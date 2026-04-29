@@ -192,7 +192,11 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, sourceJSON, ta
 	}
 
 	// Add color option
-	if !d.options.ColorOutput {
+	// We need to explicitly set color mode because difftastic auto-detects TTY
+	// and won't use colors when output is captured
+	if d.options.ColorOutput {
+		args = append(args, "--color", "always")
+	} else {
 		args = append(args, "--color", "never")
 	}
 
