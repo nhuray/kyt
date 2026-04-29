@@ -196,7 +196,7 @@ MIT License - See [LICENSE](LICENSE) for details.
 
 ## Author
 
-Created by Nicolas Leigh ([@nhuray](https://github.com/nhuray))
+Created by Nicolas Huray ([@nhuray](https://github.com/nhuray))
 
 ---
 
