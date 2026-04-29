@@ -89,10 +89,16 @@ ignoreDifferences:
 ```bash
 git clone https://github.com/nhuray/k8s-diff.git
 cd k8s-diff
+
+# Using Make (recommended)
+make build
+
+# Or directly with Go
 go build -o bin/k8s-diff ./cmd/k8s-diff
 
-# Optional: Copy to your PATH
-cp bin/k8s-diff /usr/local/bin/
+# Optional: Install to your PATH
+make install
+# Or manually: cp bin/k8s-diff /usr/local/bin/
 ```
 
 ### Using Go Install
@@ -124,14 +130,38 @@ Run tests:
 
 ```bash
 # Run all tests
-go test ./...
+make test
 
 # Run with verbose output
-go test -v ./...
+make test-verbose
 
-# Run with coverage
+# Run with coverage report
+make test-coverage
+
+# Or use go directly
+go test ./...
+go test -v ./...
 go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
+```
+
+## Development
+
+```bash
+# Show all available make targets
+make help
+
+# Build the binary
+make build
+
+# Run tests
+make test
+
+# Clean build artifacts
+make clean
+
+# Run with example manifests
+make run
+make run-json
 ```
 
 ## Dependencies
