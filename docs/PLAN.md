@@ -143,7 +143,7 @@ func (rk ResourceKey) String() string {
 }
 ```
 
-### 2.2 Key Sorting & Normalization
+### 2.2 Key Sorting & Normalization ✅
 
 **Goals:**
 
@@ -153,12 +153,12 @@ func (rk ResourceKey) String() string {
 
 **Tasks:**
 
-- [ ] Implement key sorting for JSON objects
-- [ ] Implement configurable array sorting
-- [ ] Basic normalization (remove status, managedFields by default)
-- [ ] Write tests comparing before/after normalization
+- [x] Implement key sorting for JSON objects
+- [x] Implement configurable array sorting (configuration structure in place)
+- [x] Basic normalization (remove status, managedFields by default)
+- [x] Write tests comparing before/after normalization
 
-**Note:** This will be implemented in Phase 4 along with ArgoCD normalizers integration.
+**Note:** Implemented in Phase 4 as part of the normalizer (pkg/normalizer/normalizer.go).
 
 ---
 
