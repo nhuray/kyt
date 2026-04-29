@@ -1,7 +1,7 @@
 package normalizer
 
 import (
-	"github.com/nicolasleigh/k8s-diff/pkg/config"
+	"github.com/nhuray/k8s-diff/pkg/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 

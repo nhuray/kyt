@@ -1,4 +1,4 @@
-module github.com/nicolasleigh/k8s-diff
+module github.com/nhuray/k8s-diff
 
 go 1.26.2
 

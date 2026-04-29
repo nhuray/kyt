@@ -6,7 +6,7 @@
 
 **Repository:** `/Users/nicolas/Workspace/k8s-diff`
 
-**GitHub:** `github.com/nicolasleigh/k8s-diff`
+**GitHub:** `github.com/nhuray/k8s-diff`
 
 ---
 
@@ -70,7 +70,7 @@ k8s-diff/
 - [x] Create directory structure
 - [x] Initialize Git repository
 - [x] Create `.gitignore` for Go projects
-- [x] Initialize Go module (`go mod init github.com/nicolasleigh/k8s-diff`)
+- [x] Initialize Go module (`go mod init github.com/nhuray/k8s-diff`)
 - [x] Create initial `README.md` with project description
 - [ ] Add `LICENSE` file (MIT)
 

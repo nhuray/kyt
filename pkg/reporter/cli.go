@@ -6,8 +6,8 @@ import (
 	"os"
 	"sort"
 
-	"github.com/nicolasleigh/k8s-diff/pkg/differ"
-	"github.com/nicolasleigh/k8s-diff/pkg/manifest"
+	"github.com/nhuray/k8s-diff/pkg/differ"
+	"github.com/nhuray/k8s-diff/pkg/manifest"
 )
 
 // CLIReporter formats output for human-readable CLI display

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nicolasleigh/k8s-diff/pkg/config"
-	"github.com/nicolasleigh/k8s-diff/pkg/differ"
-	"github.com/nicolasleigh/k8s-diff/pkg/manifest"
-	"github.com/nicolasleigh/k8s-diff/pkg/normalizer"
-	"github.com/nicolasleigh/k8s-diff/pkg/reporter"
+	"github.com/nhuray/k8s-diff/pkg/config"
+	"github.com/nhuray/k8s-diff/pkg/differ"
+	"github.com/nhuray/k8s-diff/pkg/manifest"
+	"github.com/nhuray/k8s-diff/pkg/normalizer"
+	"github.com/nhuray/k8s-diff/pkg/reporter"
 	"github.com/spf13/cobra"
 )
 

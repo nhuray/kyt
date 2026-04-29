@@ -11,8 +11,9 @@ A CLI tool for comparing Kubernetes manifests with smart ignore rules.
 - 🎯 **ArgoCD-Compatible Rules**: Uses the same ignore syntax as ArgoCD's `ignoreDifferences`
 - 🔍 **JSON Pointer Support**: RFC 6901 compliant JSON Pointers for precise field targeting
 - 🎨 **JQ Path Expressions**: Powerful filtering with wildcards and conditionals
-- 📊 **Multiple Output Formats**: CLI (difftastic), JSON, unified diff, HTML
-- ⚡ **Fast & Reliable**: Written in Go, leveraging ArgoCD's battle-tested code
+- 📊 **Multiple Output Formats**: CLI (with colors), JSON
+- 🎯 **Smart Normalization**: Sorts keys, removes managed fields, applies ignore rules
+- ⚡ **Fast & Reliable**: Written in Go with 52 passing tests
 
 ## Use Cases
 
@@ -23,23 +24,44 @@ A CLI tool for comparing Kubernetes manifests with smart ignore rules.
 
 ## Status
 
-🚧 **Work in Progress** - See [docs/PLAN.md](docs/PLAN.md) for detailed implementation plan.
+✅ **Core functionality complete!** - See [docs/PLAN.md](docs/PLAN.md) for implementation details.
 
-## Quick Start (Planned)
+- ✅ Phases 1-8 complete (Setup, Parsing, Config, Normalization, Diff, Output, CLI, Testing)
+- 🔨 Phase 9 in progress (Documentation)
+- 📦 Phase 10 planned (Build & Release)
+
+## Quick Start
 
 ```bash
+# Build from source
+git clone https://github.com/nhuray/k8s-diff.git
+cd k8s-diff
+go build -o bin/k8s-diff ./cmd/k8s-diff
+
 # Compare two manifest files
-k8s-diff source.yaml target.yaml
+./bin/k8s-diff source.yaml target.yaml
+
+# Compare directories
+./bin/k8s-diff ./kustomize-output ./helm-output
 
 # Use custom config
-k8s-diff source.yaml target.yaml --config my-rules.yaml
+./bin/k8s-diff source.yaml target.yaml --config my-rules.yaml
 
 # Output JSON for CI/CD
-k8s-diff source.yaml target.yaml --output json
+./bin/k8s-diff source.yaml target.yaml --output json
 
-# Generate HTML report
-k8s-diff source.yaml target.yaml --output html > report.html
+# Show identical resources
+./bin/k8s-diff source.yaml target.yaml --show-identical
+
+# Verbose mode for debugging
+./bin/k8s-diff -v source.yaml target.yaml
 ```
+
+### Exit Codes
+
+- `0` - No differences found
+- `1` - Differences detected
+- `2` - Error (invalid YAML, missing files, etc.)
 
 ## Configuration Example
 
@@ -60,40 +82,56 @@ ignoreDifferences:
       - .spec.template.spec.containers[] | select(.name == "istio-proxy")
 ```
 
-## Installation (Planned)
+## Installation
+
+### From Source
 
 ```bash
-# Homebrew (coming soon)
-brew install nicolasleigh/tap/k8s-diff
+git clone https://github.com/nhuray/k8s-diff.git
+cd k8s-diff
+go build -o bin/k8s-diff ./cmd/k8s-diff
 
-# Go install
-go install github.com/nicolasleigh/k8s-diff/cmd/k8s-diff@latest
-
-# Download binary from releases
-# See: https://github.com/nicolasleigh/k8s-diff/releases
+# Optional: Copy to your PATH
+cp bin/k8s-diff /usr/local/bin/
 ```
+
+### Using Go Install
+
+```bash
+go install github.com/nhuray/k8s-diff/cmd/k8s-diff@latest
+```
+
+### Binary Releases
+
+_(Coming soon)_ Download pre-built binaries from [GitHub Releases](https://github.com/nhuray/k8s-diff/releases)
 
 ## Documentation
 
-- [Implementation Plan](docs/PLAN.md) - Detailed development roadmap
-- [Configuration Guide](docs/configuration.md) - _(Coming soon)_
-- [Usage Examples](docs/usage.md) - _(Coming soon)_
-- [Architecture](docs/architecture.md) - _(Coming soon)_
+- [Implementation Plan](docs/PLAN.md) - Detailed development roadmap with progress
+- [Example Configs](examples/) - Sample configurations and manifests
+- Configuration Guide - _(Coming soon in docs/configuration.md)_
+- Usage Examples - _(Coming soon in docs/usage.md)_
 
-## Development
+## Testing
+
+The project has comprehensive test coverage:
+
+- **52 tests total** (45 unit + 7 integration)
+- All tests passing
+- Covers: config loading, manifest parsing, normalization, diffing, output formatting, CLI
+
+Run tests:
 
 ```bash
-# Build
-make build
+# Run all tests
+go test ./...
 
-# Run tests
-make test
+# Run with verbose output
+go test -v ./...
 
-# Run linter
-make lint
-
-# Install locally
-make install
+# Run with coverage
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
 ```
 
 ## Dependencies
@@ -128,7 +166,7 @@ MIT License - See [LICENSE](LICENSE) for details.
 
 ## Author
 
-Created by Nicolas Leigh ([@nicolasleigh](https://github.com/nicolasleigh))
+Created by Nicolas Leigh ([@nhuray](https://github.com/nhuray))
 
 ---
 
