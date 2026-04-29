@@ -31,6 +31,12 @@ var (
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
+		// Check if this is an exitError with a specific code
+		if exitErr, ok := err.(*exitError); ok {
+			os.Exit(exitErr.code)
+		}
+		// Print error to stderr and exit with code 2
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(2)
 	}
 }
