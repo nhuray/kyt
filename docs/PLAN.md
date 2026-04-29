@@ -504,9 +504,9 @@ All 8 tests passing (0.476s)
 
 ---
 
-## Phase 7: CLI Implementation (Day 8-9)
+## Phase 7: CLI Implementation (Day 8-9) ✅
 
-### 7.1 Command Structure
+### 7.1 Command Structure ✅
 
 **Main Command:**
 
@@ -518,26 +518,27 @@ k8s-diff <source> <target> [flags]
 
 ```
 --config, -c         Config file path (default: .k8s-diff.yaml)
---rules, -r          Additional rules files (can be repeated)
---output, -o         Output format: cli, json, diff, html (default: cli)
---format, -f         Alias for --output
+--output, -o         Output format: cli, json (default: cli)
 --display            Difftastic display mode: side-by-side, inline (default: side-by-side)
 --diff-tool          Diff tool: difft, diff (default: difft)
 --no-color           Disable colored output
+--show-identical     Show identical resources in output
 --verbose, -v        Verbose output
 --version            Show version
 --help, -h           Show help
 ```
 
-### 7.2 Implementation Tasks
+### 7.2 Implementation Tasks ✅
 
 **Using Cobra:**
 
-- [ ] Set up root command with Cobra in `main.go`
-- [ ] Add all flags with proper types and defaults
-- [ ] Add command-line help text
-- [ ] Handle errors gracefully with exit codes
-- [ ] Wire up all packages (config, manifest, normalizer, differ, reporter)
+- [x] Set up root command with Cobra in `main.go`
+- [x] Add all flags with proper types and defaults
+- [x] Add command-line help text
+- [x] Handle errors gracefully with exit codes
+- [x] Wire up all packages (config, manifest, normalizer, differ, reporter)
+- [x] Add version command
+- [x] Fix int64 conversion issue (YAML parser creates int, Kubernetes expects int64)
 
 **Exit Codes:**
 

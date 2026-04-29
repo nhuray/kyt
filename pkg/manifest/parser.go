@@ -180,6 +180,9 @@ func (p *Parser) parseYAMLDocument(data []byte) (*unstructured.Unstructured, err
 		return nil, nil
 	}
 
+	// Convert int to int64 for Kubernetes compatibility
+	rawObj = convertIntsToInt64(rawObj).(map[string]interface{})
+
 	// Create unstructured object
 	obj := &unstructured.Unstructured{Object: rawObj}
 
@@ -212,6 +215,32 @@ func (p *Parser) validateK8sResource(obj *unstructured.Unstructured) error {
 	}
 
 	return nil
+}
+
+// convertIntsToInt64 recursively converts all int values to int64
+// This is necessary because YAML unmarshaling creates int values by default,
+// but Kubernetes expects int64 for numeric fields (replicas, ports, etc.)
+func convertIntsToInt64(obj interface{}) interface{} {
+	switch v := obj.(type) {
+	case map[string]interface{}:
+		// Recursively process all map values
+		for key, val := range v {
+			v[key] = convertIntsToInt64(val)
+		}
+		return v
+	case []interface{}:
+		// Recursively process all slice elements
+		for i, val := range v {
+			v[i] = convertIntsToInt64(val)
+		}
+		return v
+	case int:
+		// Convert int to int64
+		return int64(v)
+	default:
+		// Return other types as-is (string, bool, float64, int64, etc.)
+		return v
+	}
 }
 
 // ParseFiles parses multiple files into a single ManifestSet
