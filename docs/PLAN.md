@@ -1,0 +1,798 @@
+# k8s-diff Implementation Plan
+
+## Project Overview
+
+**Goal:** Build a Go CLI tool that compares Kubernetes manifests using ArgoCD-compatible ignore rules (JSON Pointers & JQ expressions) and outputs differences using difftastic.
+
+**Repository:** `/Users/nicolas/Workspace/k8s-diff`
+
+**GitHub:** `github.com/nicolasleigh/k8s-diff`
+
+---
+
+## Project Structure
+
+```
+k8s-diff/
+├── .gitignore
+├── .github/
+│   └── workflows/
+│       ├── test.yml           # CI testing
+│       └── release.yml        # Binary releases
+├── README.md
+├── LICENSE
+├── Makefile
+├── go.mod
+├── go.sum
+├── cmd/
+│   └── k8s-diff/
+│       └── main.go            # CLI entry point
+├── pkg/
+│   ├── config/
+│   │   ├── config.go          # Config loading
+│   │   ├── config_test.go
+│   │   └── types.go           # Config types
+│   ├── manifest/
+│   │   ├── parser.go          # YAML parsing
+│   │   ├── parser_test.go
+│   │   └── types.go
+│   ├── normalizer/
+│   │   ├── normalizer.go      # Uses ArgoCD normalizers
+│   │   ├── normalizer_test.go
+│   │   └── ignore.go          # Ignore rules application
+│   ├── differ/
+│   │   ├── differ.go          # Diff orchestration
+│   │   ├── differ_test.go
+│   │   └── types.go
+│   └── reporter/
+│       ├── reporter.go        # Output formatting
+│       ├── reporter_test.go
+│       ├── difftastic.go      # Difftastic integration
+│       ├── html.go            # HTML output (diff2html)
+│       └── json.go            # JSON output
+├── examples/
+│   ├── .k8s-diff.yaml         # Example config
+│   ├── source.yaml            # Example source manifest
+│   └── target.yaml            # Example target manifest
+└── docs/
+    ├── PLAN.md                # This file
+    ├── configuration.md       # Config documentation
+    ├── usage.md              # Usage examples
+    └── architecture.md       # Architecture overview
+```
+
+---
+
+## Phase 1: Project Setup & Structure (Day 1) ✅
+
+### 1.1 Initialize Repository ✅
+
+- [x] Create directory structure
+- [x] Initialize Git repository
+- [x] Create `.gitignore` for Go projects
+- [x] Initialize Go module (`go mod init github.com/nicolasleigh/k8s-diff`)
+- [x] Create initial `README.md` with project description
+- [ ] Add `LICENSE` file (MIT)
+
+### 1.2 Initial Dependencies ✅
+
+```bash
+# Core dependencies installed (v2.14.21)
+go get github.com/argoproj/argo-cd/v2@latest
+go get github.com/itchyny/gojq@latest           # v0.12.19
+go get github.com/spf13/cobra@latest            # v1.10.2
+go get gopkg.in/yaml.v3@latest
+go get k8s.io/apimachinery@latest               # v0.36.0
+
+# Testing dependencies
+go get github.com/stretchr/testify@latest
+```
+
+---
+
+## Phase 2: Core Manifest Handling (Day 2-3) ✅
+
+### 2.1 Manifest Parser (`pkg/manifest/`) ✅
+
+**Goals:**
+
+- Parse single YAML files
+- Parse multi-document YAML (separated by `---`)
+- Parse directories of YAML files
+- Split resources by GVK (Group/Version/Kind), namespace, and name
+- Convert to `unstructured.Unstructured` (K8s native type)
+
+**Tasks:**
+
+- [x] Define types in `types.go`
+- [x] Implement `ParseFile(path string) ([]*unstructured.Unstructured, error)`
+- [x] Implement `ParseDirectory(dir string) ([]*unstructured.Unstructured, error)`
+- [x] Implement `ParseMultiDoc(content []byte) ([]*unstructured.Unstructured, error)`
+- [x] Add resource key generation (`kind/namespace/name`)
+- [x] Write comprehensive tests with example manifests
+- [x] Handle edge cases (empty files, invalid YAML, etc.)
+
+**Implementation Notes:**
+
+- Created `ResourceKey` struct with Group/Version/Kind/Namespace/Name
+- Created `ManifestSet` for indexed resource collections
+- Implemented `Parser` with methods: ParseFile, ParseBytes, ParseDirectory, ParseReader, ParseFiles
+- Added `SkipInvalid` mode for resilient parsing
+- All 10 tests passing with comprehensive coverage
+
+**Key Types:**
+
+```go
+// pkg/manifest/types.go
+type ResourceKey struct {
+    Group     string
+    Kind      string
+    Namespace string
+    Name      string
+}
+
+type ManifestSet struct {
+    Resources map[ResourceKey]*unstructured.Unstructured
+}
+
+func (rk ResourceKey) String() string {
+    if rk.Namespace != "" {
+        return fmt.Sprintf("%s/%s/%s/%s", rk.Group, rk.Kind, rk.Namespace, rk.Name)
+    }
+    return fmt.Sprintf("%s/%s/%s", rk.Group, rk.Kind, rk.Name)
+}
+```
+
+### 2.2 Key Sorting & Normalization
+
+**Goals:**
+
+- Sort object keys alphabetically (for consistent diffs)
+- Sort arrays where order doesn't matter (e.g., container ports)
+- Remove fields that shouldn't be compared (status, managedFields)
+
+**Tasks:**
+
+- [ ] Implement key sorting for JSON objects
+- [ ] Implement configurable array sorting
+- [ ] Basic normalization (remove status, managedFields by default)
+- [ ] Write tests comparing before/after normalization
+
+**Note:** This will be implemented in Phase 4 along with ArgoCD normalizers integration.
+
+---
+
+## Phase 3: Configuration System (Day 3-4)
+
+### 3.1 Config File Structure (`pkg/config/`)
+
+**Goals:**
+
+- Load `.k8s-diff.yaml` configuration
+- Support ArgoCD-compatible `ignoreDifferences` format
+- Support multiple config files (merge rules)
+- Validate configuration
+
+**Config Format:**
+
+```yaml
+# .k8s-diff.yaml
+ignoreDifferences:
+  # Simple ignores using JSON Pointers
+  - group: ""
+    kind: "*"
+    jsonPointers:
+      - /metadata/labels
+      - /metadata/annotations
+
+  # Complex ignores using JQ expressions
+  - group: "apps"
+    kind: "Deployment"
+    name: "" # Empty means all deployments
+    namespace: "" # Empty means all namespaces
+    jqPathExpressions:
+      - .spec.template.spec.containers[] | select(.name == "istio-proxy")
+      - .spec.template.spec.initContainers[] | select(.name == "istio-init")
+
+  # Managed fields managers (for server-side apply scenarios)
+  - group: "apps"
+    kind: "Deployment"
+    managedFieldsManagers:
+      - "kube-controller-manager"
+
+# Normalization options
+normalization:
+  sortKeys: true
+  sortArrays:
+    - path: ".spec.template.spec.containers[].ports"
+      sortBy: "containerPort"
+    - path: ".spec.template.spec.containers[].env"
+      sortBy: "name"
+
+# Output options
+output:
+  format: cli # cli, json, diff, html
+  diffTool: difft # difft, diff, or none
+  colorize: true
+```
+
+**Tasks:**
+
+- [ ] Define Go structs matching config schema in `types.go`
+- [ ] Implement config loading with Viper in `config.go`
+- [ ] Implement config validation
+- [ ] Support multiple config files (--config flag)
+- [ ] Support config merging (additional --rules files)
+- [ ] Write tests for config loading and merging
+
+**Key Types:**
+
+```go
+// pkg/config/types.go
+type Config struct {
+    IgnoreDifferences []ResourceIgnoreDifferences `yaml:"ignoreDifferences"`
+    Normalization     NormalizationConfig         `yaml:"normalization"`
+    Output            OutputConfig                `yaml:"output"`
+}
+
+type ResourceIgnoreDifferences struct {
+    Group                 string   `yaml:"group"`
+    Kind                  string   `yaml:"kind"`
+    Name                  string   `yaml:"name,omitempty"`
+    Namespace             string   `yaml:"namespace,omitempty"`
+    JSONPointers          []string `yaml:"jsonPointers,omitempty"`
+    JQPathExpressions     []string `yaml:"jqPathExpressions,omitempty"`
+    ManagedFieldsManagers []string `yaml:"managedFieldsManagers,omitempty"`
+}
+
+type NormalizationConfig struct {
+    SortKeys   bool               `yaml:"sortKeys"`
+    SortArrays []ArraySortConfig  `yaml:"sortArrays"`
+}
+
+type ArraySortConfig struct {
+    Path   string `yaml:"path"`
+    SortBy string `yaml:"sortBy"`
+}
+
+type OutputConfig struct {
+    Format   string `yaml:"format"`   // cli, json, diff, html
+    DiffTool string `yaml:"diffTool"` // difft, diff
+    Colorize bool   `yaml:"colorize"`
+}
+```
+
+---
+
+## Phase 4: Ignore Rules Engine (Day 4-6)
+
+### 4.1 Integration with ArgoCD Normalizers
+
+**Goals:**
+
+- Reuse ArgoCD's `IgnoreNormalizer` for JSON Pointers and JQ expressions
+- Match resources based on group/kind/name/namespace (with glob support)
+- Apply ignore rules to manifests
+
+**Tasks:**
+
+- [ ] Study ArgoCD's `util/argo/normalizers/diff_normalizer.go`
+- [ ] Create adapter between our config and ArgoCD's types in `normalizer.go`
+- [ ] Implement resource matching logic (group, kind, name, namespace) in `ignore.go`
+- [ ] Support glob patterns (e.g., `kind: Deployment*`)
+- [ ] Wire up ArgoCD's `IgnoreNormalizer`
+- [ ] Write comprehensive tests with various ignore scenarios
+
+**Key Implementation:**
+
+```go
+// pkg/normalizer/normalizer.go
+import (
+    argocd "github.com/argoproj/argo-cd/v3/util/argo/normalizers"
+    "github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
+    "github.com/argoproj/gitops-engine/pkg/diff"
+)
+
+type Normalizer struct {
+    config         *config.Config
+    argoNormalizer diff.Normalizer
+}
+
+func New(cfg *config.Config) (*Normalizer, error) {
+    // Convert our config to ArgoCD's format
+    argoIgnores := convertToArgoFormat(cfg.IgnoreDifferences)
+
+    // Create ArgoCD normalizer
+    argoNorm, err := argocd.NewIgnoreNormalizer(
+        argoIgnores,
+        nil, // overrides (not used for now)
+        argocd.IgnoreNormalizerOpts{},
+    )
+    if err != nil {
+        return nil, err
+    }
+
+    return &Normalizer{
+        config:         cfg,
+        argoNormalizer: argoNorm,
+    }, nil
+}
+
+func (n *Normalizer) Normalize(resources []*unstructured.Unstructured) error {
+    for _, res := range resources {
+        if err := n.argoNormalizer.Normalize(res); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
+func convertToArgoFormat(ignores []config.ResourceIgnoreDifferences) []v1alpha1.ResourceIgnoreDifferences {
+    // Convert our config format to ArgoCD's v1alpha1.ResourceIgnoreDifferences
+    // This allows us to use ArgoCD's battle-tested normalizer
+}
+```
+
+### 4.2 Testing Strategy
+
+**Test Cases:**
+
+- [ ] JSON Pointer removes field: `/metadata/labels`
+- [ ] JSON Pointer with escaping: `/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration`
+- [ ] JQ expression selects specific container: `.spec.template.spec.containers[] | select(.name == "istio-proxy")`
+- [ ] JQ expression with startsWith: `.spec.template.spec.volumes[] | select(.name | startswith("istio-"))`
+- [ ] Glob matching: `kind: Deployment*` matches `Deployment`, `DeploymentConfig`
+- [ ] Name and namespace filtering
+- [ ] Multiple rules applied in sequence
+- [ ] Invalid JQ expressions (error handling)
+- [ ] Non-existent JSON Pointers (should not error)
+
+---
+
+## Phase 5: Diff Engine (Day 6-7)
+
+### 5.1 Differ Implementation (`pkg/differ/`)
+
+**Goals:**
+
+- Match resources between source and target
+- Identify added, removed, and modified resources
+- Generate structured diff results
+- Integrate with external diff tools (difftastic)
+
+**Tasks:**
+
+- [ ] Define types in `types.go`
+- [ ] Implement resource matching algorithm in `differ.go`
+- [ ] Detect added resources (in target, not in source)
+- [ ] Detect removed resources (in source, not in target)
+- [ ] Detect modified resources (in both, but different)
+- [ ] Write normalized manifests to temp files
+- [ ] Shell out to difftastic for comparison
+- [ ] Parse difftastic output
+- [ ] Write tests with various diff scenarios
+
+**Key Types:**
+
+```go
+// pkg/differ/types.go
+type DiffResult struct {
+    Added    []manifest.ResourceKey
+    Removed  []manifest.ResourceKey
+    Modified []ResourceDiff
+    Summary  DiffSummary
+}
+
+type ResourceDiff struct {
+    Key      manifest.ResourceKey
+    DiffText string  // Output from difftastic
+}
+
+type DiffSummary struct {
+    TotalResources    int
+    AddedCount        int
+    RemovedCount      int
+    ModifiedCount     int
+    IdenticalCount    int
+}
+```
+
+### 5.2 Difftastic Integration
+
+**Options to Support:**
+
+- Display modes: `side-by-side`, `side-by-side-show-both`, `inline`
+- Color output: respect TTY detection
+- JSON output: use difftastic's `--output=json`
+
+**Tasks:**
+
+- [ ] Check if `difft` binary is available
+- [ ] Generate temp files for comparison
+- [ ] Execute `difft` with appropriate flags
+- [ ] Capture and parse output
+- [ ] Handle errors (difft not found, etc.)
+- [ ] Clean up temp files
+
+---
+
+## Phase 6: Output Formatters (Day 7-8)
+
+### 6.1 CLI Output (Default)
+
+**Goals:**
+
+- Human-readable output using difftastic
+- Color support (when TTY)
+- Summary statistics
+
+**Tasks:**
+
+- [ ] Implement CLI reporter using difftastic output in `reporter.go`
+- [ ] Add summary header/footer
+- [ ] Support `--no-color` flag
+- [ ] Write tests for output formatting
+
+### 6.2 JSON Output
+
+**Goals:**
+
+- Machine-readable JSON output
+- Structured diff information
+- CI/CD friendly
+
+**Tasks:**
+
+- [ ] Define JSON schema for diff results in `json.go`
+- [ ] Implement JSON serialization
+- [ ] Write tests
+
+**JSON Format:**
+
+```json
+{
+  "summary": {
+    "totalResources": 10,
+    "added": 1,
+    "removed": 0,
+    "modified": 2,
+    "identical": 7
+  },
+  "added": [
+    {
+      "group": "apps",
+      "kind": "Service",
+      "name": "new-service",
+      "namespace": "default"
+    }
+  ],
+  "removed": [],
+  "modified": [
+    {
+      "key": {
+        "group": "apps",
+        "kind": "Deployment",
+        "name": "app",
+        "namespace": "default"
+      },
+      "diff": "... diff text ..."
+    }
+  ]
+}
+```
+
+### 6.3 Unified Diff Output
+
+**Goals:**
+
+- Standard unified diff format
+- Compatible with patch tools
+- Fallback if difftastic not available
+
+**Tasks:**
+
+- [ ] Implement unified diff generation in `reporter.go`
+- [ ] Support `--output diff` flag
+- [ ] Write tests
+
+### 6.4 HTML Output
+
+**Goals:**
+
+- Visual HTML report using diff2html
+- Self-contained HTML file
+- Can be opened in browser
+
+**Tasks:**
+
+- [ ] Generate unified diff first in `html.go`
+- [ ] Shell out to `diff2html` CLI
+- [ ] Embed CSS/JS for self-contained report
+- [ ] Write tests
+
+---
+
+## Phase 7: CLI Implementation (Day 8-9)
+
+### 7.1 Command Structure
+
+**Main Command:**
+
+```bash
+k8s-diff <source> <target> [flags]
+```
+
+**Flags:**
+
+```
+--config, -c         Config file path (default: .k8s-diff.yaml)
+--rules, -r          Additional rules files (can be repeated)
+--output, -o         Output format: cli, json, diff, html (default: cli)
+--format, -f         Alias for --output
+--display            Difftastic display mode: side-by-side, inline (default: side-by-side)
+--diff-tool          Diff tool: difft, diff (default: difft)
+--no-color           Disable colored output
+--verbose, -v        Verbose output
+--version            Show version
+--help, -h           Show help
+```
+
+### 7.2 Implementation Tasks
+
+**Using Cobra:**
+
+- [ ] Set up root command with Cobra in `main.go`
+- [ ] Add all flags with proper types and defaults
+- [ ] Add command-line help text
+- [ ] Handle errors gracefully with exit codes
+- [ ] Wire up all packages (config, manifest, normalizer, differ, reporter)
+
+**Exit Codes:**
+
+```
+0 - Success (no differences or differences ignored)
+1 - Differences found
+2 - Error (invalid config, missing files, etc.)
+```
+
+---
+
+## Phase 8: Testing & Examples (Day 9-10)
+
+### 8.1 Unit Tests
+
+**Coverage Goals: 80%+**
+
+- [ ] Config loading and validation
+- [ ] Manifest parsing (single, multi-doc, directory)
+- [ ] Normalization (key sorting, array sorting)
+- [ ] Ignore rules (JSON Pointers, JQ expressions)
+- [ ] Resource matching and diffing
+- [ ] Output formatters
+
+### 8.2 Integration Tests
+
+**Test Scenarios:**
+
+- [ ] Compare two identical manifests (no diff)
+- [ ] Compare manifests with label differences (should be ignored)
+- [ ] Compare Helm vs Kustomize output (ignore Helm labels)
+- [ ] Compare manifests with Istio sidecars (ignore sidecar containers)
+- [ ] Test all output formats (CLI, JSON, diff, HTML)
+- [ ] Test error handling (invalid YAML, missing files, etc.)
+
+### 8.3 Example Manifests
+
+**Create Realistic Examples:**
+
+- [ ] Redis HA deployment (source)
+- [ ] Redis HA deployment (target with differences)
+- [ ] Config file for redis-ha comparison
+- [ ] Helm vs Kustomize comparison example
+
+---
+
+## Phase 9: Documentation (Day 10-11)
+
+### 9.1 README.md
+
+**Sections:**
+
+- [ ] Project overview and motivation
+- [ ] Installation instructions
+- [ ] Quick start guide
+- [ ] Basic usage examples
+- [ ] Configuration reference
+- [ ] Advanced usage (JQ expressions, etc.)
+- [ ] Comparison with other tools
+- [ ] Contributing guidelines
+
+### 9.2 docs/configuration.md
+
+**Content:**
+
+- [ ] Complete config file reference
+- [ ] JSON Pointer syntax and examples
+- [ ] JQ path expression syntax and examples
+- [ ] Glob pattern matching
+- [ ] Common configuration patterns
+- [ ] Troubleshooting
+
+### 9.3 docs/usage.md
+
+**Content:**
+
+- [ ] CLI command reference
+- [ ] Common use cases
+- [ ] Comparing Helm vs Kustomize
+- [ ] CI/CD integration examples
+
+---
+
+## Phase 10: Build & Release (Day 11-12)
+
+### 10.1 Makefile
+
+**Targets:**
+
+```makefile
+.PHONY: build test lint install clean
+
+build:
+    go build -o bin/k8s-diff ./cmd/k8s-diff
+
+test:
+    go test -v -race -coverprofile=coverage.out ./...
+
+lint:
+    golangci-lint run
+
+install:
+    go install ./cmd/k8s-diff
+
+clean:
+    rm -rf bin/ dist/
+
+release:
+    goreleaser release --clean
+```
+
+**Tasks:**
+
+- [ ] Create Makefile with all targets
+- [ ] Test all make targets
+
+### 10.2 GitHub Actions CI
+
+**Workflows:**
+
+- [ ] `.github/workflows/test.yml` - Run tests on PR
+- [ ] `.github/workflows/lint.yml` - Run linter
+- [ ] `.github/workflows/release.yml` - Build and release binaries
+
+### 10.3 Release Strategy
+
+**Using GoReleaser:**
+
+- [ ] Configure `.goreleaser.yml`
+- [ ] Build for multiple platforms (linux, darwin, windows)
+- [ ] Build for multiple architectures (amd64, arm64)
+- [ ] Generate checksums
+- [ ] Create GitHub releases with binaries
+- [ ] Publish to Homebrew tap (optional)
+
+---
+
+## Milestone Checklist
+
+### Milestone 1: Core Functionality (Day 1-6)
+
+- [x] Project structure set up
+- [ ] Manifest parsing works
+- [ ] Config loading works
+- [ ] Ignore rules engine functional
+- [ ] Basic tests passing
+
+### Milestone 2: Diff & Output (Day 7-9)
+
+- [ ] Diff engine works
+- [ ] All output formats implemented
+- [ ] CLI fully functional
+- [ ] Integration tests passing
+
+### Milestone 3: Polish & Release (Day 10-12)
+
+- [ ] Documentation complete
+- [ ] CI/CD set up
+- [ ] First release published
+- [ ] Examples working
+
+---
+
+## Risk Mitigation
+
+### Potential Risks
+
+1. **ArgoCD API Changes**
+   - **Risk:** ArgoCD libraries might have breaking changes
+   - **Mitigation:** Pin to specific version, vendor if needed
+
+2. **JQ Expression Complexity**
+   - **Risk:** Complex JQ expressions might not work
+   - **Mitigation:** Start with simple expressions, add comprehensive tests
+
+3. **Performance with Large Manifests**
+   - **Risk:** Slow with hundreds of resources
+   - **Mitigation:** Profile and optimize, consider parallel processing
+
+4. **Difftastic Dependency**
+   - **Risk:** Users might not have difftastic installed
+   - **Mitigation:** Provide clear error messages, fallback to unified diff
+
+---
+
+## Success Criteria
+
+✅ **Must Have (MVP):**
+
+- Parse YAML manifests
+- Apply JSON Pointer ignore rules
+- Apply JQ path ignore rules
+- Compare using difftastic
+- Output CLI, JSON, and diff formats
+- Documentation for basic usage
+
+🎯 **Should Have:**
+
+- HTML output
+- Comprehensive error handling
+- Good test coverage (>80%)
+- CI/CD pipeline
+- Example configurations
+
+🚀 **Nice to Have:**
+
+- Performance optimizations
+- Auto-detection of common ignore patterns
+- Homebrew distribution
+
+---
+
+## Timeline Summary
+
+| Phase     | Days           | Focus                 |
+| --------- | -------------- | --------------------- |
+| 1         | 1              | Setup & Structure ✅  |
+| 2         | 2              | Manifest Parsing      |
+| 3         | 1-2            | Configuration         |
+| 4         | 2-3            | Ignore Rules (ArgoCD) |
+| 5         | 1-2            | Diff Engine           |
+| 6         | 1-2            | Output Formatters     |
+| 7         | 1-2            | CLI Implementation    |
+| 8         | 1-2            | Testing & Examples    |
+| 9         | 1-2            | Documentation         |
+| 10        | 1-2            | Build & Release       |
+| **Total** | **11-12 days** | **MVP Ready**         |
+
+---
+
+## Out of Scope (Future Work)
+
+The following items are explicitly out of scope for the MVP but may be added later:
+
+- CLI subcommands (`validate-config`, `example-config`, etc.)
+- Nx executor integration (will be done in the deployments repo later)
+- kubectl plugin packaging
+- Advanced performance optimizations
+- Auto-detection of ignore patterns
+- Interactive mode
+- Configuration presets library
+
+---
+
+## Next Steps
+
+1. ✅ Repository created and initialized
+2. ✅ Plan documented
+3. 📝 Review plan and get approval
+4. 🚀 Start implementation with Phase 2 (Manifest Parsing)
