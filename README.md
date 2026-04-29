@@ -200,4 +200,4 @@ Created by Nicolas Leigh ([@nhuray](https://github.com/nhuray))
 
 ---
 
-**Status:** 🚧 Under active development - See [PLAN.md](docs/PLAN.md) for progress
+**Status:** ✅ Core functionality complete! Phases 1-8 done. Documentation and release automation in progress.
