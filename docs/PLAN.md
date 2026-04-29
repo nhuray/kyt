@@ -327,9 +327,9 @@ All 8 tests passing (0.476s)
 
 ---
 
-## Phase 5: Diff Engine (Day 6-7)
+## Phase 5: Diff Engine (Day 6-7) ✅
 
-### 5.1 Differ Implementation (`pkg/differ/`)
+### 5.1 Differ Implementation (`pkg/differ/`) ✅
 
 **Goals:**
 
@@ -340,57 +340,56 @@ All 8 tests passing (0.476s)
 
 **Tasks:**
 
-- [ ] Define types in `types.go`
-- [ ] Implement resource matching algorithm in `differ.go`
-- [ ] Detect added resources (in target, not in source)
-- [ ] Detect removed resources (in source, not in target)
-- [ ] Detect modified resources (in both, but different)
-- [ ] Write normalized manifests to temp files
-- [ ] Shell out to difftastic for comparison
-- [ ] Parse difftastic output
-- [ ] Write tests with various diff scenarios
+- [x] Define types in `types.go`
+- [x] Implement resource matching algorithm in `differ.go`
+- [x] Detect added resources (in target, not in source)
+- [x] Detect removed resources (in source, not in target)
+- [x] Detect modified resources (in both, but different)
+- [x] Write normalized manifests to temp files
+- [x] Shell out to difftastic for comparison
+- [x] Fallback to unified diff if difftastic not available
+- [x] Write tests with various diff scenarios
 
-**Key Types:**
+**Implementation Notes:**
 
-```go
-// pkg/differ/types.go
-type DiffResult struct {
-    Added    []manifest.ResourceKey
-    Removed  []manifest.ResourceKey
-    Modified []ResourceDiff
-    Summary  DiffSummary
-}
+- Created DiffResult type with Added, Removed, Modified, Identical slices
+- Implemented resource matching by ResourceKey (group/version/kind/namespace/name)
+- Normalizes both source and target before comparison
+- Compares resources using JSON equality
+- Generates diffs using difftastic (with fallback to unified diff)
+- Supports difftastic display modes and color output
+- Creates temporary files for diff generation
+- Properly handles difftastic exit codes (exit 1 on differences is expected)
 
-type ResourceDiff struct {
-    Key      manifest.ResourceKey
-    DiffText string  // Output from difftastic
-}
+### 5.2 Difftastic Integration ✅
 
-type DiffSummary struct {
-    TotalResources    int
-    AddedCount        int
-    RemovedCount      int
-    ModifiedCount     int
-    IdenticalCount    int
-}
-```
-
-### 5.2 Difftastic Integration
-
-**Options to Support:**
+**Options Supported:**
 
 - Display modes: `side-by-side`, `side-by-side-show-both`, `inline`
-- Color output: respect TTY detection
-- JSON output: use difftastic's `--output=json`
+- Color output: configurable via DiffOptions
+- Fallback to unified diff when difftastic unavailable
 
 **Tasks:**
 
-- [ ] Check if `difft` binary is available
-- [ ] Generate temp files for comparison
-- [ ] Execute `difft` with appropriate flags
-- [ ] Capture and parse output
-- [ ] Handle errors (difft not found, etc.)
-- [ ] Clean up temp files
+- [x] Check if `difft` binary is available
+- [x] Generate temp files for comparison
+- [x] Execute `difft` with appropriate flags
+- [x] Capture and parse output
+- [x] Handle errors (difft not found, etc.)
+- [x] Clean up temp files
+- [x] Fallback to unified diff command
+
+**Test Results:**
+
+- 7 comprehensive tests covering:
+  - Added resources detection
+  - Removed resources detection
+  - Modified resources detection with diff generation
+  - Identical resources detection
+  - Mixed changes (added + removed + modified + identical)
+  - HasDifferences() helper method
+  - Resource equality comparison
+- All tests passing (0.520s)
 
 ---
 
