@@ -55,6 +55,25 @@ go build -o bin/k8s-diff ./cmd/k8s-diff
 
 # Verbose mode for debugging
 ./bin/k8s-diff -v source.yaml target.yaml
+
+# Use unified diff instead of difftastic
+./bin/k8s-diff --diff-tool diff source.yaml target.yaml
+
+# Change difftastic display mode
+./bin/k8s-diff --display inline source.yaml target.yaml
+```
+
+### Difftastic Integration
+
+The tool automatically detects and uses [difftastic](https://difftastic.wilfred.me.uk/) if available, providing beautiful syntax-aware structural diffs. If difftastic is not found, it gracefully falls back to standard unified diff.
+
+**Install difftastic:**
+
+```bash
+# macOS
+brew install difftastic
+
+# Other platforms: see https://difftastic.wilfred.me.uk/installation.html
 ```
 
 ### Exit Codes
