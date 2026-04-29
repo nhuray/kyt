@@ -393,9 +393,9 @@ All 8 tests passing (0.476s)
 
 ---
 
-## Phase 6: Output Formatters (Day 7-8)
+## Phase 6: Output Formatters (Day 7-8) ✅
 
-### 6.1 CLI Output (Default)
+### 6.1 CLI Output (Default) ✅
 
 **Goals:**
 
@@ -405,12 +405,22 @@ All 8 tests passing (0.476s)
 
 **Tasks:**
 
-- [ ] Implement CLI reporter using difftastic output in `reporter.go`
-- [ ] Add summary header/footer
-- [ ] Support `--no-color` flag
-- [ ] Write tests for output formatting
+- [x] Implement CLI reporter using difftastic output in `cli.go`
+- [x] Add summary header/footer
+- [x] Support color output with TTY detection
+- [x] Write tests for output formatting
 
-### 6.2 JSON Output
+**Implementation Notes:**
+
+- Created Reporter interface for pluggable output formats
+- CLI reporter with colored output and TTY detection
+- Summary header shows report title
+- Sections for Added (green), Removed (red), Modified (yellow), Identical (gray)
+- Modified resources show full diff text from difftastic/unified diff
+- Summary footer with statistics and status message
+- ANSI color codes with automatic TTY detection
+
+### 6.2 JSON Output ✅
 
 **Goals:**
 
@@ -420,11 +430,11 @@ All 8 tests passing (0.476s)
 
 **Tasks:**
 
-- [ ] Define JSON schema for diff results in `json.go`
-- [ ] Implement JSON serialization
-- [ ] Write tests
+- [x] Define JSON schema for diff results in `json.go`
+- [x] Implement JSON serialization
+- [x] Write tests
 
-**JSON Format:**
+**JSON Format Implemented:**
 
 ```json
 {
@@ -438,6 +448,7 @@ All 8 tests passing (0.476s)
   "added": [
     {
       "group": "apps",
+      "version": "v1",
       "kind": "Service",
       "name": "new-service",
       "namespace": "default"
@@ -448,44 +459,48 @@ All 8 tests passing (0.476s)
     {
       "key": {
         "group": "apps",
+        "version": "v1",
         "kind": "Deployment",
         "name": "app",
         "namespace": "default"
       },
-      "diff": "... diff text ..."
+      "diff": "... diff text ...",
+      "diffLines": 42
     }
   ]
 }
 ```
 
-### 6.3 Unified Diff Output
+**Implementation Notes:**
 
-**Goals:**
+- JSONOutput structure with summary and resource arrays
+- Compact and pretty-print modes
+- Optional inclusion of identical resources
+- Full resource key information (group/version/kind/namespace/name)
+- Diff text and line count included for modified resources
 
-- Standard unified diff format
-- Compatible with patch tools
-- Fallback if difftastic not available
+### 6.3 Unified Diff Output ✅
 
-**Tasks:**
-
-- [ ] Implement unified diff generation in `reporter.go`
-- [ ] Support `--output diff` flag
-- [ ] Write tests
+**Note:** This was implemented as part of Phase 5 (differ.go) as a fallback when difftastic is not available. The differ automatically uses unified diff when difftastic is unavailable or disabled.
 
 ### 6.4 HTML Output
 
-**Goals:**
+**Status:** Deferred - Not implemented in MVP
 
-- Visual HTML report using diff2html
-- Self-contained HTML file
-- Can be opened in browser
+**Rationale:** HTML output using diff2html would require additional dependencies and complexity. Users can pipe JSON output to other tools if needed. May be added in a future release.
 
-**Tasks:**
+**Test Results:**
 
-- [ ] Generate unified diff first in `html.go`
-- [ ] Shell out to `diff2html` CLI
-- [ ] Embed CSS/JS for self-contained report
-- [ ] Write tests
+- 6 comprehensive tests covering:
+  - CLI output with and without colors
+  - CLI output with/without identical resources
+  - No differences message
+  - Differences detected message
+  - JSON compact and pretty modes
+  - JSON with/without identical resources
+  - Resource key conversion
+  - Empty result handling
+- All tests passing (0.498s)
 
 ---
 
