@@ -61,12 +61,12 @@ jobs:
           cache: true
 
       - name: Build
-        run: make build-ky
+        run: make build
 
       - name: Verify binary
         run: |
-          ./bin/ky version
-          file ./bin/ky
+          ./bin/kyt version
+          file ./bin/kyt
 
   lint:
     name: Lint
