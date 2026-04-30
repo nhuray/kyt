@@ -1,8 +1,10 @@
 package treesitter
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/fatih/color"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -337,6 +339,327 @@ func TestDiffer_Diff_Sequence(t *testing.T) {
 
 			if result.Type != tt.wantChange {
 				t.Errorf("Diff() change type = %v, want %v", result.Type, tt.wantChange)
+			}
+		})
+	}
+}
+
+func TestFormatter_FormatSideBySide(t *testing.T) {
+	tests := []struct {
+		name        string
+		node        *DiffNode
+		width       int
+		useColor    bool
+		wantContent []string // Strings that should be present in output
+	}{
+		{
+			name: "unchanged node",
+			node: &DiffNode{
+				Type:       Unchanged,
+				Key:        "name",
+				SourceText: "test",
+				TargetText: "test",
+			},
+			width:    80,
+			useColor: false,
+			wantContent: []string{
+				"name: test",
+				"│",
+			},
+		},
+		{
+			name: "added node",
+			node: &DiffNode{
+				Type:       Added,
+				Key:        "namespace",
+				TargetText: "production",
+			},
+			width:    80,
+			useColor: false,
+			wantContent: []string{
+				"namespace: production",
+				"│",
+			},
+		},
+		{
+			name: "removed node",
+			node: &DiffNode{
+				Type:       Removed,
+				Key:        "oldKey",
+				SourceText: "oldValue",
+			},
+			width:    80,
+			useColor: false,
+			wantContent: []string{
+				"oldKey: oldValue",
+				"│",
+			},
+		},
+		{
+			name: "modified node",
+			node: &DiffNode{
+				Type:       Modified,
+				Key:        "replicas",
+				SourceText: "3",
+				TargetText: "5",
+			},
+			width:    80,
+			useColor: false,
+			wantContent: []string{
+				"replicas: 3",
+				"replicas: 5",
+				"│",
+			},
+		},
+		{
+			name: "nested nodes",
+			node: &DiffNode{
+				Type:       Modified,
+				Key:        "metadata",
+				SourceText: "",
+				TargetText: "",
+				Children: []*DiffNode{
+					{
+						Type:       Unchanged,
+						Key:        "name",
+						SourceText: "test",
+						TargetText: "test",
+					},
+					{
+						Type:       Modified,
+						Key:        "namespace",
+						SourceText: "default",
+						TargetText: "production",
+					},
+				},
+			},
+			width:    80,
+			useColor: false,
+			wantContent: []string{
+				"name: test",
+				"namespace: default",
+				"namespace: production",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			formatter := NewFormatter(tt.width, tt.useColor, 2)
+			output := formatter.FormatSideBySide(tt.node, "Source", "Target")
+
+			for _, want := range tt.wantContent {
+				if !strings.Contains(output, want) {
+					t.Errorf("FormatSideBySide() output missing %q\nGot:\n%s", want, output)
+				}
+			}
+
+			// Check for header
+			if !strings.Contains(output, "Source") || !strings.Contains(output, "Target") {
+				t.Error("FormatSideBySide() output missing header labels")
+			}
+		})
+	}
+}
+
+func TestFormatter_FormatInline(t *testing.T) {
+	tests := []struct {
+		name        string
+		node        *DiffNode
+		useColor    bool
+		wantContent []string
+	}{
+		{
+			name: "unchanged node",
+			node: &DiffNode{
+				Type:       Unchanged,
+				Key:        "name",
+				SourceText: "test",
+				TargetText: "test",
+			},
+			useColor: false,
+			wantContent: []string{
+				"name: test",
+			},
+		},
+		{
+			name: "added node",
+			node: &DiffNode{
+				Type:       Added,
+				Key:        "namespace",
+				TargetText: "production",
+			},
+			useColor: false,
+			wantContent: []string{
+				"+ namespace: production",
+			},
+		},
+		{
+			name: "removed node",
+			node: &DiffNode{
+				Type:       Removed,
+				Key:        "oldKey",
+				SourceText: "oldValue",
+			},
+			useColor: false,
+			wantContent: []string{
+				"- oldKey: oldValue",
+			},
+		},
+		{
+			name: "modified node",
+			node: &DiffNode{
+				Type:       Modified,
+				Key:        "replicas",
+				SourceText: "3",
+				TargetText: "5",
+			},
+			useColor: false,
+			wantContent: []string{
+				"- replicas: 3",
+				"+ replicas: 5",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			formatter := NewFormatter(80, tt.useColor, 2)
+			output := formatter.FormatInline(tt.node, "Diff")
+
+			for _, want := range tt.wantContent {
+				if !strings.Contains(output, want) {
+					t.Errorf("FormatInline() output missing %q\nGot:\n%s", want, output)
+				}
+			}
+		})
+	}
+}
+
+func TestFormatter_Colorize(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		useColor bool
+	}{
+		{
+			name:     "color enabled",
+			text:     "test",
+			useColor: true,
+		},
+		{
+			name:     "color disabled",
+			text:     "test",
+			useColor: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			formatter := NewFormatter(80, tt.useColor, 2)
+			output := formatter.colorize(tt.text, color.FgRed)
+
+			// Text should always be present
+			if !strings.Contains(output, tt.text) {
+				t.Errorf("colorize() output missing original text %q", tt.text)
+			}
+
+			// When color is disabled, output should equal input
+			if !tt.useColor && output != tt.text {
+				t.Errorf("colorize() with useColor=false should return unmodified text, got %q want %q", output, tt.text)
+			}
+		})
+	}
+}
+
+func TestFormatter_Pad(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		width     int
+		wantLen   int
+		wantTrunc bool
+	}{
+		{
+			name:      "pad short string",
+			input:     "test",
+			width:     10,
+			wantLen:   10,
+			wantTrunc: false,
+		},
+		{
+			name:      "exact width",
+			input:     "test",
+			width:     4,
+			wantLen:   4,
+			wantTrunc: false,
+		},
+		{
+			name:      "truncate long string",
+			input:     "this is a very long string",
+			width:     10,
+			wantLen:   10,
+			wantTrunc: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			formatter := NewFormatter(80, false, 2)
+			output := formatter.pad(tt.input, tt.width)
+
+			if len(output) != tt.wantLen {
+				t.Errorf("pad() length = %d, want %d", len(output), tt.wantLen)
+			}
+
+			if tt.wantTrunc && !strings.Contains(output, "...") {
+				t.Error("pad() should truncate with ellipsis")
+			}
+		})
+	}
+}
+
+func TestNewFormatter_Defaults(t *testing.T) {
+	tests := []struct {
+		name           string
+		width          int
+		indentSize     int
+		wantWidth      int
+		wantIndentSize int
+	}{
+		{
+			name:           "valid values",
+			width:          100,
+			indentSize:     4,
+			wantWidth:      100,
+			wantIndentSize: 4,
+		},
+		{
+			name:           "zero width uses default",
+			width:          0,
+			indentSize:     4,
+			wantWidth:      120,
+			wantIndentSize: 4,
+		},
+		{
+			name:           "zero indent uses default",
+			width:          100,
+			indentSize:     0,
+			wantWidth:      100,
+			wantIndentSize: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			formatter := NewFormatter(tt.width, false, tt.indentSize)
+
+			if formatter.width != tt.wantWidth {
+				t.Errorf("NewFormatter() width = %d, want %d", formatter.width, tt.wantWidth)
+			}
+
+			if formatter.indentSize != tt.wantIndentSize {
+				t.Errorf("NewFormatter() indentSize = %d, want %d", formatter.indentSize, tt.wantIndentSize)
 			}
 		})
 	}
