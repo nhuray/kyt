@@ -120,16 +120,40 @@ func (r *CLIReporter) printModified(w io.Writer, modified []differ.ResourceDiff,
 		}
 
 		// Print resource header
-		matchInfo := r.formatMatchInfo(&diff)
+		// Extract kind and format the header more concisely
+		kind := diff.Key.Kind
+
+		// Format source name with namespace
+		var sourceName string
+		if diff.SourceKey.Namespace != "" {
+			sourceName = diff.SourceKey.Namespace + "/" + diff.SourceKey.Name
+		} else {
+			sourceName = diff.SourceKey.Name
+		}
+
+		// Format target name with namespace
+		var targetName string
+		if diff.TargetKey.Namespace != "" {
+			targetName = diff.TargetKey.Namespace + "/" + diff.TargetKey.Name
+		} else {
+			targetName = diff.TargetKey.Name
+		}
+
+		// Format the comparison header showing source → target
+		comparisonText := fmt.Sprintf("Comparing %s: `%s` → `%s`", kind, sourceName, targetName)
+		if diff.SimilarityScore > 0 {
+			comparisonText += fmt.Sprintf(" (similarity: %.2f)", diff.SimilarityScore)
+		}
+
 		if useColor {
 			_, _ = fmt.Fprintf(w, "%s%s───────────────────────────────────────────────────────────────%s\n",
 				colorBold, colorYellow, colorReset)
-			_, _ = fmt.Fprintf(w, "%s%s● %s%s\n", colorBold, colorYellow, matchInfo, colorReset)
+			_, _ = fmt.Fprintf(w, "%s%s● %s%s\n", colorBold, colorYellow, comparisonText, colorReset)
 			_, _ = fmt.Fprintf(w, "%s%s───────────────────────────────────────────────────────────────%s\n\n",
 				colorBold, colorYellow, colorReset)
 		} else {
 			_, _ = fmt.Fprintf(w, "───────────────────────────────────────────────────────────────\n")
-			_, _ = fmt.Fprintf(w, "• %s\n", matchInfo)
+			_, _ = fmt.Fprintf(w, "● %s\n", comparisonText)
 			_, _ = fmt.Fprintf(w, "───────────────────────────────────────────────────────────────\n\n")
 		}
 
@@ -189,25 +213,6 @@ func (r *CLIReporter) printSummaryLine(w io.Writer, label string, count int, use
 	} else {
 		_, _ = fmt.Fprintf(w, "  %-15s %d\n", label+":", count)
 	}
-}
-
-// formatMatchInfo formats the match information for display
-func (r *CLIReporter) formatMatchInfo(diff *differ.ResourceDiff) string {
-	if diff.MatchType == "exact" || diff.MatchType == "" {
-		// Exact match or legacy format - just show the key
-		return diff.Key.String()
-	}
-
-	// Similarity match - show source → target with score
-	if diff.SourceKey.String() == diff.TargetKey.String() {
-		// Keys are same (shouldn't happen, but handle gracefully)
-		return fmt.Sprintf("%s (similarity: %.2f)", diff.Key.String(), diff.SimilarityScore)
-	}
-
-	return fmt.Sprintf("%s → %s (similarity: %.2f)",
-		diff.SourceKey.String(),
-		diff.TargetKey.String(),
-		diff.SimilarityScore)
 }
 
 // ANSI color codes

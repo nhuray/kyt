@@ -21,6 +21,7 @@ var (
 	diffSkipNormalize       bool
 	diffExactMatch          bool
 	diffSimilarityThreshold float64
+	diffWidth               int
 )
 
 var diffCmd = &cobra.Command{
@@ -31,13 +32,22 @@ var diffCmd = &cobra.Command{
 Supports:
 - JSON Pointer ignore rules (RFC 6901)
 - JQ path expression ignore rules
-- Difftastic or unified diff output
+- Multiple diff tools: difftastic, tree-sitter, unified diff
 - Multiple output formats (CLI, JSON)
 - Smart similarity matching for renamed resources
 
+Diff Tools:
+- auto: Try difftastic first, fall back to tree-sitter, then unified (default)
+- difft: Use difftastic only (external tool, best quality)
+- treesitter: Use Go-native tree-sitter (built-in, good quality)
+- diff: Use standard unified diff (built-in, basic quality)
+
 Examples:
-  # Compare two directories
+  # Compare two directories (auto mode - tries all diff tools)
   ky diff ./source-manifests ./target-manifests
+
+  # Force tree-sitter diff (no external dependencies)
+  ky diff --diff-tool treesitter ./source ./target
 
   # Compare with custom config
   ky diff -c .ky.yaml ./source ./target
@@ -64,7 +74,8 @@ func init() {
 	diffCmd.Flags().BoolVar(&diffNoColor, "no-color", false, "disable colored output")
 	diffCmd.Flags().BoolVar(&diffShowIdentical, "show-identical", false, "show identical resources in output")
 	diffCmd.Flags().StringVar(&diffDifftasticMode, "display", "side-by-side", "difftastic display mode: side-by-side, inline")
-	diffCmd.Flags().StringVar(&diffDiffTool, "diff-tool", "difft", "diff tool: difft, diff")
+	diffCmd.Flags().StringVar(&diffDiffTool, "diff-tool", "auto", "diff tool: auto (try all), difft (difftastic only), treesitter (Go native), diff (unified)")
+	diffCmd.Flags().IntVar(&diffWidth, "width", 0, "terminal width for diff output (0 = auto-detect)")
 	diffCmd.Flags().BoolVar(&diffSkipNormalize, "skip-normalize", false, "skip normalization (use raw manifests)")
 	diffCmd.Flags().BoolVar(&diffExactMatch, "exact-match", false, "disable similarity matching (only exact name matches)")
 	diffCmd.Flags().Float64Var(&diffSimilarityThreshold, "similarity-threshold", 0.7, "minimum similarity score (0.0-1.0) for matching resources")
@@ -121,12 +132,20 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	// Create differ
 	diffOpts := &differ.DiffOptions{
-		UseDifftastic:            diffDiffTool == "difft",
+		UseDifftastic:            diffDiffTool == "auto" || diffDiffTool == "difft",
+		UseTreeSitter:            diffDiffTool == "auto" || diffDiffTool == "treesitter",
 		ColorOutput:              !diffNoColor,
 		ContextLines:             3,
 		DifftasticDisplay:        diffDifftasticMode,
+		DifftasticWidth:          diffWidth,
+		TreeSitterWidth:          120,
 		EnableSimilarityMatching: !diffExactMatch,
 		SimilarityThreshold:      diffSimilarityThreshold,
+	}
+	// If "diff" is explicitly specified, disable both difftastic and tree-sitter
+	if diffDiffTool == "diff" {
+		diffOpts.UseDifftastic = false
+		diffOpts.UseTreeSitter = false
 	}
 	diff := differ.New(norm, diffOpts)
 

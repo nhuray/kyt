@@ -70,7 +70,8 @@ type OutputConfig struct {
 	// Format is the output format: "cli", "json", "diff", "html"
 	Format string `yaml:"format"`
 
-	// DiffTool is the diff tool to use: "difft" (difftastic), "diff" (unified), "none"
+	// DiffTool is the diff tool to use: "auto" (try all), "difft" (difftastic only),
+	// "treesitter" (Go-native tree-sitter), "diff" (unified diff)
 	DiffTool string `yaml:"diffTool"`
 
 	// Colorize enables colored output (only for cli/diff formats)
@@ -100,7 +101,7 @@ func NewDefaultConfig() *Config {
 		},
 		Output: OutputConfig{
 			Format:        "cli",
-			DiffTool:      "difft",
+			DiffTool:      "auto", // Changed from "difft" to "auto" for better UX
 			Colorize:      true,
 			ShowUnchanged: false,
 			ContextLines:  3,

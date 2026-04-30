@@ -7,11 +7,25 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
+	"github.com/nhuray/k8s-diff/pkg/differ/treesitter"
 	"github.com/nhuray/k8s-diff/pkg/manifest"
 	"github.com/nhuray/k8s-diff/pkg/normalizer"
+	"golang.org/x/term"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/yaml"
 )
+
+// getTerminalWidth returns the terminal width, or a default if detection fails
+func getTerminalWidth() int {
+	// Try to get terminal width from stdout
+	if width, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
+		return width
+	}
+	// Default to 120 if we can't detect
+	return 120
+}
 
 // Differ performs diffs between two sets of Kubernetes manifests
 type Differ struct {
@@ -145,34 +159,63 @@ func areResourcesEqual(a, b *unstructured.Unstructured) (bool, error) {
 	return bytes.Equal(aJSON, bJSON), nil
 }
 
+// filterDifftasticHeaders removes difftastic's temporary file path headers
+// These lines look like: "/path/to/temp/file.yaml --- YAML" or "--- N/M --- YAML"
+func filterDifftasticHeaders(output string) string {
+	lines := strings.Split(output, "\n")
+	var filtered []string
+
+	for _, line := range lines {
+		// Check if line ends with "--- YAML" (with possible ANSI codes before YAML)
+		// Pattern: anything ending with "--- YAML" or "--- N/M --- YAML"
+		if strings.Contains(line, "--- YAML") && !strings.HasPrefix(strings.TrimSpace(line), "---") {
+			// This is a header line with file path, skip it
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+
+	return strings.Join(filtered, "\n")
+}
+
 // generateDiff generates a diff between two resources
 func (d *Differ) generateDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured) (string, int, error) {
-	// Convert resources to pretty-printed JSON
-	sourceJSON, err := json.MarshalIndent(source.Object, "", "  ")
+	// Convert resources to YAML to preserve original format
+	sourceYAML, err := yaml.Marshal(source.Object)
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to marshal source: %w", err)
 	}
 
-	targetJSON, err := json.MarshalIndent(target.Object, "", "  ")
+	targetYAML, err := yaml.Marshal(target.Object)
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to marshal target: %w", err)
 	}
 
 	// Try difftastic first if enabled
 	if d.options.UseDifftastic {
-		diffText, diffLines, err := d.generateDifftasticDiff(key, sourceJSON, targetJSON)
+		diffText, diffLines, err := d.generateDifftasticDiff(key, source, target, sourceYAML, targetYAML)
 		if err == nil {
 			return diffText, diffLines, nil
 		}
-		// Fall back to unified diff if difftastic fails
+		// Fall through to try tree-sitter
 	}
 
-	// Generate unified diff
-	return d.generateUnifiedDiff(key, sourceJSON, targetJSON)
+	// Try tree-sitter diff as fallback if enabled
+	if d.options.UseTreeSitter {
+		// Pass the same YAML bytes to tree-sitter for consistency with difftastic
+		diffText, diffLines, err := d.generateTreeSitterDiff(key, source, target, sourceYAML, targetYAML)
+		if err == nil {
+			return diffText, diffLines, nil
+		}
+		// Fall through to unified diff
+	}
+
+	// Generate unified diff as final fallback
+	return d.generateUnifiedDiff(key, sourceYAML, targetYAML)
 }
 
 // generateDifftasticDiff generates a diff using difftastic
-func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, sourceJSON, targetJSON []byte) (string, int, error) {
+func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured, sourceYAML, targetYAML []byte) (string, int, error) {
 	// Check if difftastic is available
 	if !isDifftasticAvailable() {
 		return "", 0, fmt.Errorf("difftastic not available")
@@ -185,14 +228,14 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, sourceJSON, ta
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	sourceFile := filepath.Join(tmpDir, "source.json")
-	targetFile := filepath.Join(tmpDir, "target.json")
+	sourceFile := filepath.Join(tmpDir, "source.yaml")
+	targetFile := filepath.Join(tmpDir, "target.yaml")
 
-	if err := os.WriteFile(sourceFile, sourceJSON, 0644); err != nil {
+	if err := os.WriteFile(sourceFile, sourceYAML, 0644); err != nil {
 		return "", 0, fmt.Errorf("failed to write source file: %w", err)
 	}
 
-	if err := os.WriteFile(targetFile, targetJSON, 0644); err != nil {
+	if err := os.WriteFile(targetFile, targetYAML, 0644); err != nil {
 		return "", 0, fmt.Errorf("failed to write target file: %w", err)
 	}
 
@@ -203,6 +246,14 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, sourceJSON, ta
 	if d.options.DifftasticDisplay != "" {
 		args = append(args, "--display", d.options.DifftasticDisplay)
 	}
+
+	// Add width option
+	width := d.options.DifftasticWidth
+	if width == 0 {
+		// Auto-detect terminal width
+		width = getTerminalWidth()
+	}
+	args = append(args, "--width", fmt.Sprintf("%d", width))
 
 	// Add color option
 	// We need to explicitly set color mode because difftastic auto-detects TTY
@@ -223,14 +274,17 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, sourceJSON, ta
 		return "", 0, fmt.Errorf("difftastic failed: %w", err)
 	}
 
-	// Count diff lines (approximate)
-	diffLines := bytes.Count(output, []byte("\n"))
+	// Filter out difftastic's temporary file path headers
+	filteredOutput := filterDifftasticHeaders(string(output))
 
-	return string(output), diffLines, nil
+	// Count diff lines (approximate)
+	diffLines := bytes.Count([]byte(filteredOutput), []byte("\n"))
+
+	return filteredOutput, diffLines, nil
 }
 
 // generateUnifiedDiff generates a unified diff
-func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceJSON, targetJSON []byte) (string, int, error) {
+func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceYAML, targetYAML []byte) (string, int, error) {
 	// Create temp files
 	tmpDir, err := os.MkdirTemp("", "k8s-diff-*")
 	if err != nil {
@@ -238,14 +292,14 @@ func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceJSON, targe
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	sourceFile := filepath.Join(tmpDir, "source.json")
-	targetFile := filepath.Join(tmpDir, "target.json")
+	sourceFile := filepath.Join(tmpDir, "source.yaml")
+	targetFile := filepath.Join(tmpDir, "target.yaml")
 
-	if err := os.WriteFile(sourceFile, sourceJSON, 0644); err != nil {
+	if err := os.WriteFile(sourceFile, sourceYAML, 0644); err != nil {
 		return "", 0, fmt.Errorf("failed to write source file: %w", err)
 	}
 
-	if err := os.WriteFile(targetFile, targetJSON, 0644); err != nil {
+	if err := os.WriteFile(targetFile, targetYAML, 0644); err != nil {
 		return "", 0, fmt.Errorf("failed to write target file: %w", err)
 	}
 
@@ -292,4 +346,55 @@ func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceJSON, targe
 func isDifftasticAvailable() bool {
 	_, err := exec.LookPath("difft")
 	return err == nil
+}
+
+// generateTreeSitterDiff generates a diff using Go-native tree-sitter parser
+func (d *Differ) generateTreeSitterDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured, sourceYAML, targetYAML []byte) (string, int, error) {
+	// Validate that both resources are valid Kubernetes resources
+	if err := treesitter.ValidateKubernetesResource(source); err != nil {
+		return "", 0, fmt.Errorf("invalid source resource: %w", err)
+	}
+	if err := treesitter.ValidateKubernetesResource(target); err != nil {
+		return "", 0, fmt.Errorf("invalid target resource: %w", err)
+	}
+
+	// Use the provided YAML bytes directly (no re-marshaling)
+	// This ensures consistency with difftastic and preserves original formatting
+
+	// Parse YAML with tree-sitter
+	parser := treesitter.NewParser()
+	defer parser.Close()
+
+	sourceTree, err := parser.ParseYAML(sourceYAML)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to parse source YAML: %w", err)
+	}
+
+	targetTree, err := parser.ParseYAML(targetYAML)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to parse target YAML: %w", err)
+	}
+
+	// Perform diff
+	differ := treesitter.NewDiffer(sourceTree, targetTree, sourceYAML, targetYAML)
+	diffResult, err := differ.Diff()
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to generate tree-sitter diff: %w", err)
+	}
+
+	// Format output using line-based formatter for better side-by-side visualization
+	formatter := treesitter.NewLineFormatter(d.options.TreeSitterWidth, d.options.ColorOutput, sourceYAML, targetYAML)
+
+	// Create resource keys for both source and target
+	sourceKey := manifest.NewResourceKey(source)
+	targetKey := manifest.NewResourceKey(target)
+
+	sourceLabel := fmt.Sprintf("a/%s", sourceKey.String())
+	targetLabel := fmt.Sprintf("b/%s", targetKey.String())
+	diffText := formatter.FormatSideBySide(diffResult, sourceLabel, targetLabel)
+
+	// Count diff lines (approximate - count newlines)
+	diffLines := bytes.Count([]byte(diffText), []byte("\n"))
+
+	return diffText, diffLines, nil
 }
