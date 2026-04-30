@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nhuray/k8s-diff/pkg/differ/treesitter"
-	"github.com/nhuray/k8s-diff/pkg/manifest"
-	"github.com/nhuray/k8s-diff/pkg/normalizer"
+	"github.com/nhuray/kyt/pkg/differ/treesitter"
+	"github.com/nhuray/kyt/pkg/manifest"
+	"github.com/nhuray/kyt/pkg/normalizer"
 	"golang.org/x/term"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"

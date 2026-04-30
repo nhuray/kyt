@@ -10,7 +10,7 @@ import (
 
 const (
 	// DefaultConfigFileName is the default config file name
-	DefaultConfigFileName = ".ky.yaml"
+	DefaultConfigFileName = ".kyt.yaml"
 	// LegacyConfigFileName is the legacy config file name (for backward compatibility)
 	LegacyConfigFileName = ".k8s-diff.yaml"
 )
@@ -120,7 +120,7 @@ func (l *Loader) LoadWithDefaults(path string) (*Config, error) {
 
 // SearchConfig searches for a config file in the current directory and parent directories
 // This mimics behavior of tools like git, searching upwards for config files
-// Looks for .ky.yaml first, then falls back to .k8s-diff.yaml for backward compatibility
+// Looks for .kyt.yaml first, then falls back to .k8s-diff.yaml for backward compatibility
 func (l *Loader) SearchConfig(startDir string) (*Config, string, error) {
 	dir, err := filepath.Abs(startDir)
 	if err != nil {

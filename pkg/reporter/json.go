@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/nhuray/k8s-diff/pkg/differ"
-	"github.com/nhuray/k8s-diff/pkg/manifest"
+	"github.com/nhuray/kyt/pkg/differ"
+	"github.com/nhuray/kyt/pkg/manifest"
 )
 
 // JSONReporter formats output as JSON for machine consumption

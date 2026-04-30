@@ -1,4 +1,4 @@
-module github.com/nhuray/k8s-diff
+module github.com/nhuray/kyt
 
 go 1.26.0
 

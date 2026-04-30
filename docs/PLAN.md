@@ -924,7 +924,7 @@ Modified Resources (3):
 
 ---
 
-## Phase 8.6: Tool Refactoring - Rename to `ky` with Subcommands
+## Phase 8.6: Tool Refactoring - Rename to `kyt` with Subcommands
 
 ### 8.6.1 Motivation
 
@@ -941,17 +941,17 @@ Modified Resources (3):
 
 1. **Better UX:** Split normalize and compare into separate commands
 2. **Pipe-friendly:** Enable stdin/stdout workflows for normalization
-3. **Shorter name:** `ky` (Kubernetes YAML) is easier to type
+3. **Shorter name:** `kyt` (Kubernetes YAML) is easier to type
 4. **Composability:** Allow chaining with kustomize, helm, kubectl
 
 ### 8.6.2 New Tool Design
 
-#### Tool Name: `ky` (Kubernetes YAML)
+#### Tool Name: `kyt` (Kubernetes YAML)
 
 **Command Structure:**
 
 ```
-ky                           # Read stdin, normalize, write stdout
+kyt                           # Read stdin, normalize, write stdout
 ├── lint <path>             # Normalize file/directory to stdout
 ├── diff <left> <right>  # Compare manifests (existing functionality)
 └── version                 # Version info
@@ -969,33 +969,33 @@ kustomize build path/to/directory | ky
 helm template . | ky
 
 # Chain with kubectl
-kustomize build . | ky | kubectl apply -f -
+kustomize build . | kyt | kubectl apply -f -
 ```
 
 **Normalize files:**
 
 ```bash
 # Output to stdout (default)
-ky lint path/to/file.yaml
+kyt lint path/to/file.yaml
 
 # Write in-place
-ky lint path/to/file.yaml -w
+kyt lint path/to/file.yaml -w
 
 # Normalize directory
-ky lint path/to/directory/
+kyt lint path/to/directory/
 ```
 
 **Compare manifests:**
 
 ```bash
 # Compare files
-ky diff path/to/first.yaml path/to/second.yaml
+kyt diff path/to/first.yaml path/to/second.yaml
 
 # Compare directories (with all existing options)
-ky diff ./left ./right -o json -v
+kyt diff ./left ./right -o json -v
 
 # Compare with config
-ky diff -c .ky.yaml ./left ./right
+kyt diff -c .kyt.yaml ./left ./right
 ```
 
 ### 8.6.3 Architectural Changes
@@ -1017,7 +1017,7 @@ Config:     .k8s-diff.yaml
 Repository: github.com/nhuray/ky
 Module:     github.com/nhuray/ky
 Binary:     ky
-Config:     .ky.yaml
+Config:     .kyt.yaml
 ```
 
 #### Directory Structure
@@ -1050,7 +1050,7 @@ ky/
 
 **New Files:**
 
-- [ ] `cmd/ky/main.go` - Root command with stdin normalization
+- [ ] `cmd/kyt/main.go` - Root command with stdin normalization
 
   ```go
   var rootCmd = &cobra.Command{
@@ -1071,7 +1071,7 @@ ky/
   }
   ```
 
-- [ ] `cmd/ky/lint.go` - Lint subcommand
+- [ ] `cmd/kyt/lint.go` - Lint subcommand
 
   ```go
   var lintCmd = &cobra.Command{
@@ -1091,14 +1091,14 @@ ky/
       lintCmd.Flags().BoolVarP(&writeInPlace, "write", "w", false,
           "write changes in-place")
       lintCmd.Flags().StringVarP(&lintConfig, "config", "c", "",
-          "config file (default: .ky.yaml)")
+          "config file (default: .kyt.yaml)")
       lintCmd.Flags().BoolVarP(&lintVerbose, "verbose", "v", false,
           "verbose output to stderr")
       rootCmd.AddCommand(lintCmd)
   }
   ```
 
-- [ ] `cmd/ky/diff.go` - Diff subcommand (extracted from current main.go)
+- [ ] `cmd/kyt/diff.go` - Diff subcommand (extracted from current main.go)
 
   ```go
   var diffCmd = &cobra.Command{
@@ -1117,7 +1117,7 @@ ky/
   }
   ```
 
-- [ ] `cmd/ky/version.go` - Version subcommand (extracted)
+- [ ] `cmd/kyt/version.go` - Version subcommand (extracted)
 
   ```go
   var versionCmd = &cobra.Command{
@@ -1144,9 +1144,9 @@ ky/
 - [ ] Delete `cmd/k8s-diff/` entirely
 - [ ] `go.mod` - Update module name to `github.com/nhuray/ky`
 - [ ] Update all imports throughout the codebase to use new module path
-- [ ] `Makefile` - Update BINARY_NAME to `ky`
-- [ ] `README.md` - Update all examples to use `ky`
-- [ ] Config examples: Rename `.k8s-diff.yaml` → `.ky.yaml`
+- [ ] `Makefile` - Update BINARY_NAME to `kyt`
+- [ ] `README.md` - Update all examples to use `kyt`
+- [ ] Config examples: Rename `.k8s-diff.yaml` → `.kyt.yaml`
 
 #### Task 2: Implement Stdin/Stdout Normalization
 
@@ -1154,10 +1154,10 @@ ky/
 
 ```bash
 # No args = stdin → stdout
-cat manifest.yaml | ky > normalized.yaml
+cat manifest.yaml | kyt > normalized.yaml
 
 # With path = file/directory → stdout
-ky some/path.yaml
+kyt some/path.yaml
 ```
 
 **Implementation:**
@@ -1270,14 +1270,14 @@ func runLint(cmd *cobra.Command, args []string) error {
    find . -name "*.go" -exec sed -i '' 's|github.com/nhuray/k8s-diff|github.com/nhuray/ky|g' {} +
 
    # Rename config examples
-   mv examples/.k8s-diff.yaml examples/.ky.yaml
+   mv examples/.k8s-diff.yaml examples/.kyt.yaml
    mv examples/.k8s-diff.minimal.yaml examples/.ky.minimal.yaml
    mv examples/.k8s-diff.helm-migration.yaml examples/.ky.helm-migration.yaml
    ```
 
 2. **GitHub rename:**
    - Go to repository settings
-   - Rename `k8s-diff` → `ky`
+   - Rename `k8s-diff` → `kyt`
    - Update README badges and links
 
 3. **Test everything:**
@@ -1292,7 +1292,7 @@ func runLint(cmd *cobra.Command, args []string) error {
 
 **Integration test updates:**
 
-- [ ] `cmd/ky/main_test.go` - Update all test commands
+- [ ] `cmd/kyt/main_test.go` - Update all test commands
 
   ```go
   func TestKy_Stdin(t *testing.T) {
@@ -1318,7 +1318,7 @@ func runLint(cmd *cobra.Command, args []string) error {
   }
   ```
 
-- [ ] Update all existing tests to use `ky` command
+- [ ] Update all existing tests to use `kyt` command
 - [ ] Add tests for stdin normalization
 - [ ] Add tests for lint -w flag
 
@@ -1327,8 +1327,8 @@ func runLint(cmd *cobra.Command, args []string) error {
 **README.md:**
 
 - [ ] Update project title: "ky - Kubernetes YAML Toolkit"
-- [ ] Update installation: `go install github.com/nhuray/ky/cmd/ky@latest`
-- [ ] Update all usage examples to use `ky`
+- [ ] Update installation: `go install github.com/nhuray/kyt/cmd/ky@latest`
+- [ ] Update all usage examples to use `kyt`
 - [ ] Add new sections:
   - Normalizing manifests
   - Pipe-friendly workflows
@@ -1343,7 +1343,7 @@ func runLint(cmd *cobra.Command, args []string) error {
 
 **Config examples:**
 
-- [ ] Rename all `.k8s-diff.yaml` → `.ky.yaml`
+- [ ] Rename all `.k8s-diff.yaml` → `.kyt.yaml`
 - [ ] Update comments in config files
 
 **Makefile:**
@@ -1355,7 +1355,7 @@ func runLint(cmd *cobra.Command, args []string) error {
 
 **Decision: NO backward compatibility**
 
-- Clean break from `k8s-diff` to `ky`
+- Clean break from `k8s-diff` to `kyt`
 - No deprecated aliases or warnings
 - Users must update their scripts
 - Simpler codebase, clearer semantics
@@ -1372,9 +1372,9 @@ func runLint(cmd *cobra.Command, args []string) error {
 **Config file search order:**
 
 1. `--config` flag if specified
-2. `.ky.yaml` in current directory
-3. `.ky.yaml` in parent directories (walk up)
-4. `~/.ky.yaml` in home directory
+2. `.kyt.yaml` in current directory
+3. `.kyt.yaml` in parent directories (walk up)
+4. `~/.kyt.yaml` in home directory
 5. Use defaults if no config found
 
 **For `diff` command only:**
@@ -1402,24 +1402,24 @@ spec:
 #### Lint command:
 
 ```bash
-$ ky lint deployment.yaml
+$ kyt lint deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 # ... normalized to stdout
 
-$ ky lint deployment.yaml -w
+$ kyt lint deployment.yaml -w
 # File written in-place (no stdout)
 
-$ ky lint ./manifests/ | kubectl apply -f -
+$ kyt lint ./manifests/ | kubectl apply -f -
 # Pipe normalized directory to kubectl
 ```
 
 #### Diff command (unchanged semantics):
 
 ```bash
-$ ky diff left.yaml right.yaml
+$ kyt diff left.yaml right.yaml
 ================================================================
-  ky diff Report
+  kyt diff Report
 ================================================================
 
 Modified Resources (1):
@@ -1429,21 +1429,21 @@ Modified Resources (1):
 
 ### 8.6.8 Migration Guide for Users
 
-**For users updating from `k8s-diff` to `ky`:**
+**For users updating from `k8s-diff` to `kyt`:**
 
 ```bash
 # Old command
 k8s-diff ./left ./right
 
 # New command
-ky diff ./left ./right
+kyt diff ./left ./right
 
 # New capability: normalize
-kustomize build . | ky > normalized.yaml
-ky lint deployment.yaml -w
+kustomize build . | kyt > normalized.yaml
+kyt lint deployment.yaml -w
 
 # Config file rename
-mv .k8s-diff.yaml .ky.yaml
+mv .k8s-diff.yaml .kyt.yaml
 ```
 
 **Update scripts:**
@@ -1459,7 +1459,7 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
 
 **Integration tests:**
 
-- Update all command invocations to use `ky`
+- Update all command invocations to use `kyt`
 - Add ~10 new tests for stdin/lint functionality
 - Verify all diff tests still pass
 - Test -w flag writes correctly
@@ -1473,8 +1473,8 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
 - [ ] `ky lint directory/` works
 - [ ] `ky diff left right` works (all flags)
 - [ ] `ky version` works
-- [ ] Config file `.ky.yaml` is found
-- [ ] Pipe chains work: `helm template . | ky | kubectl apply -f -`
+- [ ] Config file `.kyt.yaml` is found
+- [ ] Pipe chains work: `helm template . | kyt | kubectl apply -f -`
 
 ### 8.6.10 Effort Estimate
 
@@ -1525,16 +1525,16 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
 
 ### 8.6.12 Success Criteria
 
-- [ ] Binary named `ky` builds successfully
-- [ ] `ky` (no args) reads stdin and outputs normalized YAML
+- [ ] Binary named `kyt` builds successfully
+- [ ] `kyt` (no args) reads stdin and outputs normalized YAML
 - [ ] `ky lint <path>` outputs normalized YAML to stdout
 - [ ] `ky lint <path> -w` writes in-place
 - [ ] `ky diff <left> <right>` works with all existing flags
 - [ ] All 52+ tests pass with updated commands
 - [ ] Module path is `github.com/nhuray/ky`
-- [ ] Config file `.ky.yaml` is recognized
+- [ ] Config file `.kyt.yaml` is recognized
 - [ ] Documentation updated completely
-- [ ] GitHub repo renamed to `ky`
+- [ ] GitHub repo renamed to `kyt`
 
 ---
 
@@ -1701,7 +1701,7 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
 | 7         | 1-2            | CLI Implementation ✅          |
 | 8         | 1-2            | Testing & Examples ✅          |
 | 8.5       | 1-2            | Similarity Matching 🔨         |
-| 8.6       | 2              | Refactor to `ky` with subcommands 🔨 |
+| 8.6       | 2              | Refactor to `kyt` with subcommands 🔨 |
 | 9         | 1-2            | Documentation 🔄               |
 | 10        | 1-2            | Build & Release 🔄             |
 | 11        | 5-6            | Go-Native Tree-Sitter Diff 📝  |
@@ -1998,7 +1998,7 @@ func (d *Differ) generateTreeSitterDiff(
 
 - [ ] Update validation to accept new diff tool values
 
-**File:** `cmd/ky/diff.go`
+**File:** `cmd/kyt/diff.go`
 
 - [ ] Update `--diff-tool` flag help text:
   ```
@@ -2007,7 +2007,7 @@ func (d *Differ) generateTreeSitterDiff(
   ```
 - [ ] Wire up new options to DiffOptions
 
-**File:** `examples/.ky.yaml`
+**File:** `examples/.kyt.yaml`
 
 - [ ] Add example configuration with tree-sitter option
 - [ ] Document diff tool choices
@@ -2062,7 +2062,7 @@ func (d *Differ) generateTreeSitterDiff(
   - ConfigMap comparison
   - Complex nested structures
 
-**End-to-End Tests** (`cmd/ky/main_test.go`):
+**End-to-End Tests** (`cmd/kyt/main_test.go`):
 
 - [ ] TestKy_Diff_TreeSitter
   - Force tree-sitter mode with `--diff-tool treesitter`
@@ -2111,7 +2111,7 @@ func (d *Differ) generateTreeSitterDiff(
 ```markdown
 ### Diff Tools
 
-ky supports multiple diff backends with automatic fallback:
+kyt supports multiple diff backends with automatic fallback:
 
 1. **difftastic** (default) - Best quality structural diff, syntax-aware
    - Requires: `difft` binary installed
@@ -2128,16 +2128,16 @@ The tool automatically tries each in order. You can also force a specific tool:
 
 ```bash
 # Auto-select (default) - tries all in order
-ky diff source.yaml target.yaml
+kyt diff source.yaml target.yaml
 
 # Force difftastic only (fail if not available)
-ky diff --diff-tool difft source.yaml target.yaml
+kyt diff --diff-tool difft source.yaml target.yaml
 
 # Force tree-sitter only (Go-native, always available)
-ky diff --diff-tool treesitter source.yaml target.yaml
+kyt diff --diff-tool treesitter source.yaml target.yaml
 
 # Force unified diff only
-ky diff --diff-tool diff source.yaml target.yaml
+kyt diff --diff-tool diff source.yaml target.yaml
 ```
 
 ### Tree-Sitter Diff Features
