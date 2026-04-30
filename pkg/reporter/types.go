@@ -3,7 +3,7 @@ package reporter
 import (
 	"io"
 
-	"github.com/nhuray/k8s-diff/pkg/differ"
+	"github.com/nhuray/kyt/pkg/differ"
 )
 
 // Reporter formats and outputs diff results

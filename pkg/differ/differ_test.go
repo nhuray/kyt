@@ -3,9 +3,9 @@ package differ
 import (
 	"testing"
 
-	"github.com/nhuray/k8s-diff/pkg/config"
-	"github.com/nhuray/k8s-diff/pkg/manifest"
-	"github.com/nhuray/k8s-diff/pkg/normalizer"
+	"github.com/nhuray/kyt/pkg/config"
+	"github.com/nhuray/kyt/pkg/manifest"
+	"github.com/nhuray/kyt/pkg/normalizer"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 

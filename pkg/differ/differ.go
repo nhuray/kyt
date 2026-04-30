@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nhuray/k8s-diff/pkg/differ/treesitter"
-	"github.com/nhuray/k8s-diff/pkg/manifest"
-	"github.com/nhuray/k8s-diff/pkg/normalizer"
+	"github.com/nhuray/kyt/pkg/differ/treesitter"
+	"github.com/nhuray/kyt/pkg/manifest"
+	"github.com/nhuray/kyt/pkg/normalizer"
 	"golang.org/x/term"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
@@ -222,7 +222,7 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, source, target
 	}
 
 	// Create temp files
-	tmpDir, err := os.MkdirTemp("", "k8s-diff-*")
+	tmpDir, err := os.MkdirTemp("", "kyt-diff-*")
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to create temp dir: %w", err)
 	}
@@ -286,7 +286,7 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, source, target
 // generateUnifiedDiff generates a unified diff
 func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceYAML, targetYAML []byte) (string, int, error) {
 	// Create temp files
-	tmpDir, err := os.MkdirTemp("", "k8s-diff-*")
+	tmpDir, err := os.MkdirTemp("", "kyt-diff-*")
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to create temp dir: %w", err)
 	}

@@ -6,8 +6,8 @@ import (
 	"os"
 	"sort"
 
-	"github.com/nhuray/k8s-diff/pkg/differ"
-	"github.com/nhuray/k8s-diff/pkg/manifest"
+	"github.com/nhuray/kyt/pkg/differ"
+	"github.com/nhuray/kyt/pkg/manifest"
 )
 
 // CLIReporter formats output for human-readable CLI display
@@ -65,11 +65,11 @@ func (r *CLIReporter) printHeader(w io.Writer, result *differ.DiffResult, useCol
 
 	if useColor {
 		_, _ = fmt.Fprintf(w, "%s%s%s\n", colorBold, separator, colorReset)
-		_, _ = fmt.Fprintf(w, "%s%s  k8s-diff Report%s\n", colorBold, colorCyan, colorReset)
+		_, _ = fmt.Fprintf(w, "%s%s  kyt Report%s\n", colorBold, colorCyan, colorReset)
 		_, _ = fmt.Fprintf(w, "%s%s%s\n\n", colorBold, separator, colorReset)
 	} else {
 		_, _ = fmt.Fprintf(w, "%s\n", separator)
-		_, _ = fmt.Fprintf(w, "  k8s-diff Report\n")
+		_, _ = fmt.Fprintf(w, "  kyt Report\n")
 		_, _ = fmt.Fprintf(w, "%s\n\n", separator)
 	}
 }

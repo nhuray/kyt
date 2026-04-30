@@ -1,6 +1,6 @@
 package config
 
-// Config represents the complete configuration for k8s-diff
+// Config represents the complete configuration for kyt
 type Config struct {
 	IgnoreDifferences []ResourceIgnoreDifferences `yaml:"ignoreDifferences"`
 	Normalization     NormalizationConfig         `yaml:"normalization"`

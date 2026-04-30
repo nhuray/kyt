@@ -1,10 +1,10 @@
-# ky (Kubernetes YAML toolkit)
+# kyt (Kubernetes YAML Toolkit)
 
 A powerful CLI tool for working with Kubernetes manifests.
 
 ## Overview
 
-`ky` is a Go-based toolkit that helps you normalize, compare, and manage Kubernetes manifests. It uses [ArgoCD](https://argo-cd.readthedocs.io/)-compatible ignore rules (JSON Pointers and JQ path expressions) and leverages [difftastic](https://difftastic.wilfred.me.uk/) for beautiful structural diffs.
+`kyt` is a Go-based toolkit that helps you normalize, compare, and manage Kubernetes manifests. It uses [ArgoCD](https://argo-cd.readthedocs.io/)-compatible ignore rules (JSON Pointers and JQ path expressions) and leverages [difftastic](https://difftastic.wilfred.me.uk/) for beautiful structural diffs.
 
 **Key Features:**
 
@@ -43,22 +43,22 @@ cd k8s-diff
 make build
 
 # Compare two manifest files
-./bin/ky diff source.yaml target.yaml
+./bin/kyt diff source.yaml target.yaml
 
 # Compare directories
-./bin/ky diff ./kustomize-output ./helm-output
+./bin/kyt diff ./kustomize-output ./helm-output
 
 # Normalize a manifest file
-./bin/ky lint deployment.yaml
+./bin/kyt lint deployment.yaml
 
 # Pipe manifests through ky
-kustomize build . | ky lint | kubectl apply -f -
+kustomize build . | kyt lint | kubectl apply -f -
 
 # Use custom config
-./bin/ky diff -c .ky.yaml source.yaml target.yaml
+./bin/kyt diff -c .kyt.yaml source.yaml target.yaml
 
 # Output JSON for CI/CD
-./bin/ky diff -o json source.yaml target.yaml
+./bin/kyt diff -o json source.yaml target.yaml
 ```
 
 ## Commands
@@ -69,28 +69,28 @@ Compare two Kubernetes manifest files or directories with smart ignore rules.
 
 ```bash
 # Basic comparison
-ky diff source.yaml target.yaml
+kyt diff source.yaml target.yaml
 
 # Compare directories
-ky diff ./helm-output ./kustomize-output
+kyt diff ./helm-output ./kustomize-output
 
 # Show identical resources
-ky diff --show-identical source.yaml target.yaml
+kyt diff --show-identical source.yaml target.yaml
 
 # JSON output for CI/CD
-ky diff -o json source.yaml target.yaml
+kyt diff -o json source.yaml target.yaml
 
 # Verbose mode for debugging
-ky diff -v source.yaml target.yaml
+kyt diff -v source.yaml target.yaml
 
 # Disable similarity matching (exact name match only)
-ky diff --exact-match source.yaml target.yaml
+kyt diff --exact-match source.yaml target.yaml
 
 # Use unified diff instead of difftastic
-ky diff --diff-tool diff source.yaml target.yaml
+kyt diff --diff-tool diff source.yaml target.yaml
 
 # Change difftastic display mode
-ky diff --display inline source.yaml target.yaml
+kyt diff --display inline source.yaml target.yaml
 ```
 
 **Exit Codes:**
@@ -104,34 +104,34 @@ Normalize Kubernetes manifests by applying ignore rules and transformations.
 
 ```bash
 # Normalize a file to stdout
-ky lint deployment.yaml
+kyt lint deployment.yaml
 
 # Normalize a directory to stdout
-ky lint ./manifests
+kyt lint ./manifests
 
 # Normalize and write back to source files
-ky lint -w ./manifests
+kyt lint -w ./manifests
 
 # Normalize from stdin
-cat deployment.yaml | ky lint
+cat deployment.yaml | kyt lint
 
 # Chain with other tools
-kustomize build . | ky lint | kubectl apply -f -
-helm template . | ky lint > normalized.yaml
+kustomize build . | kyt lint | kubectl apply -f -
+helm template . | kyt lint > normalized.yaml
 ```
 
 ### `ky version` - Version information
 
 ```bash
-ky version
+kyt version
 ```
 
 ## Configuration
 
-The tool searches for `.ky.yaml` (or legacy `.k8s-diff.yaml`) in the current directory and parent directories.
+The tool searches for `.kyt.yaml` (or legacy `.k8s-diff.yaml`) in the current directory and parent directories.
 
 ```yaml
-# .ky.yaml
+# .kyt.yaml
 ignoreDifferences:
   # Ignore all labels and annotations
   - group: ""
@@ -154,7 +154,7 @@ ignoreDifferences:
       - /spec/clusterIPs
 ```
 
-See [examples/.ky.yaml](examples/.ky.yaml) for a complete configuration example.
+See [examples/.kyt.yaml](examples/.kyt.yaml) for a complete configuration example.
 
 ## Installation
 
@@ -168,11 +168,11 @@ cd k8s-diff
 make build
 
 # Or directly with Go
-go build -o bin/ky ./cmd/ky
+go build -o bin/kyt ./cmd/ky
 
 # Optional: Install to your PATH
 make install
-# Or manually: cp bin/ky /usr/local/bin/
+# Or manually: cp bin/kyt /usr/local/bin/
 ```
 
 ### Using Go Install
@@ -287,4 +287,4 @@ Created by Nicolas Huray ([@nhuray](https://github.com/nhuray))
 
 ---
 
-**Status:** ✅ Phase 8.6 complete! Tool refactored to `ky` with subcommands. Documentation and release automation in progress.
+**Status:** ✅ Phase 8.6 complete! Tool refactored to `kyt` with subcommands. Documentation and release automation in progress.

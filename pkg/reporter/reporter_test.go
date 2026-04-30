@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nhuray/k8s-diff/pkg/differ"
-	"github.com/nhuray/k8s-diff/pkg/manifest"
+	"github.com/nhuray/kyt/pkg/differ"
+	"github.com/nhuray/kyt/pkg/manifest"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -28,7 +28,7 @@ func TestCLIReporter_Report(t *testing.T) {
 				ShowIdentical: false,
 			},
 			expectedStrs: []string{
-				"k8s-diff Report",
+				"kyt Report",
 				"Added Resources (1):",
 				"Removed Resources (1):",
 				"Modified Resources (1):",
