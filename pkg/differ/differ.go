@@ -178,53 +178,6 @@ func filterDifftasticHeaders(output string) string {
 	return strings.Join(filtered, "\n")
 }
 
-// formatDifftasticHeader creates a header line for difftastic side-by-side output
-// matching the format used by tree-sitter: "Kind: `namespace/name` │ Kind: `namespace/name`"
-func (d *Differ) formatDifftasticHeader(source, target *unstructured.Unstructured, width int) string {
-	sourceKey := manifest.NewResourceKey(source)
-	targetKey := manifest.NewResourceKey(target)
-
-	kind := sourceKey.Kind
-
-	// Format source name with namespace
-	var sourceName string
-	if sourceKey.Namespace != "" {
-		sourceName = sourceKey.Namespace + "/" + sourceKey.Name
-	} else {
-		sourceName = sourceKey.Name
-	}
-
-	// Format target name with namespace
-	var targetName string
-	if targetKey.Namespace != "" {
-		targetName = targetKey.Namespace + "/" + targetKey.Name
-	} else {
-		targetName = targetKey.Name
-	}
-
-	// Format: "Kind: `namespace/name` │ Kind: `namespace/name`"
-	sourceText := fmt.Sprintf("%s: `%s`", kind, sourceName)
-	targetText := fmt.Sprintf("%s: `%s`", kind, targetName)
-
-	// Use half the width for each side
-	halfWidth := width / 2
-
-	// Pad source text
-	paddedSource := sourceText
-	if len(sourceText) < halfWidth {
-		paddedSource = sourceText + strings.Repeat(" ", halfWidth-len(sourceText))
-	}
-
-	// Build header with separator line
-	headerLine := paddedSource + " │  " + targetText
-	header := headerLine + "\n"
-	// Make separator match the header length for proper alignment
-	headerLength := len([]rune(headerLine)) // Use rune count for proper Unicode handling
-	header += strings.Repeat("─", headerLength) + "\n"
-
-	return header
-}
-
 // generateDiff generates a diff between two resources
 func (d *Differ) generateDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured) (string, int, error) {
 	// Convert resources to YAML to preserve original format
@@ -323,12 +276,6 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, source, target
 
 	// Filter out difftastic's temporary file path headers
 	filteredOutput := filterDifftasticHeaders(string(output))
-
-	// Add our custom header for side-by-side display modes
-	if d.options.DifftasticDisplay == "side-by-side" || d.options.DifftasticDisplay == "side-by-side-show-both" {
-		header := d.formatDifftasticHeader(source, target, width)
-		filteredOutput = header + filteredOutput
-	}
 
 	// Count diff lines (approximate)
 	diffLines := bytes.Count([]byte(filteredOutput), []byte("\n"))

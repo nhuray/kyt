@@ -122,23 +122,25 @@ func (r *CLIReporter) printModified(w io.Writer, modified []differ.ResourceDiff,
 		// Print resource header
 		// Extract kind and format the header more concisely
 		kind := diff.Key.Kind
-		sourceName := diff.Key.Name
-		targetName := diff.Key.Name
 
-		// For similarity matches, show source → target
-		if diff.MatchType == "similarity" && diff.SourceKey.String() != diff.TargetKey.String() {
+		// Format source name with namespace
+		var sourceName string
+		if diff.SourceKey.Namespace != "" {
+			sourceName = diff.SourceKey.Namespace + "/" + diff.SourceKey.Name
+		} else {
 			sourceName = diff.SourceKey.Name
+		}
+
+		// Format target name with namespace
+		var targetName string
+		if diff.TargetKey.Namespace != "" {
+			targetName = diff.TargetKey.Namespace + "/" + diff.TargetKey.Name
+		} else {
 			targetName = diff.TargetKey.Name
 		}
 
-		// Format the comparison header
-		var comparisonText string
-		if sourceName != targetName {
-			comparisonText = fmt.Sprintf("Comparing %s: `%s` → `%s`", kind, sourceName, targetName)
-		} else {
-			comparisonText = fmt.Sprintf("Comparing %s: `%s`", kind, sourceName)
-		}
-
+		// Format the comparison header showing source → target
+		comparisonText := fmt.Sprintf("Comparing %s: `%s` → `%s`", kind, sourceName, targetName)
 		if diff.SimilarityScore > 0 {
 			comparisonText += fmt.Sprintf(" (similarity: %.2f)", diff.SimilarityScore)
 		}
