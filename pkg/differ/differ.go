@@ -12,9 +12,20 @@ import (
 	"github.com/nhuray/k8s-diff/pkg/differ/treesitter"
 	"github.com/nhuray/k8s-diff/pkg/manifest"
 	"github.com/nhuray/k8s-diff/pkg/normalizer"
+	"golang.org/x/term"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
 )
+
+// getTerminalWidth returns the terminal width, or a default if detection fails
+func getTerminalWidth() int {
+	// Try to get terminal width from stdout
+	if width, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
+		return width
+	}
+	// Default to 120 if we can't detect
+	return 120
+}
 
 // Differ performs diffs between two sets of Kubernetes manifests
 type Differ struct {
@@ -169,7 +180,7 @@ func filterDifftasticHeaders(output string) string {
 
 // formatDifftasticHeader creates a header line for difftastic side-by-side output
 // matching the format used by tree-sitter: "Kind: `namespace/name` │ Kind: `namespace/name`"
-func (d *Differ) formatDifftasticHeader(source, target *unstructured.Unstructured) string {
+func (d *Differ) formatDifftasticHeader(source, target *unstructured.Unstructured, width int) string {
 	sourceKey := manifest.NewResourceKey(source)
 	targetKey := manifest.NewResourceKey(target)
 
@@ -195,8 +206,7 @@ func (d *Differ) formatDifftasticHeader(source, target *unstructured.Unstructure
 	sourceText := fmt.Sprintf("%s: `%s`", kind, sourceName)
 	targetText := fmt.Sprintf("%s: `%s`", kind, targetName)
 
-	// Pad to make it look nice (similar to tree-sitter's width)
-	width := 120
+	// Use half the width for each side
 	halfWidth := width / 2
 
 	// Pad source text
@@ -206,8 +216,11 @@ func (d *Differ) formatDifftasticHeader(source, target *unstructured.Unstructure
 	}
 
 	// Build header with separator line
-	header := paddedSource + " │  " + targetText + "\n"
-	header += strings.Repeat("─", width) + "\n"
+	headerLine := paddedSource + " │  " + targetText
+	header := headerLine + "\n"
+	// Make separator match the header length for proper alignment
+	headerLength := len([]rune(headerLine)) // Use rune count for proper Unicode handling
+	header += strings.Repeat("─", headerLength) + "\n"
 
 	return header
 }
@@ -281,6 +294,14 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, source, target
 		args = append(args, "--display", d.options.DifftasticDisplay)
 	}
 
+	// Add width option
+	width := d.options.DifftasticWidth
+	if width == 0 {
+		// Auto-detect terminal width
+		width = getTerminalWidth()
+	}
+	args = append(args, "--width", fmt.Sprintf("%d", width))
+
 	// Add color option
 	// We need to explicitly set color mode because difftastic auto-detects TTY
 	// and won't use colors when output is captured
@@ -305,7 +326,7 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, source, target
 
 	// Add our custom header for side-by-side display modes
 	if d.options.DifftasticDisplay == "side-by-side" || d.options.DifftasticDisplay == "side-by-side-show-both" {
-		header := d.formatDifftasticHeader(source, target)
+		header := d.formatDifftasticHeader(source, target, width)
 		filteredOutput = header + filteredOutput
 	}
 

@@ -96,6 +96,10 @@ type DiffOptions struct {
 	// Options: "side-by-side", "side-by-side-show-both", "inline"
 	DifftasticDisplay string
 
+	// DifftasticWidth is the terminal width for difftastic output
+	// If 0, auto-detects terminal width. Default: 0 (auto-detect)
+	DifftasticWidth int
+
 	// TreeSitterWidth is the terminal width for tree-sitter output
 	// Default: 120
 	TreeSitterWidth int
@@ -117,6 +121,7 @@ func NewDefaultDiffOptions() *DiffOptions {
 		ColorOutput:              true,
 		ContextLines:             3,
 		DifftasticDisplay:        "side-by-side",
+		DifftasticWidth:          0, // Auto-detect terminal width
 		TreeSitterWidth:          120,
 		EnableSimilarityMatching: true,
 		SimilarityThreshold:      0.7,

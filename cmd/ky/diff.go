@@ -21,6 +21,7 @@ var (
 	diffSkipNormalize       bool
 	diffExactMatch          bool
 	diffSimilarityThreshold float64
+	diffWidth               int
 )
 
 var diffCmd = &cobra.Command{
@@ -74,6 +75,7 @@ func init() {
 	diffCmd.Flags().BoolVar(&diffShowIdentical, "show-identical", false, "show identical resources in output")
 	diffCmd.Flags().StringVar(&diffDifftasticMode, "display", "side-by-side", "difftastic display mode: side-by-side, inline")
 	diffCmd.Flags().StringVar(&diffDiffTool, "diff-tool", "auto", "diff tool: auto (try all), difft (difftastic only), treesitter (Go native), diff (unified)")
+	diffCmd.Flags().IntVar(&diffWidth, "width", 0, "terminal width for diff output (0 = auto-detect)")
 	diffCmd.Flags().BoolVar(&diffSkipNormalize, "skip-normalize", false, "skip normalization (use raw manifests)")
 	diffCmd.Flags().BoolVar(&diffExactMatch, "exact-match", false, "disable similarity matching (only exact name matches)")
 	diffCmd.Flags().Float64Var(&diffSimilarityThreshold, "similarity-threshold", 0.7, "minimum similarity score (0.0-1.0) for matching resources")
@@ -135,6 +137,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		ColorOutput:              !diffNoColor,
 		ContextLines:             3,
 		DifftasticDisplay:        diffDifftasticMode,
+		DifftasticWidth:          diffWidth,
 		TreeSitterWidth:          120,
 		EnableSimilarityMatching: !diffExactMatch,
 		SimilarityThreshold:      diffSimilarityThreshold,
