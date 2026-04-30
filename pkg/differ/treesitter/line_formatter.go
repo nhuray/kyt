@@ -1,6 +1,7 @@
 package treesitter
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -57,9 +58,11 @@ func (lf *LineFormatter) FormatSideBySide(root *DiffNode, sourceLabel, targetLab
 
 // LineDiff represents a single line diff
 type LineDiff struct {
-	SourceLine string
-	TargetLine string
-	Type       ChangeType
+	SourceLine   string
+	TargetLine   string
+	SourceLineNo int // Line number in source (1-based, 0 if not present)
+	TargetLineNo int // Line number in target (1-based, 0 if not present)
+	Type         ChangeType
 }
 
 // buildLineDiffs converts tree diff to line-based diffs
@@ -86,10 +89,13 @@ func (lf *LineFormatter) buildLineDiffs(root *DiffNode, sourceLines, targetLines
 		case Unchanged:
 			// Show unchanged lines from source (they're the same in target)
 			for i := r.SourceStart; i <= r.SourceEnd && i > 0 && i <= len(sourceLines); i++ {
+				targetLineNo := r.TargetStart + (i - r.SourceStart)
 				result = append(result, LineDiff{
-					SourceLine: sourceLines[i-1],
-					TargetLine: sourceLines[i-1], // Same line
-					Type:       Unchanged,
+					SourceLine:   sourceLines[i-1],
+					TargetLine:   sourceLines[i-1], // Same line
+					SourceLineNo: i,
+					TargetLineNo: targetLineNo,
+					Type:         Unchanged,
 				})
 			}
 
@@ -97,9 +103,11 @@ func (lf *LineFormatter) buildLineDiffs(root *DiffNode, sourceLines, targetLines
 			// Show empty on left, content on right
 			for i := r.TargetStart; i <= r.TargetEnd && i > 0 && i <= len(targetLines); i++ {
 				result = append(result, LineDiff{
-					SourceLine: "",
-					TargetLine: targetLines[i-1],
-					Type:       Added,
+					SourceLine:   "",
+					TargetLine:   targetLines[i-1],
+					SourceLineNo: 0,
+					TargetLineNo: i,
+					Type:         Added,
 				})
 			}
 
@@ -107,9 +115,11 @@ func (lf *LineFormatter) buildLineDiffs(root *DiffNode, sourceLines, targetLines
 			// Show content on left, empty on right
 			for i := r.SourceStart; i <= r.SourceEnd && i > 0 && i <= len(sourceLines); i++ {
 				result = append(result, LineDiff{
-					SourceLine: sourceLines[i-1],
-					TargetLine: "",
-					Type:       Removed,
+					SourceLine:   sourceLines[i-1],
+					TargetLine:   "",
+					SourceLineNo: i,
+					TargetLineNo: 0,
+					Type:         Removed,
 				})
 			}
 
@@ -145,18 +155,34 @@ func (lf *LineFormatter) buildLineDiffs(root *DiffNode, sourceLines, targetLines
 			for i := 0; i < maxLines; i++ {
 				srcLine := ""
 				tgtLine := ""
+				srcLineNo := 0
+				tgtLineNo := 0
 
 				if sourceStart+i <= sourceEnd {
 					srcLine = sourceLines[sourceStart+i-1]
+					srcLineNo = sourceStart + i
 				}
 				if targetStart+i <= targetEnd {
 					tgtLine = targetLines[targetStart+i-1]
+					tgtLineNo = targetStart + i
+				}
+
+				// Determine if this specific line changed
+				lineType := Modified
+				if srcLine == tgtLine && srcLine != "" {
+					lineType = Unchanged
+				} else if srcLine == "" {
+					lineType = Added
+				} else if tgtLine == "" {
+					lineType = Removed
 				}
 
 				result = append(result, LineDiff{
-					SourceLine: srcLine,
-					TargetLine: tgtLine,
-					Type:       Modified,
+					SourceLine:   srcLine,
+					TargetLine:   tgtLine,
+					SourceLineNo: srcLineNo,
+					TargetLineNo: tgtLineNo,
+					Type:         lineType,
 				})
 			}
 		}
@@ -254,53 +280,276 @@ func (lf *LineFormatter) collectLineRanges(node *DiffNode) []LineRange {
 
 // formatLinePair formats a single line pair side-by-side
 func (lf *LineFormatter) formatLinePair(buf *strings.Builder, ld LineDiff, halfWidth int) {
+	// Calculate line number column width (4 chars is usually enough)
+	lineNoWidth := 4
+	contentWidth := halfWidth - lineNoWidth - 1 // -1 for space after line number
+
 	switch ld.Type {
 	case Unchanged:
-		// Gray on both sides
-		left := lf.pad(ld.SourceLine, halfWidth)
-		buf.WriteString(lf.colorize(left, color.FgHiBlack))
+		// Dim/faint line numbers for unchanged lines
+		srcLineNo := lf.formatLineNumber(ld.SourceLineNo, lineNoWidth, color.Faint)
+		tgtLineNo := lf.formatLineNumber(ld.TargetLineNo, lineNoWidth, color.Faint)
+
+		// Highlight YAML keys in the content
+		srcContent := lf.highlightYAMLKeys(ld.SourceLine, color.Faint)
+		tgtContent := lf.highlightYAMLKeys(ld.TargetLine, color.Faint)
+
+		buf.WriteString(srcLineNo)
+		buf.WriteString(" ")
+		buf.WriteString(lf.padColored(srcContent, ld.SourceLine, contentWidth, color.Faint))
 		buf.WriteString(" │ ")
-		buf.WriteString(lf.colorize(ld.TargetLine, color.FgHiBlack))
+		buf.WriteString(tgtLineNo)
+		buf.WriteString(" ")
+		buf.WriteString(lf.colorizeIfPlain(tgtContent, ld.TargetLine, color.Faint))
 		buf.WriteString("\n")
 
 	case Added:
-		// Empty left, green right
-		left := lf.pad("", halfWidth)
-		buf.WriteString(left)
+		// Empty left, bright green and bold right with line number
+		srcLineNo := lf.formatLineNumber(0, lineNoWidth, color.Faint)
+		tgtLineNo := lf.formatLineNumberBold(ld.TargetLineNo, lineNoWidth, color.FgHiGreen)
+
+		tgtContent := lf.highlightYAMLKeys(ld.TargetLine, color.FgHiGreen)
+
+		buf.WriteString(srcLineNo)
+		buf.WriteString(" ")
+		buf.WriteString(strings.Repeat(" ", contentWidth))
 		buf.WriteString(" │ ")
-		buf.WriteString(lf.colorize(ld.TargetLine, color.FgGreen))
+		buf.WriteString(tgtLineNo)
+		buf.WriteString(" ")
+		buf.WriteString(lf.colorizeIfPlain(tgtContent, ld.TargetLine, color.FgHiGreen))
 		buf.WriteString("\n")
 
 	case Removed:
-		// Red left, empty right
-		left := lf.pad(ld.SourceLine, halfWidth)
-		buf.WriteString(lf.colorize(left, color.FgRed))
+		// Bright red and bold left with line number, empty right
+		srcLineNo := lf.formatLineNumberBold(ld.SourceLineNo, lineNoWidth, color.FgHiRed)
+		tgtLineNo := lf.formatLineNumber(0, lineNoWidth, color.Faint)
+
+		srcContent := lf.highlightYAMLKeys(ld.SourceLine, color.FgHiRed)
+
+		buf.WriteString(srcLineNo)
+		buf.WriteString(" ")
+		buf.WriteString(lf.padColored(srcContent, ld.SourceLine, contentWidth, color.FgHiRed))
 		buf.WriteString(" │ ")
-		buf.WriteString("")
+		buf.WriteString(tgtLineNo)
+		buf.WriteString(" ")
 		buf.WriteString("\n")
 
 	case Modified:
 		// Use character-level diff for modified lines
+		srcLineNo := lf.formatLineNumberBold(ld.SourceLineNo, lineNoWidth, color.FgHiRed)
+		tgtLineNo := lf.formatLineNumberBold(ld.TargetLineNo, lineNoWidth, color.FgHiGreen)
+
 		if lf.useColor && ld.SourceLine != "" && ld.TargetLine != "" {
 			sourceSegs, targetSegs := computeCharDiff(ld.SourceLine, ld.TargetLine)
 
 			// Format source with character highlighting
-			sourceFormatted := lf.formatSegmentsWithPadding(sourceSegs, halfWidth, color.FgRed)
+			sourceFormatted := lf.formatSegmentsWithPaddingAndKeys(sourceSegs, contentWidth, color.FgHiRed)
+			buf.WriteString(srcLineNo)
+			buf.WriteString(" ")
 			buf.WriteString(sourceFormatted)
 			buf.WriteString(" │ ")
 
 			// Format target with character highlighting
-			targetFormatted := formatSegments(targetSegs, lf.useColor)
+			targetFormatted := lf.formatSegmentsWithKeys(targetSegs, color.FgHiGreen)
+			buf.WriteString(tgtLineNo)
+			buf.WriteString(" ")
 			buf.WriteString(targetFormatted)
 			buf.WriteString("\n")
 		} else {
 			// Fallback to line-level coloring
-			left := lf.pad(ld.SourceLine, halfWidth)
-			buf.WriteString(lf.colorize(left, color.FgRed))
+			srcContent := lf.highlightYAMLKeys(ld.SourceLine, color.FgHiRed)
+			tgtContent := lf.highlightYAMLKeys(ld.TargetLine, color.FgHiGreen)
+
+			buf.WriteString(srcLineNo)
+			buf.WriteString(" ")
+			buf.WriteString(lf.padColored(srcContent, ld.SourceLine, contentWidth, color.FgHiRed))
 			buf.WriteString(" │ ")
-			buf.WriteString(lf.colorize(ld.TargetLine, color.FgGreen))
+			buf.WriteString(tgtLineNo)
+			buf.WriteString(" ")
+			buf.WriteString(lf.colorizeIfPlain(tgtContent, ld.TargetLine, color.FgHiGreen))
 			buf.WriteString("\n")
 		}
+	}
+}
+
+// formatLineNumber formats a line number with padding and color
+func (lf *LineFormatter) formatLineNumber(lineNo, width int, c color.Attribute) string {
+	if lineNo == 0 {
+		// Empty line number (for added/removed lines)
+		return lf.colorize(strings.Repeat(" ", width), c)
+	}
+	numStr := fmt.Sprintf("%d", lineNo)
+	padding := width - len(numStr)
+	if padding < 0 {
+		padding = 0
+	}
+	return lf.colorize(strings.Repeat(" ", padding)+numStr, c)
+}
+
+// formatLineNumberBold formats a line number with padding, color, and bold
+func (lf *LineFormatter) formatLineNumberBold(lineNo, width int, c color.Attribute) string {
+	if lineNo == 0 {
+		// Empty line number (for added/removed lines)
+		return lf.colorize(strings.Repeat(" ", width), c)
+	}
+	numStr := fmt.Sprintf("%d", lineNo)
+	padding := width - len(numStr)
+	if padding < 0 {
+		padding = 0
+	}
+	if !lf.useColor {
+		return strings.Repeat(" ", padding) + numStr
+	}
+	col := color.New(c, color.Bold)
+	col.EnableColor()
+	return col.Sprint(strings.Repeat(" ", padding) + numStr)
+}
+
+// highlightYAMLKeys highlights YAML keys (text before colon) in magenta
+func (lf *LineFormatter) highlightYAMLKeys(line string, baseColor color.Attribute) string {
+	if !lf.useColor {
+		return line
+	}
+
+	// Find colon position
+	colonIdx := strings.Index(line, ":")
+	if colonIdx == -1 {
+		// No colon, return with base color
+		colBase := color.New(baseColor)
+		colBase.EnableColor()
+		return colBase.Sprint(line)
+	}
+
+	// Split into key and value
+	key := line[:colonIdx]
+	rest := line[colonIdx:]
+
+	// Highlight key in magenta, rest in base color
+	colKey := color.New(color.FgMagenta)
+	colKey.EnableColor()
+	colRest := color.New(baseColor)
+	colRest.EnableColor()
+	return colKey.Sprint(key) + colRest.Sprint(rest)
+}
+
+// colorizeIfPlain applies color only if the text doesn't already have color codes
+func (lf *LineFormatter) colorizeIfPlain(text, originalText string, c color.Attribute) string {
+	if text != originalText {
+		// Already has color codes
+		return text
+	}
+	return lf.colorize(text, c)
+}
+
+// padColored pads colored text to the specified width
+func (lf *LineFormatter) padColored(coloredText, plainText string, width int, c color.Attribute) string {
+	plainLen := len(plainText)
+	if plainLen >= width {
+		// Truncate if needed
+		if width > 3 {
+			// This is simplified - ideally we'd truncate the colored text properly
+			return lf.colorize(plainText[:width-3]+"...", c)
+		}
+		return lf.colorize(plainText[:width], c)
+	}
+	// Add padding
+	return coloredText + strings.Repeat(" ", width-plainLen)
+}
+
+// formatSegmentsWithPaddingAndKeys formats segments with YAML key highlighting and padding
+func (lf *LineFormatter) formatSegmentsWithPaddingAndKeys(segments []DiffSegment, width int, baseColor color.Attribute) string {
+	// Calculate plain text length
+	plainLen := 0
+	for _, seg := range segments {
+		plainLen += len(seg.Text)
+	}
+
+	// Format segments with key highlighting
+	var formatted string
+	for _, seg := range segments {
+		formatted += lf.formatSegmentWithKeys(seg.Text, seg.Type, baseColor)
+	}
+
+	// Add padding
+	if plainLen < width {
+		formatted += strings.Repeat(" ", width-plainLen)
+	} else if plainLen > width && width > 3 {
+		// Truncate - simplified version
+		plain := plainTextFromSegments(segments)
+		formatted = lf.colorize(plain[:width-3]+"...", baseColor)
+	}
+
+	return formatted
+}
+
+// formatSegmentsWithKeys formats segments with YAML key highlighting
+func (lf *LineFormatter) formatSegmentsWithKeys(segments []DiffSegment, baseColor color.Attribute) string {
+	var formatted string
+	for _, seg := range segments {
+		formatted += lf.formatSegmentWithKeys(seg.Text, seg.Type, baseColor)
+	}
+	return formatted
+}
+
+// formatSegmentWithKeys formats a single segment with YAML key highlighting
+func (lf *LineFormatter) formatSegmentWithKeys(text string, changeType ChangeType, baseColor color.Attribute) string {
+	if !lf.useColor {
+		return text
+	}
+
+	// Check for YAML key (text before colon)
+	colonIdx := strings.Index(text, ":")
+
+	switch changeType {
+	case Unchanged:
+		if colonIdx != -1 {
+			// Has key - highlight key in magenta, rest in base color
+			key := text[:colonIdx]
+			rest := text[colonIdx:]
+			colKey := color.New(color.FgMagenta)
+			colKey.EnableColor()
+			colRest := color.New(baseColor)
+			colRest.EnableColor()
+			return colKey.Sprint(key) + colRest.Sprint(rest)
+		}
+		col := color.New(baseColor)
+		col.EnableColor()
+		return col.Sprint(text)
+
+	case Added:
+		// Bright green, bold, and underline for added parts
+		if colonIdx != -1 {
+			key := text[:colonIdx]
+			rest := text[colonIdx:]
+			colKey := color.New(color.FgMagenta)
+			colKey.EnableColor()
+			colRest := color.New(color.FgHiGreen, color.Bold, color.Underline)
+			colRest.EnableColor()
+			return colKey.Sprint(key) + colRest.Sprint(rest)
+		}
+		col := color.New(color.FgHiGreen, color.Bold, color.Underline)
+		col.EnableColor()
+		return col.Sprint(text)
+
+	case Removed:
+		// Bright red, bold, and underline for removed parts
+		if colonIdx != -1 {
+			key := text[:colonIdx]
+			rest := text[colonIdx:]
+			colKey := color.New(color.FgMagenta)
+			colKey.EnableColor()
+			colRest := color.New(color.FgHiRed, color.Bold, color.Underline)
+			colRest.EnableColor()
+			return colKey.Sprint(key) + colRest.Sprint(rest)
+		}
+		col := color.New(baseColor, color.Bold, color.Underline)
+		col.EnableColor()
+		return col.Sprint(text)
+
+	default:
+		col := color.New(baseColor)
+		col.EnableColor()
+		return col.Sprint(text)
 	}
 }
 
@@ -366,7 +615,10 @@ func (lf *LineFormatter) colorize(s string, c color.Attribute) string {
 	if !lf.useColor {
 		return s
 	}
-	return color.New(c).Sprint(s)
+	// Create a color instance and force color output
+	col := color.New(c)
+	col.EnableColor()
+	return col.Sprint(s)
 }
 
 // formatHeader formats the header
