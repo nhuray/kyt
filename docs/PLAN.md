@@ -1460,7 +1460,7 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
 **Integration tests:**
 
 - Update all command invocations to use `kyt`
-- Add ~10 new tests for stdin/lint functionality
+- Add ~10 new tests for stdin/fmt functionality
 - Verify all diff tests still pass
 - Test -w flag writes correctly
 - Test verbose output goes to stderr
@@ -1468,9 +1468,9 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
 **Manual testing checklist:**
 
 - [ ] `ky < file.yaml` works
-- [ ] `ky lint file.yaml` outputs to stdout
-- [ ] `ky lint file.yaml -w` writes in-place
-- [ ] `ky lint directory/` works
+- [ ] `ky fmt file.yaml` outputs to stdout
+- [ ] `ky fmt file.yaml -w` writes in-place
+- [ ] `ky fmt directory/` works
 - [ ] `ky diff left right` works (all flags)
 - [ ] `ky version` works
 - [ ] Config file `.kyt.yaml` is found
@@ -1482,9 +1482,9 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
   - Create new command files
   - Extract logic from main.go
 - **Task 2: Stdin/stdout** - 2-3 hours
-  - Implement normalize with stdin
+  - Implement format with stdin
   - Handle path vs stdin logic
-- **Task 3: Lint command** - 2 hours
+- **Task 3: Fmt command** - 2 hours
   - Implement -w flag
   - File/directory writing
 - **Task 4: Rename module** - 2 hours
@@ -1493,7 +1493,7 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
   - Rename files and directories
 - **Task 5: Update tests** - 3-4 hours
   - Update all test commands
-  - Add new lint/stdin tests
+  - Add new fmt/stdin tests
   - Verify everything passes
 - **Task 6: Documentation** - 2-3 hours
   - Update README
@@ -1526,9 +1526,9 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
 ### 8.6.12 Success Criteria
 
 - [ ] Binary named `kyt` builds successfully
-- [ ] `kyt` (no args) reads stdin and outputs normalized YAML
-- [ ] `ky lint <path>` outputs normalized YAML to stdout
-- [ ] `ky lint <path> -w` writes in-place
+- [ ] `kyt` (no args) reads stdin and outputs formatted YAML
+- [ ] `ky fmt <path>` outputs formatted YAML to stdout
+- [ ] `ky fmt <path> -w` writes in-place
 - [ ] `ky diff <left> <right>` works with all existing flags
 - [ ] All 52+ tests pass with updated commands
 - [ ] Module path is `github.com/nhuray/ky`
