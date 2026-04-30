@@ -50,6 +50,15 @@ func NewResourceMatcher(enableSimilarity bool, threshold float64) *ResourceMatch
 	}
 }
 
+// NewResourceMatcherWithStringThreshold creates a matcher with custom string similarity threshold
+func NewResourceMatcherWithStringThreshold(enableSimilarity bool, threshold float64, stringThreshold int) *ResourceMatcher {
+	return &ResourceMatcher{
+		scorer:                NewSimilarityScorerWithThreshold(stringThreshold),
+		enableSimilarityMatch: enableSimilarity,
+		similarityThreshold:   threshold,
+	}
+}
+
 // MatchResources performs 2-stage matching between source and target resources
 // Returns: matched pairs, unmatched source keys, unmatched target keys
 func (m *ResourceMatcher) MatchResources(

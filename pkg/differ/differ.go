@@ -76,9 +76,10 @@ func (d *Differ) Diff(source, target *manifest.ManifestSet) (*DiffResult, error)
 	SetResourceCache(normalizedSource, normalizedTarget)
 
 	// Perform 2-stage matching
-	matcher := NewResourceMatcher(
+	matcher := NewResourceMatcherWithStringThreshold(
 		d.options.EnableSimilarityMatching,
 		d.options.SimilarityThreshold,
+		d.options.StringSimilarityThreshold,
 	)
 
 	matches, unmatchedSource, unmatchedTarget := matcher.MatchResources(

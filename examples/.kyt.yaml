@@ -61,3 +61,4 @@ output:
   colorize: true # Enable colored output
   showUnchanged: false # Show resources with no differences
   contextLines: 3 # Context lines for unified diff
+  stringSimilarityThreshold: 100 # Minimum string length for fuzzy matching (0 = disable)

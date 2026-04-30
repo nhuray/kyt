@@ -15,17 +15,29 @@ type SimilarityScorer struct {
 	KeyOnlyMatch      float64
 	ArrayMatch        float64
 	MissingFieldScore float64
+
+	// StringSimilarityThreshold is the minimum string length for fuzzy matching
+	// Strings longer than this will use Levenshtein distance
+	StringSimilarityThreshold int
 }
 
 // NewDefaultSimilarityScorer returns a scorer with default weights
 func NewDefaultSimilarityScorer() *SimilarityScorer {
 	return &SimilarityScorer{
-		ExactMatchScore:   1.0,
-		StructuralMatch:   0.8,
-		KeyOnlyMatch:      0.3,
-		ArrayMatch:        0.7,
-		MissingFieldScore: 0.0,
+		ExactMatchScore:           1.0,
+		StructuralMatch:           0.8,
+		KeyOnlyMatch:              0.3,
+		ArrayMatch:                0.7,
+		MissingFieldScore:         0.0,
+		StringSimilarityThreshold: 100, // Enable fuzzy matching for strings > 100 chars
 	}
+}
+
+// NewSimilarityScorerWithThreshold returns a scorer with custom string similarity threshold
+func NewSimilarityScorerWithThreshold(threshold int) *SimilarityScorer {
+	scorer := NewDefaultSimilarityScorer()
+	scorer.StringSimilarityThreshold = threshold
+	return scorer
 }
 
 // CompareResources computes similarity between two Kubernetes resources
@@ -182,8 +194,25 @@ func (s *SimilarityScorer) compareValues(a, b interface{}) float64 {
 	case reflect.Slice, reflect.Array:
 		return s.compareArrays(a, b)
 
+	case reflect.String:
+		// Use fuzzy string matching for long strings
+		aStr, aOk := a.(string)
+		bStr, bOk := b.(string)
+		if aOk && bOk {
+			// Check if strings are long enough for fuzzy matching
+			// Note: threshold of 0 disables fuzzy matching
+			if s.StringSimilarityThreshold > 0 && (len(aStr) >= s.StringSimilarityThreshold || len(bStr) >= s.StringSimilarityThreshold) {
+				// Use Levenshtein-based similarity
+				similarity := stringSimilarity(aStr, bStr)
+				// Scale by structural match weight
+				return similarity * s.StructuralMatch
+			}
+		}
+		// Short strings or type mismatch - treat as key-only match
+		return s.KeyOnlyMatch
+
 	default:
-		// Primitives (string, int, bool, etc.) - already checked equality
+		// Primitives (int, bool, etc.) - already checked equality
 		return s.KeyOnlyMatch
 	}
 }

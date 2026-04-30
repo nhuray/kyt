@@ -13,15 +13,16 @@ import (
 
 var (
 	// Diff command flags
-	diffOutputFormat        string
-	diffNoColor             bool
-	diffShowIdentical       bool
-	diffDifftasticMode      string
-	diffDiffTool            string
-	diffSkipNormalize       bool
-	diffExactMatch          bool
-	diffSimilarityThreshold float64
-	diffWidth               int
+	diffOutputFormat              string
+	diffNoColor                   bool
+	diffShowIdentical             bool
+	diffDifftasticMode            string
+	diffDiffTool                  string
+	diffSkipNormalize             bool
+	diffExactMatch                bool
+	diffSimilarityThreshold       float64
+	diffWidth                     int
+	diffStringSimilarityThreshold int
 )
 
 var diffCmd = &cobra.Command{
@@ -79,6 +80,7 @@ func init() {
 	diffCmd.Flags().BoolVar(&diffSkipNormalize, "skip-normalize", false, "skip normalization (use raw manifests)")
 	diffCmd.Flags().BoolVar(&diffExactMatch, "exact-match", false, "disable similarity matching (only exact name matches)")
 	diffCmd.Flags().Float64Var(&diffSimilarityThreshold, "similarity-threshold", 0.7, "minimum similarity score (0.0-1.0) for matching resources")
+	diffCmd.Flags().IntVar(&diffStringSimilarityThreshold, "string-similarity-threshold", 100, "minimum string length for fuzzy matching (0 = disable)")
 
 	rootCmd.AddCommand(diffCmd)
 }
@@ -130,17 +132,25 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	// Create normalizer
 	norm := normalizer.New(cfg)
 
+	// Determine string similarity threshold (flag takes precedence over config)
+	stringSimilarityThreshold := diffStringSimilarityThreshold
+	if stringSimilarityThreshold == 100 && cfg.Output.StringSimilarityThreshold > 0 {
+		// If flag is at default value, use config value
+		stringSimilarityThreshold = cfg.Output.StringSimilarityThreshold
+	}
+
 	// Create differ
 	diffOpts := &differ.DiffOptions{
-		UseDifftastic:            diffDiffTool == "auto" || diffDiffTool == "difft",
-		UseTreeSitter:            diffDiffTool == "auto" || diffDiffTool == "treesitter",
-		ColorOutput:              !diffNoColor,
-		ContextLines:             3,
-		DifftasticDisplay:        diffDifftasticMode,
-		DifftasticWidth:          diffWidth,
-		TreeSitterWidth:          120,
-		EnableSimilarityMatching: !diffExactMatch,
-		SimilarityThreshold:      diffSimilarityThreshold,
+		UseDifftastic:             diffDiffTool == "auto" || diffDiffTool == "difft",
+		UseTreeSitter:             diffDiffTool == "auto" || diffDiffTool == "treesitter",
+		ColorOutput:               !diffNoColor,
+		ContextLines:              3,
+		DifftasticDisplay:         diffDifftasticMode,
+		DifftasticWidth:           diffWidth,
+		TreeSitterWidth:           120,
+		EnableSimilarityMatching:  !diffExactMatch,
+		SimilarityThreshold:       diffSimilarityThreshold,
+		StringSimilarityThreshold: stringSimilarityThreshold,
 	}
 	// If "diff" is explicitly specified, disable both difftastic and tree-sitter
 	if diffDiffTool == "diff" {
