@@ -221,7 +221,7 @@ output:
 
 func TestLoaderLoadFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, ".k8s-diff.yaml")
+	configPath := filepath.Join(tmpDir, ".kyt.yaml")
 
 	content := `
 ignoreDifferences:

@@ -28,7 +28,7 @@ func TestCLIReporter_Report(t *testing.T) {
 				ShowIdentical: false,
 			},
 			expectedStrs: []string{
-				"k8s-diff Report",
+				"kyt Report",
 				"Added Resources (1):",
 				"Removed Resources (1):",
 				"Modified Resources (1):",
