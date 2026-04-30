@@ -13,8 +13,8 @@ on:
       - develop
 
 env:
-  GO_MIN_VERSION: "1.21"
-  GO_LATEST_VERSION: "1.23"
+  GO_MIN_VERSION: "1.24"
+  GO_LATEST_VERSION: "1.26"
 
 jobs:
   test:
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ["1.21", "1.22", "1.23"]
+        go-version: ["1.24", "1.25", "1.26"]
 
     steps:
       - name: Checkout code
