@@ -347,8 +347,8 @@ func (d *Differ) generateTreeSitterDiff(key manifest.ResourceKey, source, target
 		return "", 0, fmt.Errorf("failed to generate tree-sitter diff: %w", err)
 	}
 
-	// Format output
-	formatter := treesitter.NewFormatter(d.options.TreeSitterWidth, d.options.ColorOutput, 2)
+	// Format output using line-based formatter for better side-by-side visualization
+	formatter := treesitter.NewLineFormatter(d.options.TreeSitterWidth, d.options.ColorOutput, sourceYAML, targetYAML)
 	sourceLabel := fmt.Sprintf("a/%s", key.String())
 	targetLabel := fmt.Sprintf("b/%s", key.String())
 	diffText := formatter.FormatSideBySide(diffResult, sourceLabel, targetLabel)
