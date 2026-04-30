@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/nhuray/k8s-diff/pkg/differ/treesitter"
 	"github.com/nhuray/k8s-diff/pkg/manifest"
@@ -147,6 +148,25 @@ func areResourcesEqual(a, b *unstructured.Unstructured) (bool, error) {
 	return bytes.Equal(aJSON, bJSON), nil
 }
 
+// filterDifftasticHeaders removes difftastic's temporary file path headers
+// These lines look like: "/path/to/temp/file.yaml --- YAML" or "--- N/M --- YAML"
+func filterDifftasticHeaders(output string) string {
+	lines := strings.Split(output, "\n")
+	var filtered []string
+
+	for _, line := range lines {
+		// Check if line ends with "--- YAML" (with possible ANSI codes before YAML)
+		// Pattern: anything ending with "--- YAML" or "--- N/M --- YAML"
+		if strings.Contains(line, "--- YAML") && !strings.HasPrefix(strings.TrimSpace(line), "---") {
+			// This is a header line with file path, skip it
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+
+	return strings.Join(filtered, "\n")
+}
+
 // generateDiff generates a diff between two resources
 func (d *Differ) generateDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured) (string, int, error) {
 	// Convert resources to YAML to preserve original format
@@ -235,10 +255,13 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, sourceYAML, ta
 		return "", 0, fmt.Errorf("difftastic failed: %w", err)
 	}
 
-	// Count diff lines (approximate)
-	diffLines := bytes.Count(output, []byte("\n"))
+	// Filter out difftastic's temporary file path headers
+	filteredOutput := filterDifftasticHeaders(string(output))
 
-	return string(output), diffLines, nil
+	// Count diff lines (approximate)
+	diffLines := bytes.Count([]byte(filteredOutput), []byte("\n"))
+
+	return filteredOutput, diffLines, nil
 }
 
 // generateUnifiedDiff generates a unified diff
