@@ -39,15 +39,21 @@ k8s-diff/
 │   ├── normalizer/
 │   │   ├── normalizer.go      # Uses ArgoCD normalizers
 │   │   ├── normalizer_test.go
-│   │   └── ignore.go          # Ignore rules application
+│   │   ├── jq.go              # JQ expression support
+│   │   └── types.go
 │   ├── differ/
 │   │   ├── differ.go          # Diff orchestration
 │   │   ├── differ_test.go
+│   │   ├── similarity.go      # Similarity scoring (Phase 8.5)
+│   │   ├── similarity_test.go
+│   │   ├── matcher.go         # Resource matching (Phase 8.5)
+│   │   ├── matcher_test.go
 │   │   └── types.go
 │   └── reporter/
-│       ├── reporter.go        # Output formatting
+│       ├── cli.go             # CLI output formatting
+│       ├── json.go            # JSON output
 │       ├── reporter_test.go
-│       ├── difftastic.go      # Difftastic integration
+│       └── types.go
 │       ├── html.go            # HTML output (diff2html)
 │       └── json.go            # JSON output
 ├── examples/
@@ -593,6 +599,331 @@ k8s-diff <source> <target> [flags]
 
 ---
 
+## Phase 8.5: Similarity Matching (Smart Resource Pairing)
+
+### 8.5.1 Problem Statement
+
+**Current limitation:** Resources are only compared when they have exact `(group, kind, namespace, name)` matches. If a resource is renamed (e.g., `app-config-v1` → `app-config-v2`), it's reported as "removed + added" instead of "modified".
+
+**Real-world scenarios:**
+
+- Helm release name changes: `myapp-prod` → `myapp-production`
+- Version-suffixed resources: `redis-v1` → `redis-v2`
+- Environment-specific naming: `app-dev-config` → `app-staging-config`
+- Renamed deployments during refactoring
+
+**Goal:** Intelligently match resources by structural similarity when exact name matching fails.
+
+### 8.5.2 Design: Multi-Stage Matching
+
+#### Stage 1: Exact Match (Current behavior - keep as-is)
+
+- Match resources by full ResourceKey: `(group, kind, namespace, name)`
+- This is the primary, fast path
+- **Performance:** O(n) - hash map lookup
+
+#### Stage 2: Similarity-Based Matching (New)
+
+**For unmatched resources:**
+
+1. **Group by GVK+Namespace:** `(group, version, kind, namespace)`
+   - Only compare resources of the same type in the same namespace
+   - Example: All unmatched ConfigMaps in `default` namespace
+
+2. **Case A: 1-to-1 Mapping (Simple)**
+   - If exactly 1 unmatched resource on each side → compare them
+   - If similarity ≥ threshold → mark as "modified"
+   - Example: 1 orphan ConfigMap source, 1 orphan ConfigMap target
+
+3. **Case B: Many-to-Many Mapping (Complex)**
+   - If multiple unmatched resources → compute pairwise similarity matrix
+   - Use greedy matching: pair highest similarity first
+   - Only pair if similarity ≥ threshold
+   - Example: 3 ConfigMaps source, 2 ConfigMaps target
+
+4. **Case C: Remaining Unpaired**
+   - Resources that don't match → report as added/removed
+
+**Performance:** O(n×m) per GVK group where n, m = unmatched resources
+
+### 8.5.3 Similarity Algorithm: Hierarchical Structural Comparison
+
+**Chosen approach:** Recursive comparison with weighted scoring
+
+**Key design decisions:**
+
+- ✅ **Compare `spec` field** - Labels/annotations likely differ or are ignored
+- ✅ **Element-by-element array matching** - Normalization sorts arrays first
+- ✅ **Treat all fields equally** - No field-specific weights (KISS principle)
+- ✅ **Fall back to full object** - If `spec` missing, compare entire object minus metadata
+- ✅ **Short-circuit optimization** - Skip deep comparison if top-level similarity < 0.3
+
+**Scoring weights:**
+
+```
+ExactMatchScore    = 1.0   // Exact key+value match
+StructuralMatch    = 0.8   // Recursive match for nested objects
+KeyOnlyMatch       = 0.3   // Key exists but value differs
+ArrayMatch         = 0.7   // Arrays compared element-by-element
+MissingFieldScore  = 0.0   // Key missing in one side
+```
+
+**Example calculation:**
+
+```yaml
+# Source spec
+replicas: 1 # Different value: +0.3
+image: redis:7.0 # Different value: +0.3
+ports: # Array with same elements: +0.7
+  - containerPort: 6379
+resources: # Nested object with exact match: +0.8
+  limits:
+    cpu: 500m
+
+# Similarity = (0.3 + 0.3 + 0.7 + 0.8) / 4 = 0.525
+```
+
+### 8.5.4 Implementation Tasks
+
+**New Files:**
+
+- [ ] `pkg/differ/similarity.go` - Similarity scoring algorithm
+  - `SimilarityScorer` struct with configurable weights
+  - `CompareSpecs(a, b map[string]interface{}) float64`
+  - `compareValues()` - recursive comparison dispatcher
+  - `compareObjects()` - map comparison
+  - `compareArrays()` - element-by-element array comparison
+  - Short-circuit optimization for performance
+
+- [ ] `pkg/differ/matcher.go` - Resource matching logic
+  - `findExactMatches()` - Stage 1: current exact matching
+  - `groupByGVKNamespace()` - Group unmatched resources
+  - `findSimilarityMatches()` - Stage 2: similarity matching
+  - `findBestMatches()` - Greedy pairing for many-to-many
+  - `Match` struct with `MatchType` ("exact" or "similarity")
+
+**Modified Files:**
+
+- [ ] `pkg/differ/differ.go`
+  - Update `Diff()` to use 2-stage matching
+  - Pass similarity matches to diff generation
+
+- [ ] `pkg/differ/types.go`
+  - Add `MatchType` field to `ResourceDiff`: "exact" | "similarity"
+  - Add `SimilarityScore` field to `ResourceDiff`
+  - Update `DiffOptions` to include:
+    - `EnableSimilarityMatching bool` (default: true)
+    - `SimilarityThreshold float64` (default: 0.7)
+
+- [ ] `pkg/reporter/cli.go`
+  - Update output format to show similarity score
+  - Format: `ConfigMap.core/app-v1 → ConfigMap.core/app-v2 (similarity: 0.85)`
+  - Format: `Deployment.apps/redis (exact match)` or just current format
+
+- [ ] `pkg/reporter/json.go`
+  - Add `matchType` field to modified resources in JSON output
+  - Add `similarityScore` field
+  - Add `sourceKey` and `targetKey` to show name mapping
+
+- [ ] `cmd/k8s-diff/main.go`
+  - Add `--exact-match` flag to disable similarity matching
+  - Add `--similarity-threshold` flag (default: 0.7)
+  - Wire up flags to `DiffOptions`
+
+- [ ] `pkg/config/types.go`
+  - Add similarity matching configuration:
+    ```yaml
+    matching:
+      enableSimilarity: true
+      threshold: 0.7
+    ```
+
+**Tests:**
+
+- [ ] `pkg/differ/similarity_test.go` - Algorithm tests
+  - Test exact matches return 1.0
+  - Test completely different specs return ~0.0
+  - Test partial matches return intermediate scores
+  - Test nested object comparison
+  - Test array comparison (sorted)
+  - Test primitive value differences
+  - Test nil/missing field handling
+  - Benchmark for performance
+
+- [ ] `pkg/differ/matcher_test.go` - Matching logic tests
+  - Test exact matching (preserve existing behavior)
+  - Test 1-to-1 similarity matching
+  - Test many-to-many greedy pairing
+  - Test threshold filtering
+  - Test grouping by GVK+namespace
+
+- [ ] `cmd/k8s-diff/integration_test.go` - End-to-end tests
+  - Test renamed resources matched by similarity
+  - Test --exact-match flag disables similarity
+  - Test --similarity-threshold configuration
+  - Test output format includes similarity scores
+  - Test JSON output includes match metadata
+
+### 8.5.5 Configuration & CLI
+
+**CLI Flags:**
+
+```bash
+# Disable similarity matching (use only exact name matching)
+k8s-diff --exact-match source.yaml target.yaml
+
+# Adjust similarity threshold (0.0 to 1.0)
+k8s-diff --similarity-threshold 0.8 source.yaml target.yaml
+
+# Verbose mode shows matching decisions
+k8s-diff -v source.yaml target.yaml
+# Output: "Matched ConfigMap/app-v1 with ConfigMap/app-v2 (similarity: 0.85)"
+```
+
+**Config File:**
+
+```yaml
+# .k8s-diff.yaml
+matching:
+  enableSimilarity: true # Can disable here too
+  threshold: 0.7 # Require 70% similarity minimum
+```
+
+### 8.5.6 Expected Output Examples
+
+#### CLI Output (with similarity):
+
+```
+Modified Resources (3):
+
+───────────────────────────────────────────────────────────────
+• ConfigMap.core/app-config-v1 → ConfigMap.core/app-config-v2 (similarity: 0.85)
+───────────────────────────────────────────────────────────────
+[diff output]
+
+───────────────────────────────────────────────────────────────
+• Deployment.apps/redis (exact match)
+───────────────────────────────────────────────────────────────
+[diff output]
+
+───────────────────────────────────────────────────────────────
+• Service.core/redis-svc → Service.core/redis-service (similarity: 0.92)
+───────────────────────────────────────────────────────────────
+[diff output]
+```
+
+#### JSON Output (with similarity metadata):
+
+```json
+{
+  "modified": [
+    {
+      "sourceKey": {
+        "group": "",
+        "kind": "ConfigMap",
+        "namespace": "default",
+        "name": "app-config-v1"
+      },
+      "targetKey": {
+        "group": "",
+        "kind": "ConfigMap",
+        "namespace": "default",
+        "name": "app-config-v2"
+      },
+      "matchType": "similarity",
+      "similarityScore": 0.85,
+      "diffText": "..."
+    },
+    {
+      "sourceKey": {
+        "group": "apps",
+        "kind": "Deployment",
+        "namespace": "default",
+        "name": "redis"
+      },
+      "targetKey": {
+        "group": "apps",
+        "kind": "Deployment",
+        "namespace": "default",
+        "name": "redis"
+      },
+      "matchType": "exact",
+      "similarityScore": 1.0,
+      "diffText": "..."
+    }
+  ]
+}
+```
+
+### 8.5.7 Performance Considerations
+
+**Optimization strategies:**
+
+1. **Early exit:** If top-level keys similarity < 0.3, skip deep comparison
+2. **Array sampling:** For arrays > 100 elements, sample representative elements
+3. **Depth limit:** Limit recursion depth to prevent stack overflow
+4. **Caching:** Cache similarity scores for repeated comparisons (if needed)
+
+**Performance targets:**
+
+- Exact matching: O(n) - no change from current
+- Similarity matching: O(n×m) per GVK group
+  - For typical case (1-5 unmatched per GVK): ~10ms overhead
+  - For worst case (100 unmatched per GVK): ~500ms acceptable
+  - Total overhead should be < 1s for 1000 resources
+
+### 8.5.8 Edge Cases & Considerations
+
+**Handled cases:**
+
+- ✅ Resources with missing `spec` field → fall back to full object comparison
+- ✅ Empty specs → return 1.0 similarity (both empty)
+- ✅ Different namespaces → only match within same namespace
+- ✅ Threshold filtering → pairs below threshold treated as unpaired
+- ✅ Exact match priority → exact matches always chosen over similarity
+
+**Known limitations:**
+
+- ⚠️ Cross-namespace matching not supported (by design)
+- ⚠️ Field importance not weighted (all fields equal)
+- ⚠️ Array element order matters (mitigated by normalization sorting)
+
+### 8.5.9 Testing Strategy
+
+**Unit tests:** (~200 lines)
+
+- Algorithm correctness (15 tests)
+- Edge cases (nil, empty, deep nesting)
+- Performance benchmarks
+
+**Integration tests:** (~150 lines)
+
+- End-to-end renamed resource scenarios
+- Flag and config testing
+- Output format validation
+
+**Test coverage goal:** 85%+ for new code
+
+### 8.5.10 Effort Estimate
+
+- **Implementation:** ~6-8 hours
+  - similarity.go: ~200 lines
+  - matcher.go: ~250 lines
+  - Updates to existing files: ~150 lines
+  - CLI and config changes: ~50 lines
+
+- **Testing:** ~4-5 hours
+  - Unit tests: ~350 lines
+  - Integration tests: ~150 lines
+
+- **Documentation:** ~1 hour
+  - Update README with examples
+  - Add inline code documentation
+
+**Total: ~11-14 hours**
+
+---
+
 ## Phase 9: Documentation (Day 10-11) 🔄
 
 ### 9.1 README.md ✅
@@ -722,41 +1053,43 @@ k8s-diff <source> <target> [flags]
 - Parse YAML manifests
 - Apply JSON Pointer ignore rules
 - Apply JQ path ignore rules
-- Compare using difftastic
-- Output CLI, JSON, and diff formats
+- Smart resource matching with similarity scoring
+- Compare using difftastic with color support
+- Output CLI and JSON formats
+- Comprehensive test coverage (52+ tests)
 - Documentation for basic usage
 
 🎯 **Should Have:**
 
-- HTML output
-- Comprehensive error handling
-- Good test coverage (>80%)
+- HTML output (future enhancement)
 - CI/CD pipeline
-- Example configurations
+- Binary releases for multiple platforms
 
 🚀 **Nice to Have:**
 
-- Performance optimizations
+- Performance optimizations for very large manifests (1000+ resources)
 - Auto-detection of common ignore patterns
 - Homebrew distribution
+- Field-weighted similarity scoring
 
 ---
 
 ## Timeline Summary
 
-| Phase     | Days           | Focus                 |
-| --------- | -------------- | --------------------- |
-| 1         | 1              | Setup & Structure ✅  |
-| 2         | 2              | Manifest Parsing      |
-| 3         | 1-2            | Configuration         |
-| 4         | 2-3            | Ignore Rules (ArgoCD) |
-| 5         | 1-2            | Diff Engine           |
-| 6         | 1-2            | Output Formatters     |
-| 7         | 1-2            | CLI Implementation    |
-| 8         | 1-2            | Testing & Examples    |
-| 9         | 1-2            | Documentation         |
-| 10        | 1-2            | Build & Release       |
-| **Total** | **11-12 days** | **MVP Ready**         |
+| Phase     | Days           | Focus                          |
+| --------- | -------------- | ------------------------------ |
+| 1         | 1              | Setup & Structure ✅           |
+| 2         | 2              | Manifest Parsing ✅            |
+| 3         | 1-2            | Configuration ✅               |
+| 4         | 2-3            | Ignore Rules (ArgoCD) ✅       |
+| 5         | 1-2            | Diff Engine ✅                 |
+| 6         | 1-2            | Output Formatters ✅           |
+| 7         | 1-2            | CLI Implementation ✅          |
+| 8         | 1-2            | Testing & Examples ✅          |
+| 8.5       | 1-2            | Similarity Matching 🔨         |
+| 9         | 1-2            | Documentation 🔄               |
+| 10        | 1-2            | Build & Release 🔄             |
+| **Total** | **13-16 days** | **MVP Ready + Smart Matching** |
 
 ---
 
