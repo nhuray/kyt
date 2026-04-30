@@ -12,14 +12,14 @@ import (
 // TestCLI_DiffIdenticalManifests tests comparing identical manifests
 func TestCLI_DiffIdenticalManifests(t *testing.T) {
 	// Build the binary first
-	buildCmd := exec.Command("go", "build", "-o", "../../bin/ky-test", ".")
+	buildCmd := exec.Command("go", "build", "-o", "../../bin/kyt-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer func() { _ = os.Remove("../../bin/ky-test") }()
+	defer func() { _ = os.Remove("../../bin/kyt-test") }()
 
 	// Run the comparison
-	cmd := exec.Command("../../bin/ky-test",
+	cmd := exec.Command("../../bin/kyt-test",
 		"diff",
 		"../../examples/manifests/basic",
 		"../../examples/manifests/basic")
@@ -48,13 +48,13 @@ func TestCLI_DiffIdenticalManifests(t *testing.T) {
 
 // TestCLI_DiffDifferentManifests tests comparing different manifests
 func TestCLI_DiffDifferentManifests(t *testing.T) {
-	buildCmd := exec.Command("go", "build", "-o", "../../bin/ky-test", ".")
+	buildCmd := exec.Command("go", "build", "-o", "../../bin/kyt-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer func() { _ = os.Remove("../../bin/ky-test") }()
+	defer func() { _ = os.Remove("../../bin/kyt-test") }()
 
-	cmd := exec.Command("../../bin/ky-test",
+	cmd := exec.Command("../../bin/kyt-test",
 		"diff",
 		"../../examples/manifests/basic",
 		"../../examples/manifests/multi-doc")
@@ -95,13 +95,13 @@ func TestCLI_DiffDifferentManifests(t *testing.T) {
 
 // TestCLI_DiffJSONOutput tests JSON output format
 func TestCLI_DiffJSONOutput(t *testing.T) {
-	buildCmd := exec.Command("go", "build", "-o", "../../bin/ky-test", ".")
+	buildCmd := exec.Command("go", "build", "-o", "../../bin/kyt-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer func() { _ = os.Remove("../../bin/ky-test") }()
+	defer func() { _ = os.Remove("../../bin/kyt-test") }()
 
-	cmd := exec.Command("../../bin/ky-test",
+	cmd := exec.Command("../../bin/kyt-test",
 		"diff",
 		"-o", "json",
 		"../../examples/manifests/basic",
@@ -145,13 +145,13 @@ func TestCLI_DiffJSONOutput(t *testing.T) {
 
 // TestCLI_DiffShowIdentical tests --show-identical flag
 func TestCLI_DiffShowIdentical(t *testing.T) {
-	buildCmd := exec.Command("go", "build", "-o", "../../bin/ky-test", ".")
+	buildCmd := exec.Command("go", "build", "-o", "../../bin/kyt-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer func() { _ = os.Remove("../../bin/ky-test") }()
+	defer func() { _ = os.Remove("../../bin/kyt-test") }()
 
-	cmd := exec.Command("../../bin/ky-test",
+	cmd := exec.Command("../../bin/kyt-test",
 		"diff",
 		"--show-identical",
 		"../../examples/manifests/basic",
@@ -176,11 +176,11 @@ func TestCLI_DiffShowIdentical(t *testing.T) {
 
 // TestCLI_DiffInvalidYAML tests error handling for invalid YAML
 func TestCLI_DiffInvalidYAML(t *testing.T) {
-	buildCmd := exec.Command("go", "build", "-o", "../../bin/ky-test", ".")
+	buildCmd := exec.Command("go", "build", "-o", "../../bin/kyt-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer func() { _ = os.Remove("../../bin/ky-test") }()
+	defer func() { _ = os.Remove("../../bin/kyt-test") }()
 
 	// Create a temp file with invalid YAML
 	tmpDir := t.TempDir()
@@ -189,7 +189,7 @@ func TestCLI_DiffInvalidYAML(t *testing.T) {
 		t.Fatalf("Failed to write temp file: %v", err)
 	}
 
-	cmd := exec.Command("../../bin/ky-test",
+	cmd := exec.Command("../../bin/kyt-test",
 		"diff",
 		"../../examples/manifests/basic",
 		invalidYAML)
@@ -218,13 +218,13 @@ func TestCLI_DiffInvalidYAML(t *testing.T) {
 
 // TestCLI_DiffMissingFile tests error handling for missing files
 func TestCLI_DiffMissingFile(t *testing.T) {
-	buildCmd := exec.Command("go", "build", "-o", "../../bin/ky-test", ".")
+	buildCmd := exec.Command("go", "build", "-o", "../../bin/kyt-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer func() { _ = os.Remove("../../bin/ky-test") }()
+	defer func() { _ = os.Remove("../../bin/kyt-test") }()
 
-	cmd := exec.Command("../../bin/ky-test",
+	cmd := exec.Command("../../bin/kyt-test",
 		"diff",
 		"../../examples/manifests/basic",
 		"../../examples/manifests/nonexistent")
@@ -253,13 +253,13 @@ func TestCLI_DiffMissingFile(t *testing.T) {
 
 // TestCLI_Version tests the version command
 func TestCLI_Version(t *testing.T) {
-	buildCmd := exec.Command("go", "build", "-o", "../../bin/ky-test", ".")
+	buildCmd := exec.Command("go", "build", "-o", "../../bin/kyt-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer func() { _ = os.Remove("../../bin/ky-test") }()
+	defer func() { _ = os.Remove("../../bin/kyt-test") }()
 
-	cmd := exec.Command("../../bin/ky-test", "version")
+	cmd := exec.Command("../../bin/kyt-test", "version")
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -273,20 +273,20 @@ func TestCLI_Version(t *testing.T) {
 	output := stdout.String()
 
 	// Should contain version info
-	if !bytes.Contains([]byte(output), []byte("ky")) {
-		t.Errorf("Expected 'ky' in version output, got: %s", output)
+	if !bytes.Contains([]byte(output), []byte("kyt")) {
+		t.Errorf("Expected 'kyt' in version output, got: %s", output)
 	}
 }
 
 // TestCLI_FmtFile tests fmt command with a file
 func TestCLI_FmtFile(t *testing.T) {
-	buildCmd := exec.Command("go", "build", "-o", "../../bin/ky-test", ".")
+	buildCmd := exec.Command("go", "build", "-o", "../../bin/kyt-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer func() { _ = os.Remove("../../bin/ky-test") }()
+	defer func() { _ = os.Remove("../../bin/kyt-test") }()
 
-	cmd := exec.Command("../../bin/ky-test",
+	cmd := exec.Command("../../bin/kyt-test",
 		"fmt",
 		"../../examples/manifests/basic/deployment.yaml")
 
@@ -312,11 +312,11 @@ func TestCLI_FmtFile(t *testing.T) {
 
 // TestCLI_FmtStdin tests fmt command with stdin
 func TestCLI_FmtStdin(t *testing.T) {
-	buildCmd := exec.Command("go", "build", "-o", "../../bin/ky-test", ".")
+	buildCmd := exec.Command("go", "build", "-o", "../../bin/kyt-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer func() { _ = os.Remove("../../bin/ky-test") }()
+	defer func() { _ = os.Remove("../../bin/kyt-test") }()
 
 	// Read sample YAML file
 	yamlContent, err := os.ReadFile("../../examples/manifests/basic/deployment.yaml")
@@ -324,7 +324,7 @@ func TestCLI_FmtStdin(t *testing.T) {
 		t.Fatalf("Failed to read sample YAML: %v", err)
 	}
 
-	cmd := exec.Command("../../bin/ky-test", "fmt")
+	cmd := exec.Command("../../bin/kyt-test", "fmt")
 	cmd.Stdin = bytes.NewReader(yamlContent)
 
 	var stdout, stderr bytes.Buffer
