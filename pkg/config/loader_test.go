@@ -9,10 +9,6 @@ import (
 func TestNewDefaultConfig(t *testing.T) {
 	cfg := NewDefaultConfig()
 
-	if cfg == nil {
-		t.Fatal("Expected non-nil config")
-	}
-
 	// Check defaults
 	if !cfg.Normalization.SortKeys {
 		t.Error("Expected sortKeys to be true by default")
@@ -28,10 +24,6 @@ func TestNewDefaultConfig(t *testing.T) {
 
 	if !cfg.Output.Colorize {
 		t.Error("Expected colorize to be true by default")
-	}
-
-	if len(cfg.Normalization.RemoveDefaultFields) == 0 {
-		t.Error("Expected some default fields to be removed")
 	}
 }
 

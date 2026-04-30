@@ -164,7 +164,11 @@ func writeBackToSource(sourcePath string, resources []*unstructured.Unstructured
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
-		defer file.Close()
+		defer func() {
+			if cerr := file.Close(); cerr != nil && err == nil {
+				err = fmt.Errorf("failed to close output file: %w", cerr)
+			}
+		}()
 
 		if err := manifest.WriteYAML(file, resources); err != nil {
 			return fmt.Errorf("failed to write YAML: %w", err)
@@ -179,7 +183,11 @@ func writeBackToSource(sourcePath string, resources []*unstructured.Unstructured
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
-		defer file.Close()
+		defer func() {
+			if cerr := file.Close(); cerr != nil && err == nil {
+				err = fmt.Errorf("failed to close output file: %w", cerr)
+			}
+		}()
 
 		if err := manifest.WriteYAML(file, resources); err != nil {
 			return fmt.Errorf("failed to write YAML: %w", err)

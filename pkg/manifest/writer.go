@@ -24,7 +24,9 @@ func WriteYAML(w io.Writer, resources []*unstructured.Unstructured) error {
 	// Write each resource as a YAML document
 	encoder := yaml.NewEncoder(w)
 	encoder.SetIndent(2)
-	defer encoder.Close()
+	defer func() {
+		_ = encoder.Close() // Best effort close, error already handled below
+	}()
 
 	for i, res := range sorted {
 		if i > 0 {
@@ -38,6 +40,11 @@ func WriteYAML(w io.Writer, resources []*unstructured.Unstructured) error {
 			key := NewResourceKey(res)
 			return fmt.Errorf("failed to encode resource %s: %w", key.String(), err)
 		}
+	}
+
+	// Explicitly close encoder to catch any errors
+	if err := encoder.Close(); err != nil {
+		return fmt.Errorf("failed to close encoder: %w", err)
 	}
 
 	return nil
