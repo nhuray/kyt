@@ -149,20 +149,20 @@ func areResourcesEqual(a, b *unstructured.Unstructured) (bool, error) {
 
 // generateDiff generates a diff between two resources
 func (d *Differ) generateDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured) (string, int, error) {
-	// Convert resources to pretty-printed JSON
-	sourceJSON, err := json.MarshalIndent(source.Object, "", "  ")
+	// Convert resources to YAML to preserve original format
+	sourceYAML, err := yaml.Marshal(source.Object)
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to marshal source: %w", err)
 	}
 
-	targetJSON, err := json.MarshalIndent(target.Object, "", "  ")
+	targetYAML, err := yaml.Marshal(target.Object)
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to marshal target: %w", err)
 	}
 
 	// Try difftastic first if enabled
 	if d.options.UseDifftastic {
-		diffText, diffLines, err := d.generateDifftasticDiff(key, sourceJSON, targetJSON)
+		diffText, diffLines, err := d.generateDifftasticDiff(key, sourceYAML, targetYAML)
 		if err == nil {
 			return diffText, diffLines, nil
 		}
@@ -179,11 +179,11 @@ func (d *Differ) generateDiff(key manifest.ResourceKey, source, target *unstruct
 	}
 
 	// Generate unified diff as final fallback
-	return d.generateUnifiedDiff(key, sourceJSON, targetJSON)
+	return d.generateUnifiedDiff(key, sourceYAML, targetYAML)
 }
 
 // generateDifftasticDiff generates a diff using difftastic
-func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, sourceJSON, targetJSON []byte) (string, int, error) {
+func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, sourceYAML, targetYAML []byte) (string, int, error) {
 	// Check if difftastic is available
 	if !isDifftasticAvailable() {
 		return "", 0, fmt.Errorf("difftastic not available")
@@ -196,14 +196,14 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, sourceJSON, ta
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	sourceFile := filepath.Join(tmpDir, "source.json")
-	targetFile := filepath.Join(tmpDir, "target.json")
+	sourceFile := filepath.Join(tmpDir, "source.yaml")
+	targetFile := filepath.Join(tmpDir, "target.yaml")
 
-	if err := os.WriteFile(sourceFile, sourceJSON, 0644); err != nil {
+	if err := os.WriteFile(sourceFile, sourceYAML, 0644); err != nil {
 		return "", 0, fmt.Errorf("failed to write source file: %w", err)
 	}
 
-	if err := os.WriteFile(targetFile, targetJSON, 0644); err != nil {
+	if err := os.WriteFile(targetFile, targetYAML, 0644); err != nil {
 		return "", 0, fmt.Errorf("failed to write target file: %w", err)
 	}
 
@@ -241,7 +241,7 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, sourceJSON, ta
 }
 
 // generateUnifiedDiff generates a unified diff
-func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceJSON, targetJSON []byte) (string, int, error) {
+func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceYAML, targetYAML []byte) (string, int, error) {
 	// Create temp files
 	tmpDir, err := os.MkdirTemp("", "k8s-diff-*")
 	if err != nil {
@@ -249,14 +249,14 @@ func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceJSON, targe
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	sourceFile := filepath.Join(tmpDir, "source.json")
-	targetFile := filepath.Join(tmpDir, "target.json")
+	sourceFile := filepath.Join(tmpDir, "source.yaml")
+	targetFile := filepath.Join(tmpDir, "target.yaml")
 
-	if err := os.WriteFile(sourceFile, sourceJSON, 0644); err != nil {
+	if err := os.WriteFile(sourceFile, sourceYAML, 0644); err != nil {
 		return "", 0, fmt.Errorf("failed to write source file: %w", err)
 	}
 
-	if err := os.WriteFile(targetFile, targetJSON, 0644); err != nil {
+	if err := os.WriteFile(targetFile, targetYAML, 0644); err != nil {
 		return "", 0, fmt.Errorf("failed to write target file: %w", err)
 	}
 
