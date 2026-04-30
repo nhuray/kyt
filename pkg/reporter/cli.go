@@ -120,15 +120,16 @@ func (r *CLIReporter) printModified(w io.Writer, modified []differ.ResourceDiff,
 		}
 
 		// Print resource header
+		matchInfo := r.formatMatchInfo(&diff)
 		if useColor {
 			fmt.Fprintf(w, "%s%s───────────────────────────────────────────────────────────────%s\n",
 				colorBold, colorYellow, colorReset)
-			fmt.Fprintf(w, "%s%s● %s%s\n", colorBold, colorYellow, diff.Key.String(), colorReset)
+			fmt.Fprintf(w, "%s%s● %s%s\n", colorBold, colorYellow, matchInfo, colorReset)
 			fmt.Fprintf(w, "%s%s───────────────────────────────────────────────────────────────%s\n\n",
 				colorBold, colorYellow, colorReset)
 		} else {
 			fmt.Fprintf(w, "───────────────────────────────────────────────────────────────\n")
-			fmt.Fprintf(w, "• %s\n", diff.Key.String())
+			fmt.Fprintf(w, "• %s\n", matchInfo)
 			fmt.Fprintf(w, "───────────────────────────────────────────────────────────────\n\n")
 		}
 
@@ -188,6 +189,25 @@ func (r *CLIReporter) printSummaryLine(w io.Writer, label string, count int, use
 	} else {
 		fmt.Fprintf(w, "  %-15s %d\n", label+":", count)
 	}
+}
+
+// formatMatchInfo formats the match information for display
+func (r *CLIReporter) formatMatchInfo(diff *differ.ResourceDiff) string {
+	if diff.MatchType == "exact" || diff.MatchType == "" {
+		// Exact match or legacy format - just show the key
+		return diff.Key.String()
+	}
+
+	// Similarity match - show source → target with score
+	if diff.SourceKey.String() == diff.TargetKey.String() {
+		// Keys are same (shouldn't happen, but handle gracefully)
+		return fmt.Sprintf("%s (similarity: %.2f)", diff.Key.String(), diff.SimilarityScore)
+	}
+
+	return fmt.Sprintf("%s → %s (similarity: %.2f)",
+		diff.SourceKey.String(),
+		diff.TargetKey.String(),
+		diff.SimilarityScore)
 }
 
 // ANSI color codes

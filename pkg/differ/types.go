@@ -25,7 +25,13 @@ type DiffResult struct {
 
 // ResourceDiff represents a single modified resource with its diff
 type ResourceDiff struct {
-	// Key uniquely identifies the resource
+	// SourceKey uniquely identifies the source resource
+	SourceKey manifest.ResourceKey
+
+	// TargetKey uniquely identifies the target resource (may differ from SourceKey for similarity matches)
+	TargetKey manifest.ResourceKey
+
+	// Key uniquely identifies the resource (for backward compatibility, equals SourceKey)
 	Key manifest.ResourceKey
 
 	// Source is the normalized source resource
@@ -39,6 +45,12 @@ type ResourceDiff struct {
 
 	// DiffLines contains the number of lines that differ
 	DiffLines int
+
+	// MatchType indicates how the resources were matched ("exact" or "similarity")
+	MatchType string
+
+	// SimilarityScore is the similarity score (1.0 for exact matches, 0.0-1.0 for similarity matches)
+	SimilarityScore float64
 }
 
 // DiffSummary provides aggregate statistics about the diff
@@ -79,14 +91,24 @@ type DiffOptions struct {
 	// DifftasticDisplay is the display mode for difftastic
 	// Options: "side-by-side", "side-by-side-show-both", "inline"
 	DifftasticDisplay string
+
+	// EnableSimilarityMatching enables similarity-based resource matching
+	// When enabled, resources with different names but similar structure will be matched
+	EnableSimilarityMatching bool
+
+	// SimilarityThreshold is the minimum similarity score (0.0-1.0) required for matching
+	// Default: 0.7 (70% similarity)
+	SimilarityThreshold float64
 }
 
 // NewDefaultDiffOptions returns DiffOptions with sensible defaults
 func NewDefaultDiffOptions() *DiffOptions {
 	return &DiffOptions{
-		UseDifftastic:     true,
-		ColorOutput:       true,
-		ContextLines:      3,
-		DifftasticDisplay: "side-by-side",
+		UseDifftastic:            true,
+		ColorOutput:              true,
+		ContextLines:             3,
+		DifftasticDisplay:        "side-by-side",
+		EnableSimilarityMatching: true,
+		SimilarityThreshold:      0.7,
 	}
 }
