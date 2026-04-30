@@ -1,0 +1,196 @@
+# GoReleaser configuration for kyt
+# Documentation: https://goreleaser.com
+
+version: 2
+
+# Project metadata
+project_name: kyt
+
+# Build configuration
+builds:
+  - id: kyt
+    binary: kyt
+    main: ./cmd/kyt
+    env:
+      - CGO_ENABLED=1
+    
+    # Build for multiple platforms
+    goos:
+      - linux
+      - darwin
+      - windows
+    
+    goarch:
+      - amd64
+      - arm64
+    
+    # Skip unsupported combinations
+    ignore:
+      - goos: windows
+        goarch: arm64
+    
+    # Version information
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    
+    # Build flags
+    flags:
+      - -trimpath
+    
+    mod_timestamp: "{{.CommitTimestamp}}"
+
+# Archive configuration
+archives:
+  - id: default
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    
+    # Files to include in archive
+    files:
+      - README.md
+      - LICENSE
+      - docs/*.md
+      - examples/.kyt.yaml
+
+# Checksums
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# Snapshots (for builds without tags)
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# Changelog generation
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Performance Improvements"
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "Refactors"
+      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: Others
+      order: 999
+
+# Release configuration
+release:
+  github:
+    owner: nhuray
+    name: kyt
+  
+  # Release name
+  name_template: "v{{.Version}}"
+  
+  # Draft release (review before publishing)
+  draft: false
+  
+  # Mark as pre-release if version contains alpha, beta, rc
+  prerelease: auto
+  
+  # Release notes
+  header: |
+    ## kyt v{{ .Version }}
+    
+    A powerful CLI tool for formatting and comparing Kubernetes manifests.
+    
+    ### Installation
+    
+    **Linux (x86_64):**
+    ```bash
+    curl -L https://github.com/nhuray/kyt/releases/download/v{{ .Version }}/kyt_{{ .Version }}_Linux_x86_64.tar.gz | tar xz
+    sudo mv kyt /usr/local/bin/
+    ```
+    
+    **macOS (Apple Silicon):**
+    ```bash
+    curl -L https://github.com/nhuray/kyt/releases/download/v{{ .Version }}/kyt_{{ .Version }}_Darwin_arm64.tar.gz | tar xz
+    sudo mv kyt /usr/local/bin/
+    ```
+    
+    **macOS (Intel):**
+    ```bash
+    curl -L https://github.com/nhuray/kyt/releases/download/v{{ .Version }}/kyt_{{ .Version }}_Darwin_x86_64.tar.gz | tar xz
+    sudo mv kyt /usr/local/bin/
+    ```
+    
+    **Windows (PowerShell):**
+    ```powershell
+    Invoke-WebRequest -Uri "https://github.com/nhuray/kyt/releases/download/v{{ .Version }}/kyt_{{ .Version }}_Windows_x86_64.zip" -OutFile "kyt.zip"
+    Expand-Archive -Path "kyt.zip" -DestinationPath .
+    ```
+    
+    ### What's Changed
+  
+  footer: |
+    **Full Changelog**: https://github.com/nhuray/kyt/compare/{{ .PreviousTag }}...{{ .Tag }}
+    
+    ---
+    
+    ## Documentation
+    
+    - [fmt Command Guide](https://github.com/nhuray/kyt/blob/main/docs/fmt.md)
+    - [diff Command Guide](https://github.com/nhuray/kyt/blob/main/docs/diff.md)
+    - [Configuration Examples](https://github.com/nhuray/kyt/tree/main/examples)
+
+# Homebrew tap (optional - commented out for now)
+# brews:
+#   - repository:
+#       owner: nhuray
+#       name: homebrew-tap
+#     directory: Formula
+#     homepage: https://github.com/nhuray/kyt
+#     description: "Kubernetes YAML Toolkit - Format and compare manifests with intelligent ignore rules"
+#     license: MIT
+#     dependencies:
+#       - name: difftastic
+#         type: optional
+#     test: |
+#       system "#{bin}/kyt version"
+#     install: |
+#       bin.install "kyt"
+
+# Docker images (optional - commented out for now)
+# dockers:
+#   - image_templates:
+#       - "nhuray/kyt:{{ .Version }}"
+#       - "nhuray/kyt:latest"
+#     dockerfile: Dockerfile
+#     build_flag_templates:
+#       - "--pull"
+#       - "--label=org.opencontainers.image.created={{.Date}}"
+#       - "--label=org.opencontainers.image.title={{.ProjectName}}"
+#       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+#       - "--label=org.opencontainers.image.version={{.Version}}"
+
+# Announce (optional)
+# announce:
+#   twitter:
+#     enabled: false
+#   discord:
+#     enabled: false

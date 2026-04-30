@@ -65,8 +65,8 @@ run-json: build ## Build and run kyt diff with JSON output
 	@echo "Running $(BINARY) diff with JSON output..."
 	@$(BINARY_PATH) diff -o json examples/manifests/basic examples/manifests/multi-doc
 
-run-lint: build ## Build and run kyt lint
-	@echo "Running $(BINARY) lint..."
-	@$(BINARY_PATH) lint examples/manifests/basic
+run-fmt: build ## Build and run kyt fmt
+	@echo "Running $(BINARY) fmt..."
+	@$(BINARY_PATH) fmt examples/manifests/basic
 
 .DEFAULT_GOAL := help

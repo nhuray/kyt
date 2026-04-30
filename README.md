@@ -166,42 +166,77 @@ See [examples/.kyt.yaml](examples/.kyt.yaml) for a complete configuration exampl
 
 ## Installation
 
+### Binary Releases (Recommended)
+
+Download pre-built binaries from [GitHub Releases](https://github.com/nhuray/kyt/releases):
+
+**Linux (x86_64):**
+```bash
+curl -L https://github.com/nhuray/kyt/releases/latest/download/kyt_Linux_x86_64.tar.gz | tar xz
+sudo mv kyt /usr/local/bin/
+```
+
+**macOS (Apple Silicon):**
+```bash
+curl -L https://github.com/nhuray/kyt/releases/latest/download/kyt_Darwin_arm64.tar.gz | tar xz
+sudo mv kyt /usr/local/bin/
+```
+
+**macOS (Intel):**
+```bash
+curl -L https://github.com/nhuray/kyt/releases/latest/download/kyt_Darwin_x86_64.tar.gz | tar xz
+sudo mv kyt /usr/local/bin/
+```
+
+**Windows (PowerShell):**
+```powershell
+Invoke-WebRequest -Uri "https://github.com/nhuray/kyt/releases/latest/download/kyt_Windows_x86_64.zip" -OutFile "kyt.zip"
+Expand-Archive -Path "kyt.zip" -DestinationPath .
+# Add kyt.exe to your PATH
+```
+
+### Using Go Install
+
+```bash
+go install github.com/nhuray/kyt/cmd/kyt@latest
+```
+
 ### From Source
 
 ```bash
-git clone https://github.com/nhuray/k8s-diff.git
-cd k8s-diff
+git clone https://github.com/nhuray/kyt.git
+cd kyt
 
 # Using Make (recommended)
 make build
 
 # Or directly with Go
-go build -o bin/kyt ./cmd/ky
+go build -o bin/kyt ./cmd/kyt
 
 # Optional: Install to your PATH
 make install
 # Or manually: cp bin/kyt /usr/local/bin/
 ```
 
-### Using Go Install
+### Verify Installation
 
 ```bash
-go install github.com/nhuray/k8s-diff/cmd/ky@latest
+kyt version
 ```
 
-### Binary Releases
+### Difftastic (Optional but Recommended)
 
-_(Coming soon)_ Download pre-built binaries from [GitHub Releases](https://github.com/nhuray/k8s-diff/releases)
-
-### Difftastic Integration
-
-The `ky diff` command automatically detects and uses [difftastic](https://difftastic.wilfred.me.uk/) if available, providing beautiful syntax-aware structural diffs. If difftastic is not found, it gracefully falls back to standard unified diff.
+The `kyt diff` command automatically detects and uses [difftastic](https://difftastic.wilfred.me.uk/) if available, providing beautiful syntax-aware structural diffs. If difftastic is not found, it gracefully falls back to a built-in tree-sitter diff or standard unified diff.
 
 **Install difftastic:**
 
 ```bash
 # macOS
 brew install difftastic
+
+# Linux (from GitHub releases)
+curl -L https://github.com/Wilfred/difftastic/releases/latest/download/difft-x86_64-unknown-linux-gnu.tar.gz | tar xz
+sudo mv difft /usr/local/bin/
 
 # Other platforms: see https://difftastic.wilfred.me.uk/installation.html
 ```
