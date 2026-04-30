@@ -8,7 +8,7 @@
 
 ### 1. Bug Fix: Double YAML Separators ✅
 
-**Issue:** The `ky lint` command was outputting double `---` separators between YAML documents.
+**Issue:** The `ky fmt` command was outputting double `---` separators between YAML documents.
 
 **Root Cause:** In `pkg/manifest/writer.go`, the code was manually writing `---` separators AND the `yaml.Encoder` was automatically adding them, resulting in duplicates.
 
@@ -21,7 +21,7 @@
 
 **Verification:**
 ```bash
-cat gke-dev.yaml | ./bin/ky lint > output.yaml
+cat gke-dev.yaml | ./bin/ky fmt > output.yaml
 # No more double separators!
 ```
 

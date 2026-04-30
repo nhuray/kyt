@@ -12,45 +12,45 @@ import (
 )
 
 var (
-	// Lint command flags
-	lintWrite bool
+	// Fmt command flags
+	fmtWrite bool
 )
 
-var lintCmd = &cobra.Command{
-	Use:   "lint [path]",
-	Short: "Normalize Kubernetes manifests",
-	Long: `Normalize Kubernetes manifests by applying ignore rules and transformations.
+var fmtCmd = &cobra.Command{
+	Use:   "fmt [path]",
+	Short: "Format Kubernetes manifests",
+	Long: `Format Kubernetes manifests by applying transformations like sorting keys and arrays.
 
 By default, reads from the specified path and writes to stdout.
 Use -w to write changes back to the source files.
 
 Examples:
-  # Normalize a file to stdout
-  kyt lint deployment.yaml
+  # Format a file to stdout
+  kyt fmt deployment.yaml
 
-  # Normalize a directory to stdout
-  kyt lint ./manifests
+  # Format a directory to stdout
+  kyt fmt ./manifests
 
-  # Normalize and write back to source files
-  kyt lint -w ./manifests
+  # Format and write back to source files
+  kyt fmt -w ./manifests
 
-  # Normalize from stdin
-  cat deployment.yaml | kyt lint
+  # Format from stdin
+  cat deployment.yaml | kyt fmt
 
   # Chain with other tools
-  kustomize build . | kyt lint | kubectl apply -f -
+  kustomize build . | kyt fmt | kubectl apply -f -
 `,
-	RunE:          runLint,
+	RunE:          runFmt,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
 
 func init() {
-	lintCmd.Flags().BoolVarP(&lintWrite, "write", "w", false, "write normalized output back to source files")
-	rootCmd.AddCommand(lintCmd)
+	fmtCmd.Flags().BoolVarP(&fmtWrite, "write", "w", false, "write formatted output back to source files")
+	rootCmd.AddCommand(fmtCmd)
 }
 
-func runLint(cmd *cobra.Command, args []string) error {
+func runFmt(cmd *cobra.Command, args []string) error {
 	var input io.Reader
 	var sourcePath string
 
@@ -63,7 +63,7 @@ func runLint(cmd *cobra.Command, args []string) error {
 		}
 
 		// Cannot use -w with stdin
-		if lintWrite {
+		if fmtWrite {
 			return fmt.Errorf("cannot use -w/--write with stdin input")
 		}
 	} else {
@@ -130,13 +130,13 @@ func runLint(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write output
-	if lintWrite {
+	if fmtWrite {
 		// Write back to source files
 		if rootVerbose {
-			fmt.Fprintf(os.Stderr, "Writing normalized manifests back to source...\n")
+			fmt.Fprintf(os.Stderr, "Writing formatted manifests back to source...\n")
 		}
 
-		// For now, we'll write all normalized resources back to the original path
+		// For now, we'll write all formatted resources back to the original path
 		// TODO: In a more advanced implementation, we could preserve the original
 		// file structure when dealing with directories
 		return writeBackToSource(sourcePath, normalized)
@@ -149,7 +149,7 @@ func runLint(cmd *cobra.Command, args []string) error {
 	}
 }
 
-// writeBackToSource writes normalized manifests back to the source file(s)
+// writeBackToSource writes formatted manifests back to the source file(s)
 func writeBackToSource(sourcePath string, resources []*unstructured.Unstructured) error {
 	info, err := os.Stat(sourcePath)
 	if err != nil {
@@ -159,7 +159,7 @@ func writeBackToSource(sourcePath string, resources []*unstructured.Unstructured
 	if info.IsDir() {
 		// For directories, we write all resources to a single file in the directory
 		// In a production implementation, you might want to preserve the original file structure
-		outputPath := sourcePath + "/normalized.yaml"
+		outputPath := sourcePath + "/formatted.yaml"
 		file, err := os.Create(outputPath)
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
@@ -175,7 +175,7 @@ func writeBackToSource(sourcePath string, resources []*unstructured.Unstructured
 		}
 
 		if rootVerbose {
-			fmt.Fprintf(os.Stderr, "Wrote normalized manifests to: %s\n", outputPath)
+			fmt.Fprintf(os.Stderr, "Wrote formatted manifests to: %s\n", outputPath)
 		}
 	} else {
 		// For single files, write back to the same file
@@ -194,7 +194,7 @@ func writeBackToSource(sourcePath string, resources []*unstructured.Unstructured
 		}
 
 		if rootVerbose {
-			fmt.Fprintf(os.Stderr, "Wrote normalized manifests to: %s\n", sourcePath)
+			fmt.Fprintf(os.Stderr, "Wrote formatted manifests to: %s\n", sourcePath)
 		}
 	}
 
