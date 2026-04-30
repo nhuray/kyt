@@ -1,5 +1,5 @@
-# k8s-diff Configuration
-# This file demonstrates the configuration options for k8s-diff
+# kyt Configuration
+# This file demonstrates the configuration options for kyt
 
 # Ignore differences for specific resources
 ignoreDifferences:

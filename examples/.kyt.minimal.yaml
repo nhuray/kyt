@@ -1,4 +1,4 @@
-# Minimal k8s-diff Configuration
+# Minimal kyt Configuration
 # This is a minimal configuration that only ignores common metadata fields
 
 ignoreDifferences:

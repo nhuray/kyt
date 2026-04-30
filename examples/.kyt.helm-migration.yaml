@@ -1,4 +1,4 @@
-# k8s-diff Configuration for Helm to Kustomize Migration
+# kyt Configuration for Helm to Kustomize Migration
 # This configuration is specifically designed to compare Helm-rendered manifests
 # with Kustomize-rendered manifests during a migration
 

@@ -34,20 +34,12 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 - **Pre-deployment validation**: Compare what's currently deployed vs what will be deployed, filtering out noise
 - **Format and standardize**: Clean up YAML files by sorting keys, removing managed fields, and applying consistent formatting
 
-## Status
-
-✅ **Core functionality complete!** - See [docs/PLAN.md](docs/PLAN.md) for implementation details.
-
-- ✅ Phases 1-8.6 complete (Setup, Parsing, Config, Normalization, Diff, Output, CLI, Testing, Tool Refactoring)
-- 🔨 Phase 9 in progress (Documentation)
-- 📦 Phase 10 planned (Build & Release)
-
 ## Quick Start
 
 ```bash
 # Build from source
-git clone https://github.com/nhuray/k8s-diff.git
-cd k8s-diff
+git clone https://github.com/nhuray/kyt.git
+cd kyt
 make build
 
 # Compare two manifest files
@@ -136,7 +128,7 @@ kyt version
 
 ## Configuration
 
-The tool searches for `.kyt.yaml` (or legacy `.k8s-diff.yaml`) in the current directory and parent directories.
+The tool searches for `.kyt.yaml` in the current directory and parent directories.
 
 ```yaml
 # .kyt.yaml
@@ -245,8 +237,7 @@ sudo mv difft /usr/local/bin/
 
 - **[fmt Command Guide](docs/fmt.md)** - Complete guide to formatting manifests with configuration options
 - **[diff Command Guide](docs/diff.md)** - Advanced comparison techniques with JQ expressions and examples
-- [Implementation Plan](docs/PLAN.md) - Detailed development roadmap with progress
-- [Example Configs](examples/) - Sample configurations and manifests
+- **[Example Configs](examples/)** - Sample configurations and manifests
 
 ## Testing
 
