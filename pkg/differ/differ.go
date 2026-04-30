@@ -58,7 +58,59 @@ func (d *Differ) Diff(source, target *manifest.ManifestSet) (*DiffResult, error)
 		normalizedTarget[key] = normalized
 	}
 
-	// Find resources in both sets
+	// Set up resource cache for similarity matching
+	SetResourceCache(normalizedSource, normalizedTarget)
+
+	// Perform 2-stage matching
+	matcher := NewResourceMatcher(
+		d.options.EnableSimilarityMatching,
+		d.options.SimilarityThreshold,
+	)
+
+	matches, unmatchedSource, unmatchedTarget := matcher.MatchResources(
+		normalizedSource,
+		normalizedTarget,
+	)
+
+	// Process matched pairs
+	for _, match := range matches {
+		sourceObj := match.SourceResource
+		targetObj := match.TargetResource
+
+		// Check if resources are equal
+		equal, err := areResourcesEqual(sourceObj, targetObj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compare resources for %s: %w", match.SourceKey.String(), err)
+		}
+
+		if equal {
+			result.Identical = append(result.Identical, match.SourceKey)
+		} else {
+			// Generate diff
+			diffText, diffLines, err := d.generateDiff(match.SourceKey, sourceObj, targetObj)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate diff for %s: %w", match.SourceKey.String(), err)
+			}
+
+			result.Modified = append(result.Modified, ResourceDiff{
+				SourceKey:       match.SourceKey,
+				TargetKey:       match.TargetKey,
+				Key:             match.SourceKey, // For backward compatibility
+				Source:          sourceObj,
+				Target:          targetObj,
+				DiffText:        diffText,
+				DiffLines:       diffLines,
+				MatchType:       string(match.Type),
+				SimilarityScore: match.SimilarityScore,
+			})
+		}
+	}
+
+	// Process unmatched resources
+	result.Removed = unmatchedSource
+	result.Added = unmatchedTarget
+
+	// Calculate summary
 	allKeys := make(map[manifest.ResourceKey]bool)
 	for key := range normalizedSource {
 		allKeys[key] = true
@@ -67,45 +119,6 @@ func (d *Differ) Diff(source, target *manifest.ManifestSet) (*DiffResult, error)
 		allKeys[key] = true
 	}
 
-	// Compare each resource
-	for key := range allKeys {
-		sourceObj, inSource := normalizedSource[key]
-		targetObj, inTarget := normalizedTarget[key]
-
-		if inSource && !inTarget {
-			// Resource removed
-			result.Removed = append(result.Removed, key)
-		} else if !inSource && inTarget {
-			// Resource added
-			result.Added = append(result.Added, key)
-		} else {
-			// Resource exists in both - check if modified
-			equal, err := areResourcesEqual(sourceObj, targetObj)
-			if err != nil {
-				return nil, fmt.Errorf("failed to compare resources for %s: %w", key.String(), err)
-			}
-
-			if equal {
-				result.Identical = append(result.Identical, key)
-			} else {
-				// Generate diff
-				diffText, diffLines, err := d.generateDiff(key, sourceObj, targetObj)
-				if err != nil {
-					return nil, fmt.Errorf("failed to generate diff for %s: %w", key.String(), err)
-				}
-
-				result.Modified = append(result.Modified, ResourceDiff{
-					Key:       key,
-					Source:    sourceObj,
-					Target:    targetObj,
-					DiffText:  diffText,
-					DiffLines: diffLines,
-				})
-			}
-		}
-	}
-
-	// Calculate summary
 	result.Summary = DiffSummary{
 		TotalResources: len(allKeys),
 		AddedCount:     len(result.Added),

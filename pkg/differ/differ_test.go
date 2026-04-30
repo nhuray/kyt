@@ -237,6 +237,7 @@ func TestDiff_MixedChanges(t *testing.T) {
 
 	opts := NewDefaultDiffOptions()
 	opts.UseDifftastic = false
+	opts.EnableSimilarityMatching = false // Disable similarity matching for this test
 
 	differ := New(norm, opts)
 
@@ -460,5 +461,246 @@ func TestAreResourcesEqual(t *testing.T) {
 	}
 	if equal {
 		t.Error("Expected res1 and res3 to be different")
+	}
+}
+
+func TestDiff_SimilarityMatching(t *testing.T) {
+	cfg := config.NewDefaultConfig()
+	norm := normalizer.New(cfg)
+
+	opts := NewDefaultDiffOptions()
+	opts.UseDifftastic = false
+	opts.EnableSimilarityMatching = true
+	opts.SimilarityThreshold = 0.6 // Threshold appropriate for normalized resources
+
+	differ := New(norm, opts)
+
+	source := manifest.NewManifestSet()
+	target := manifest.NewManifestSet()
+
+	// Add Deployment with name v1 in source
+	deployV1 := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":      "my-app-v1",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"replicas": int64(3),
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name":  "nginx",
+								"image": "nginx:1.19",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	source.Add(deployV1)
+
+	// Add Deployment with name v2 in target (similar structure, different name and image)
+	deployV2 := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":      "my-app-v2",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"replicas": int64(3),
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name":  "nginx",
+								"image": "nginx:1.20", // Updated image
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	target.Add(deployV2)
+
+	result, err := differ.Diff(source, target)
+	if err != nil {
+		t.Fatalf("Diff failed: %v", err)
+	}
+
+	// Debug: Print what we got
+	t.Logf("Added: %d, Removed: %d, Modified: %d", len(result.Added), len(result.Removed), len(result.Modified))
+	if len(result.Modified) > 0 {
+		t.Logf("Modified[0]: MatchType=%s, Score=%.2f, SourceKey=%s, TargetKey=%s",
+			result.Modified[0].MatchType, result.Modified[0].SimilarityScore,
+			result.Modified[0].SourceKey.Name, result.Modified[0].TargetKey.Name)
+	}
+
+	// With similarity matching enabled, these should be matched as modified
+	if len(result.Added) != 0 {
+		t.Errorf("Expected 0 added resources with similarity matching, got %d", len(result.Added))
+	}
+
+	if len(result.Removed) != 0 {
+		t.Errorf("Expected 0 removed resources with similarity matching, got %d", len(result.Removed))
+	}
+
+	if len(result.Modified) != 1 {
+		t.Errorf("Expected 1 modified resource with similarity matching, got %d", len(result.Modified))
+	}
+
+	// Check match metadata
+	if len(result.Modified) > 0 {
+		mod := result.Modified[0]
+		if mod.MatchType != "similarity" {
+			t.Errorf("Expected MatchType='similarity', got '%s'", mod.MatchType)
+		}
+		if mod.SimilarityScore < 0.5 || mod.SimilarityScore > 0.7 {
+			t.Errorf("Expected SimilarityScore between 0.5 and 0.7 (normalized resources), got %.2f", mod.SimilarityScore)
+		}
+		if mod.SourceKey.Name != "my-app-v1" {
+			t.Errorf("Expected SourceKey name 'my-app-v1', got '%s'", mod.SourceKey.Name)
+		}
+		if mod.TargetKey.Name != "my-app-v2" {
+			t.Errorf("Expected TargetKey name 'my-app-v2', got '%s'", mod.TargetKey.Name)
+		}
+	}
+}
+
+func TestDiff_SimilarityMatching_Disabled(t *testing.T) {
+	cfg := config.NewDefaultConfig()
+	norm := normalizer.New(cfg)
+
+	opts := NewDefaultDiffOptions()
+	opts.UseDifftastic = false
+	opts.EnableSimilarityMatching = false // Disabled
+
+	differ := New(norm, opts)
+
+	source := manifest.NewManifestSet()
+	target := manifest.NewManifestSet()
+
+	// Add ConfigMap with name v1 in source
+	configV1 := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "app-config-v1",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+	}
+	source.Add(configV1)
+
+	// Add ConfigMap with name v2 in target (similar structure, different name)
+	configV2 := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "app-config-v2",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+	}
+	target.Add(configV2)
+
+	result, err := differ.Diff(source, target)
+	if err != nil {
+		t.Fatalf("Diff failed: %v", err)
+	}
+
+	// With similarity matching disabled, these should be reported as added/removed
+	if len(result.Added) != 1 {
+		t.Errorf("Expected 1 added resource without similarity matching, got %d", len(result.Added))
+	}
+
+	if len(result.Removed) != 1 {
+		t.Errorf("Expected 1 removed resource without similarity matching, got %d", len(result.Removed))
+	}
+
+	if len(result.Modified) != 0 {
+		t.Errorf("Expected 0 modified resources without similarity matching, got %d", len(result.Modified))
+	}
+}
+
+func TestDiff_SimilarityMatching_BelowThreshold(t *testing.T) {
+	cfg := config.NewDefaultConfig()
+	norm := normalizer.New(cfg)
+
+	opts := NewDefaultDiffOptions()
+	opts.UseDifftastic = false
+	opts.EnableSimilarityMatching = true
+	opts.SimilarityThreshold = 0.9 // High threshold
+
+	differ := New(norm, opts)
+
+	source := manifest.NewManifestSet()
+	target := manifest.NewManifestSet()
+
+	// Add ConfigMap with some data in source
+	config1 := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "config1",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+	}
+	source.Add(config1)
+
+	// Add ConfigMap with mostly different data in target
+	config2 := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "config2",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"key3": "value3",
+				"key4": "value4",
+				"key5": "value5",
+			},
+		},
+	}
+	target.Add(config2)
+
+	result, err := differ.Diff(source, target)
+	if err != nil {
+		t.Fatalf("Diff failed: %v", err)
+	}
+
+	// Resources are too different to match (below threshold)
+	// Should be reported as added/removed
+	if len(result.Added) != 1 {
+		t.Errorf("Expected 1 added resource (below threshold), got %d", len(result.Added))
+	}
+
+	if len(result.Removed) != 1 {
+		t.Errorf("Expected 1 removed resource (below threshold), got %d", len(result.Removed))
 	}
 }

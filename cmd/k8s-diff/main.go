@@ -19,14 +19,16 @@ var (
 	date    = "unknown"
 
 	// Command-line flags
-	configFile     string
-	outputFormat   string
-	noColor        bool
-	showIdentical  bool
-	difftasticMode string
-	diffTool       string
-	skipNormalize  bool
-	verbose        bool
+	configFile          string
+	outputFormat        string
+	noColor             bool
+	showIdentical       bool
+	difftasticMode      string
+	diffTool            string
+	skipNormalize       bool
+	verbose             bool
+	exactMatch          bool
+	similarityThreshold float64
 )
 
 func main() {
@@ -82,6 +84,8 @@ func init() {
 	rootCmd.Flags().StringVar(&diffTool, "diff-tool", "difft", "diff tool: difft, diff")
 	rootCmd.Flags().BoolVar(&skipNormalize, "skip-normalize", false, "skip normalization (use raw manifests)")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	rootCmd.Flags().BoolVar(&exactMatch, "exact-match", false, "disable similarity matching (only exact name matches)")
+	rootCmd.Flags().Float64Var(&similarityThreshold, "similarity-threshold", 0.7, "minimum similarity score (0.0-1.0) for matching resources")
 
 	// Add version command
 	rootCmd.AddCommand(versionCmd)
@@ -146,10 +150,12 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	// Create differ
 	diffOpts := &differ.DiffOptions{
-		UseDifftastic:     diffTool == "difft",
-		ColorOutput:       !noColor,
-		ContextLines:      3,
-		DifftasticDisplay: difftasticMode,
+		UseDifftastic:            diffTool == "difft",
+		ColorOutput:              !noColor,
+		ContextLines:             3,
+		DifftasticDisplay:        difftasticMode,
+		EnableSimilarityMatching: !exactMatch,
+		SimilarityThreshold:      similarityThreshold,
 	}
 	diff := differ.New(norm, diffOpts)
 

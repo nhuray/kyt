@@ -53,9 +53,13 @@ type ResourceKeyJSON struct {
 
 // ModifiedJSON represents a modified resource with its diff
 type ModifiedJSON struct {
-	Key       ResourceKeyJSON `json:"key"`
-	Diff      string          `json:"diff"`
-	DiffLines int             `json:"diffLines"`
+	SourceKey       ResourceKeyJSON `json:"sourceKey"`
+	TargetKey       ResourceKeyJSON `json:"targetKey"`
+	Key             ResourceKeyJSON `json:"key"` // For backward compatibility
+	MatchType       string          `json:"matchType"`
+	SimilarityScore float64         `json:"similarityScore"`
+	Diff            string          `json:"diff"`
+	DiffLines       int             `json:"diffLines"`
 }
 
 // Report formats and writes the diff result as JSON
@@ -102,9 +106,13 @@ func (r *JSONReporter) convertToJSON(result *differ.DiffResult) *JSONOutput {
 	// Convert modified resources
 	for _, diff := range result.Modified {
 		output.Modified = append(output.Modified, ModifiedJSON{
-			Key:       convertResourceKey(diff.Key),
-			Diff:      diff.DiffText,
-			DiffLines: diff.DiffLines,
+			SourceKey:       convertResourceKey(diff.SourceKey),
+			TargetKey:       convertResourceKey(diff.TargetKey),
+			Key:             convertResourceKey(diff.Key), // For backward compatibility
+			MatchType:       diff.MatchType,
+			SimilarityScore: diff.SimilarityScore,
+			Diff:            diff.DiffText,
+			DiffLines:       diff.DiffLines,
 		})
 	}
 
