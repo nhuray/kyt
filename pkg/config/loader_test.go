@@ -18,8 +18,8 @@ func TestNewDefaultConfig(t *testing.T) {
 		t.Errorf("Expected default format to be 'cli', got %s", cfg.Output.Format)
 	}
 
-	if cfg.Output.DiffTool != "difft" {
-		t.Errorf("Expected default diffTool to be 'difft', got %s", cfg.Output.DiffTool)
+	if cfg.Output.DiffTool != "auto" {
+		t.Errorf("Expected default diffTool to be 'auto', got %s", cfg.Output.DiffTool)
 	}
 
 	if !cfg.Output.Colorize {
