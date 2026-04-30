@@ -280,13 +280,74 @@ func (lf *LineFormatter) formatLinePair(buf *strings.Builder, ld LineDiff, halfW
 		buf.WriteString("\n")
 
 	case Modified:
-		// Red left, green right
-		left := lf.pad(ld.SourceLine, halfWidth)
-		buf.WriteString(lf.colorize(left, color.FgRed))
-		buf.WriteString(" │ ")
-		buf.WriteString(lf.colorize(ld.TargetLine, color.FgGreen))
-		buf.WriteString("\n")
+		// Use character-level diff for modified lines
+		if lf.useColor && ld.SourceLine != "" && ld.TargetLine != "" {
+			sourceSegs, targetSegs := computeCharDiff(ld.SourceLine, ld.TargetLine)
+
+			// Format source with character highlighting
+			sourceFormatted := lf.formatSegmentsWithPadding(sourceSegs, halfWidth, color.FgRed)
+			buf.WriteString(sourceFormatted)
+			buf.WriteString(" │ ")
+
+			// Format target with character highlighting
+			targetFormatted := formatSegments(targetSegs, lf.useColor)
+			buf.WriteString(targetFormatted)
+			buf.WriteString("\n")
+		} else {
+			// Fallback to line-level coloring
+			left := lf.pad(ld.SourceLine, halfWidth)
+			buf.WriteString(lf.colorize(left, color.FgRed))
+			buf.WriteString(" │ ")
+			buf.WriteString(lf.colorize(ld.TargetLine, color.FgGreen))
+			buf.WriteString("\n")
+		}
 	}
+}
+
+// formatSegmentsWithPadding formats segments and pads the result
+func (lf *LineFormatter) formatSegmentsWithPadding(segments []DiffSegment, width int, baseColor color.Attribute) string {
+	// Calculate the plain text length (without ANSI codes)
+	plainLen := 0
+	for _, seg := range segments {
+		plainLen += len(seg.Text)
+	}
+
+	// Format segments with appropriate colors
+	var formatted string
+	for _, seg := range segments {
+		switch seg.Type {
+		case Unchanged:
+			// Use base color for unchanged parts in modified lines
+			formatted += color.New(baseColor).Sprint(seg.Text)
+		case Removed:
+			// Use base color with underline for removed characters
+			formatted += color.New(baseColor, color.Underline).Sprint(seg.Text)
+		case Added:
+			// Added segments don't appear on source side
+		default:
+			formatted += color.New(baseColor).Sprint(seg.Text)
+		}
+	}
+
+	// Add padding
+	if plainLen < width {
+		formatted += strings.Repeat(" ", width-plainLen)
+	} else if plainLen > width {
+		// Truncate if too long (this is tricky with ANSI codes, so we simplify)
+		// For now, just add ellipsis marker
+		formatted = lf.colorize(lf.pad(plainTextFromSegments(segments), width), baseColor)
+	}
+
+	return formatted
+}
+
+// plainTextFromSegments extracts plain text from segments
+func plainTextFromSegments(segments []DiffSegment) string {
+	var result string
+	for _, seg := range segments {
+		result += seg.Text
+	}
+	return result
 }
 
 // pad pads or truncates string to width
