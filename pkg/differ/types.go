@@ -79,10 +79,14 @@ func (r *DiffResult) HasDifferences() bool {
 // DiffOptions configures how the diff is performed
 type DiffOptions struct {
 	// UseDifftastic enables difftastic for diff generation
-	// If false or difftastic is not available, falls back to unified diff
+	// If false or difftastic is not available, falls back to tree-sitter
 	UseDifftastic bool
 
-	// ColorOutput enables color output (only applicable for difftastic)
+	// UseTreeSitter enables Go-native tree-sitter diff generation
+	// Used as fallback when difftastic is unavailable, or can be forced
+	UseTreeSitter bool
+
+	// ColorOutput enables color output (applicable for difftastic and tree-sitter)
 	ColorOutput bool
 
 	// ContextLines is the number of context lines for unified diff
@@ -91,6 +95,10 @@ type DiffOptions struct {
 	// DifftasticDisplay is the display mode for difftastic
 	// Options: "side-by-side", "side-by-side-show-both", "inline"
 	DifftasticDisplay string
+
+	// TreeSitterWidth is the terminal width for tree-sitter output
+	// Default: 120
+	TreeSitterWidth int
 
 	// EnableSimilarityMatching enables similarity-based resource matching
 	// When enabled, resources with different names but similar structure will be matched
@@ -105,9 +113,11 @@ type DiffOptions struct {
 func NewDefaultDiffOptions() *DiffOptions {
 	return &DiffOptions{
 		UseDifftastic:            true,
+		UseTreeSitter:            true, // Enable tree-sitter fallback by default
 		ColorOutput:              true,
 		ContextLines:             3,
 		DifftasticDisplay:        "side-by-side",
+		TreeSitterWidth:          120,
 		EnableSimilarityMatching: true,
 		SimilarityThreshold:      0.7,
 	}

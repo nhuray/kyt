@@ -574,6 +574,233 @@ func TestDiff_SimilarityMatching(t *testing.T) {
 	}
 }
 
+func TestDiff_TreeSitterFallback(t *testing.T) {
+	cfg := config.NewDefaultConfig()
+	norm := normalizer.New(cfg)
+
+	// Configure differ to skip difftastic and use tree-sitter
+	opts := NewDefaultDiffOptions()
+	opts.UseDifftastic = false
+	opts.UseTreeSitter = true
+	opts.ColorOutput = false // Disable colors for easier testing
+
+	differ := New(norm, opts)
+
+	source := manifest.NewManifestSet()
+	target := manifest.NewManifestSet()
+
+	// Add ConfigMap to source
+	sourceRes := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "test-config",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+	}
+	_ = source.Add(sourceRes)
+
+	// Add modified version to target
+	targetRes := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "test-config",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"key1": "value1-modified",
+				"key2": "value2",
+				"key3": "value3", // Added key
+			},
+		},
+	}
+	_ = target.Add(targetRes)
+
+	result, err := differ.Diff(source, target)
+	if err != nil {
+		t.Fatalf("Diff failed: %v", err)
+	}
+
+	if len(result.Modified) != 1 {
+		t.Fatalf("Expected 1 modified resource, got %d", len(result.Modified))
+	}
+
+	// Verify diff text is generated
+	diffText := result.Modified[0].DiffText
+	if diffText == "" {
+		t.Error("Expected non-empty diff text")
+	}
+
+	// Verify diff contains expected changes
+	if !contains(diffText, "key1") {
+		t.Error("Diff should contain modified key 'key1'")
+	}
+	if !contains(diffText, "key3") {
+		t.Error("Diff should contain added key 'key3'")
+	}
+
+	// Verify side-by-side separator is present
+	if !contains(diffText, "│") {
+		t.Error("Tree-sitter diff should contain side-by-side separator '│'")
+	}
+}
+
+func TestDiff_TreeSitterWithDeployment(t *testing.T) {
+	cfg := config.NewDefaultConfig()
+	norm := normalizer.New(cfg)
+
+	opts := NewDefaultDiffOptions()
+	opts.UseDifftastic = false
+	opts.UseTreeSitter = true
+	opts.ColorOutput = false
+
+	differ := New(norm, opts)
+
+	source := manifest.NewManifestSet()
+	target := manifest.NewManifestSet()
+
+	// Add Deployment to source
+	sourceRes := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":      "test-deployment",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"replicas": int64(3),
+				"selector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"app": "test",
+					},
+				},
+			},
+		},
+	}
+	_ = source.Add(sourceRes)
+
+	// Add modified version with different replicas
+	targetRes := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":      "test-deployment",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"replicas": int64(5), // Changed from 3 to 5
+				"selector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"app": "test",
+					},
+				},
+			},
+		},
+	}
+	_ = target.Add(targetRes)
+
+	result, err := differ.Diff(source, target)
+	if err != nil {
+		t.Fatalf("Diff failed: %v", err)
+	}
+
+	if len(result.Modified) != 1 {
+		t.Fatalf("Expected 1 modified resource, got %d", len(result.Modified))
+	}
+
+	// Verify diff text contains replicas change
+	diffText := result.Modified[0].DiffText
+	if !contains(diffText, "replicas") {
+		t.Error("Diff should show replicas change")
+	}
+}
+
+func TestDiff_FallbackChain(t *testing.T) {
+	cfg := config.NewDefaultConfig()
+	norm := normalizer.New(cfg)
+
+	// Test with default options (auto mode)
+	opts := NewDefaultDiffOptions()
+	opts.ColorOutput = false
+
+	differ := New(norm, opts)
+
+	source := manifest.NewManifestSet()
+	target := manifest.NewManifestSet()
+
+	// Add simple ConfigMap
+	sourceRes := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "test",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"key": "value",
+			},
+		},
+	}
+	_ = source.Add(sourceRes)
+
+	targetRes := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "test",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"key": "new-value",
+			},
+		},
+	}
+	_ = target.Add(targetRes)
+
+	// Should not fail regardless of which diff tool is available
+	result, err := differ.Diff(source, target)
+	if err != nil {
+		t.Fatalf("Diff failed: %v", err)
+	}
+
+	if len(result.Modified) != 1 {
+		t.Fatalf("Expected 1 modified resource, got %d", len(result.Modified))
+	}
+
+	// Some diff should be generated
+	if result.Modified[0].DiffText == "" {
+		t.Error("Expected non-empty diff text")
+	}
+}
+
+// Helper function to check if string contains substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) &&
+		(s == substr || len(s) > len(substr) &&
+			findSubstring(s, substr))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 func TestDiff_SimilarityMatching_Disabled(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	norm := normalizer.New(cfg)

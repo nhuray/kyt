@@ -8,9 +8,11 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/nhuray/k8s-diff/pkg/differ/treesitter"
 	"github.com/nhuray/k8s-diff/pkg/manifest"
 	"github.com/nhuray/k8s-diff/pkg/normalizer"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/yaml"
 )
 
 // Differ performs diffs between two sets of Kubernetes manifests
@@ -164,10 +166,19 @@ func (d *Differ) generateDiff(key manifest.ResourceKey, source, target *unstruct
 		if err == nil {
 			return diffText, diffLines, nil
 		}
-		// Fall back to unified diff if difftastic fails
+		// Fall through to try tree-sitter
 	}
 
-	// Generate unified diff
+	// Try tree-sitter diff as fallback if enabled
+	if d.options.UseTreeSitter {
+		diffText, diffLines, err := d.generateTreeSitterDiff(key, source, target)
+		if err == nil {
+			return diffText, diffLines, nil
+		}
+		// Fall through to unified diff
+	}
+
+	// Generate unified diff as final fallback
 	return d.generateUnifiedDiff(key, sourceJSON, targetJSON)
 }
 
@@ -292,4 +303,58 @@ func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceJSON, targe
 func isDifftasticAvailable() bool {
 	_, err := exec.LookPath("difft")
 	return err == nil
+}
+
+// generateTreeSitterDiff generates a diff using Go-native tree-sitter parser
+func (d *Differ) generateTreeSitterDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured) (string, int, error) {
+	// Validate that both resources are valid Kubernetes resources
+	if err := treesitter.ValidateKubernetesResource(source); err != nil {
+		return "", 0, fmt.Errorf("invalid source resource: %w", err)
+	}
+	if err := treesitter.ValidateKubernetesResource(target); err != nil {
+		return "", 0, fmt.Errorf("invalid target resource: %w", err)
+	}
+
+	// Convert resources to YAML for tree-sitter parsing
+	sourceYAML, err := yaml.Marshal(source.Object)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to marshal source to YAML: %w", err)
+	}
+
+	targetYAML, err := yaml.Marshal(target.Object)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to marshal target to YAML: %w", err)
+	}
+
+	// Parse YAML with tree-sitter
+	parser := treesitter.NewParser()
+	defer parser.Close()
+
+	sourceTree, err := parser.ParseYAML(sourceYAML)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to parse source YAML: %w", err)
+	}
+
+	targetTree, err := parser.ParseYAML(targetYAML)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to parse target YAML: %w", err)
+	}
+
+	// Perform diff
+	differ := treesitter.NewDiffer(sourceTree, targetTree, sourceYAML, targetYAML)
+	diffResult, err := differ.Diff()
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to generate tree-sitter diff: %w", err)
+	}
+
+	// Format output
+	formatter := treesitter.NewFormatter(d.options.TreeSitterWidth, d.options.ColorOutput, 2)
+	sourceLabel := fmt.Sprintf("a/%s", key.String())
+	targetLabel := fmt.Sprintf("b/%s", key.String())
+	diffText := formatter.FormatSideBySide(diffResult, sourceLabel, targetLabel)
+
+	// Count diff lines (approximate - count newlines)
+	diffLines := bytes.Count([]byte(diffText), []byte("\n"))
+
+	return diffText, diffLines, nil
 }
