@@ -28,14 +28,7 @@ func WriteYAML(w io.Writer, resources []*unstructured.Unstructured) error {
 		_ = encoder.Close() // Best effort close, error already handled below
 	}()
 
-	for i, res := range sorted {
-		if i > 0 {
-			// Write document separator between resources
-			if _, err := fmt.Fprintln(w, "---"); err != nil {
-				return fmt.Errorf("failed to write separator: %w", err)
-			}
-		}
-
+	for _, res := range sorted {
 		if err := encoder.Encode(res.Object); err != nil {
 			key := NewResourceKey(res)
 			return fmt.Errorf("failed to encode resource %s: %w", key.String(), err)
