@@ -13,7 +13,7 @@ A powerful CLI tool for working with Kubernetes manifests.
 - 🎨 **JQ Path Expressions**: Powerful filtering with wildcards and conditionals
 - 📊 **Multiple Output Formats**: CLI (with colors), JSON
 - 🎯 **Smart Normalization**: Sorts keys, removes managed fields, applies ignore rules
-- 🔧 **Lint & Format**: Normalize manifests with `ky lint`
+- 🔧 **Lint & Format**: Format manifests with `ky fmt`
 - 🔀 **Pipe-friendly**: Works seamlessly with kubectl, kustomize, helm
 - 🤖 **Smart Similarity Matching**: Automatically detects renamed resources
 - ⚡ **Fast & Reliable**: Written in Go with 60+ passing tests
@@ -49,10 +49,10 @@ make build
 ./bin/kyt diff ./kustomize-output ./helm-output
 
 # Normalize a manifest file
-./bin/kyt lint deployment.yaml
+./bin/kyt fmt deployment.yaml
 
 # Pipe manifests through ky
-kustomize build . | kyt lint | kubectl apply -f -
+kustomize build . | kyt fmt | kubectl apply -f -
 
 # Use custom config
 ./bin/kyt diff -c .kyt.yaml source.yaml target.yaml
@@ -98,26 +98,26 @@ kyt diff --display inline source.yaml target.yaml
 - `1` - Differences detected
 - `2` - Error (invalid YAML, missing files, etc.)
 
-### `ky lint` - Normalize manifests
+### `ky fmt` - Format manifests
 
-Normalize Kubernetes manifests by applying ignore rules and transformations.
+Format Kubernetes manifests by applying transformations like sorting keys and arrays.
 
 ```bash
-# Normalize a file to stdout
-kyt lint deployment.yaml
+# Format a file to stdout
+kyt fmt deployment.yaml
 
-# Normalize a directory to stdout
-kyt lint ./manifests
+# Format a directory to stdout
+kyt fmt ./manifests
 
-# Normalize and write back to source files
-kyt lint -w ./manifests
+# Format and write back to source files
+kyt fmt -w ./manifests
 
-# Normalize from stdin
-cat deployment.yaml | kyt lint
+# Format from stdin
+cat deployment.yaml | kyt fmt
 
 # Chain with other tools
-kustomize build . | kyt lint | kubectl apply -f -
-helm template . | kyt lint > normalized.yaml
+kustomize build . | kyt fmt | kubectl apply -f -
+helm template . | kyt fmt > formatted.yaml
 ```
 
 ### `ky version` - Version information

@@ -951,38 +951,38 @@ Modified Resources (3):
 **Command Structure:**
 
 ```
-kyt                           # Read stdin, normalize, write stdout
-├── lint <path>             # Normalize file/directory to stdout
+kyt                           # Read stdin, format, write stdout
+├── fmt <path>              # Format file/directory to stdout
 ├── diff <left> <right>  # Compare manifests (existing functionality)
 └── version                 # Version info
 ```
 
 #### Usage Examples:
 
-**Normalize via pipe (most common):**
+**Format via pipe (most common):**
 
 ```bash
-# Normalize kustomize output
+# Format kustomize output
 kustomize build path/to/directory | ky
 
-# Normalize helm output
+# Format helm output
 helm template . | ky
 
 # Chain with kubectl
 kustomize build . | kyt | kubectl apply -f -
 ```
 
-**Normalize files:**
+**Format files:**
 
 ```bash
 # Output to stdout (default)
-kyt lint path/to/file.yaml
+kyt fmt path/to/file.yaml
 
 # Write in-place
-kyt lint path/to/file.yaml -w
+kyt fmt path/to/file.yaml -w
 
-# Normalize directory
-kyt lint path/to/directory/
+# Format directory
+kyt fmt path/to/directory/
 ```
 
 **Compare manifests:**
@@ -1037,8 +1037,8 @@ k8s-diff/
 ky/
 ├── cmd/
 │   └── ky/
-│       ├── main.go      # Root command + stdin normalize (~80 lines)
-│       ├── lint.go      # Lint subcommand (~120 lines)
+│       ├── main.go      # Root command + stdin format (~80 lines)
+│       ├── fmt.go       # Format subcommand (~120 lines)
 │       ├── diff.go      # Diff subcommand (~150 lines)
 │       ├── version.go   # Version subcommand (~30 lines)
 │       └── main_test.go # Integration tests (updated)
@@ -1050,51 +1050,51 @@ ky/
 
 **New Files:**
 
-- [ ] `cmd/kyt/main.go` - Root command with stdin normalization
+- [ ] `cmd/kyt/main.go` - Root command with stdin formatting
 
   ```go
   var rootCmd = &cobra.Command{
       Use:   "ky [path]",
       Short: "ky - Kubernetes YAML toolkit",
-      Long: `Normalize and compare Kubernetes manifests.
+      Long: `Format and compare Kubernetes manifests.
 
   When called with no arguments, reads from stdin and writes to stdout.
   Perfect for piping with kustomize, helm, etc.`,
-      RunE: runNormalize,  // Default: normalize stdin→stdout
+      RunE: runFormat,  // Default: format stdin→stdout
   }
 
-  func runNormalize(cmd *cobra.Command, args []string) error {
+  func runFormat(cmd *cobra.Command, args []string) error {
       // Read from stdin
       // Parse YAML
-      // Normalize
+      // Format
       // Output to stdout
   }
   ```
 
-- [ ] `cmd/kyt/lint.go` - Lint subcommand
+- [ ] `cmd/kyt/fmt.go` - Format subcommand
 
   ```go
-  var lintCmd = &cobra.Command{
-      Use:   "lint <path>",
-      Short: "Normalize Kubernetes manifests",
+  var fmtCmd = &cobra.Command{
+      Use:   "fmt <path>",
+      Short: "Format Kubernetes manifests",
       Args:  cobra.ExactArgs(1),
-      RunE:  runLint,
+      RunE:  runFmt,
   }
 
   var (
       writeInPlace bool
-      lintConfig   string
-      lintVerbose  bool
+      fmtConfig   string
+      fmtVerbose  bool
   )
 
   func init() {
-      lintCmd.Flags().BoolVarP(&writeInPlace, "write", "w", false,
+      fmtCmd.Flags().BoolVarP(&writeInPlace, "write", "w", false,
           "write changes in-place")
-      lintCmd.Flags().StringVarP(&lintConfig, "config", "c", "",
+      fmtCmd.Flags().StringVarP(&fmtConfig, "config", "c", "",
           "config file (default: .kyt.yaml)")
-      lintCmd.Flags().BoolVarP(&lintVerbose, "verbose", "v", false,
+      fmtCmd.Flags().BoolVarP(&fmtVerbose, "verbose", "v", false,
           "verbose output to stderr")
-      rootCmd.AddCommand(lintCmd)
+      rootCmd.AddCommand(fmtCmd)
   }
   ```
 
@@ -1228,27 +1228,27 @@ func runNormalize(cmd *cobra.Command, args []string) error {
 **Lint command with -w flag:**
 
 ```go
-func runLint(cmd *cobra.Command, args []string) error {
+func runFmt(cmd *cobra.Command, args []string) error {
     path := args[0]
 
     // Verbose output to stderr
-    if lintVerbose {
-        fmt.Fprintf(os.Stderr, "Linting: %s\n", path)
+    if fmtVerbose {
+        fmt.Fprintf(os.Stderr, "Formatting: %s\n", path)
     }
 
-    // Parse + normalize (same as root command)
-    // ... (similar logic to runNormalize)
+    // Parse + format (same as root command)
+    // ... (similar logic to runFormat)
 
     if writeInPlace {
         // Write back to original file(s)
         if isDir {
-            return writeNormalizedToDirectory(path, normalized)
+            return writeFormattedToDirectory(path, formatted)
         } else {
-            return writeNormalizedToFile(path, normalized)
+            return writeFormattedToFile(path, formatted)
         }
     } else {
         // Write to stdout
-        return manifest.WriteYAML(os.Stdout, normalized)
+        return manifest.WriteYAML(os.Stdout, formatted)
     }
 }
 ```
@@ -1299,16 +1299,16 @@ func runLint(cmd *cobra.Command, args []string) error {
       cmd := exec.Command("../../bin/ky")
       cmd.Stdin = strings.NewReader(yamlContent)
       output, err := cmd.Output()
-      // Verify normalized output
+      // Verify formatted output
   }
 
-  func TestKy_Lint_File(t *testing.T) {
-      cmd := exec.Command("../../bin/ky", "lint", "testdata/deployment.yaml")
+  func TestKy_Fmt_File(t *testing.T) {
+      cmd := exec.Command("../../bin/ky", "fmt", "testdata/deployment.yaml")
       // ...
   }
 
-  func TestKy_Lint_WriteInPlace(t *testing.T) {
-      cmd := exec.Command("../../bin/ky", "lint", "-w", tmpFile)
+  func TestKy_Fmt_WriteInPlace(t *testing.T) {
+      cmd := exec.Command("../../bin/ky", "fmt", "-w", tmpFile)
       // ...
   }
 
@@ -1319,8 +1319,8 @@ func runLint(cmd *cobra.Command, args []string) error {
   ```
 
 - [ ] Update all existing tests to use `kyt` command
-- [ ] Add tests for stdin normalization
-- [ ] Add tests for lint -w flag
+- [ ] Add tests for stdin formatting
+- [ ] Add tests for fmt -w flag
 
 #### Task 6: Documentation Updates
 
@@ -1330,9 +1330,9 @@ func runLint(cmd *cobra.Command, args []string) error {
 - [ ] Update installation: `go install github.com/nhuray/kyt/cmd/ky@latest`
 - [ ] Update all usage examples to use `kyt`
 - [ ] Add new sections:
-  - Normalizing manifests
+  - Formatting manifests
   - Pipe-friendly workflows
-  - Lint command usage
+  - Fmt command usage
   - Diff command usage
 
 **PLAN.md:**
@@ -1399,19 +1399,19 @@ spec:
 ---
 ```
 
-#### Lint command:
+#### Fmt command:
 
 ```bash
-$ kyt lint deployment.yaml
+$ kyt fmt deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
-# ... normalized to stdout
+# ... formatted to stdout
 
-$ kyt lint deployment.yaml -w
+$ kyt fmt deployment.yaml -w
 # File written in-place (no stdout)
 
-$ kyt lint ./manifests/ | kubectl apply -f -
-# Pipe normalized directory to kubectl
+$ kyt fmt ./manifests/ | kubectl apply -f -
+# Pipe formatted directory to kubectl
 ```
 
 #### Diff command (unchanged semantics):
@@ -1438,9 +1438,9 @@ k8s-diff ./left ./right
 # New command
 kyt diff ./left ./right
 
-# New capability: normalize
-kustomize build . | kyt > normalized.yaml
-kyt lint deployment.yaml -w
+# New capability: format
+kustomize build . | kyt > formatted.yaml
+kyt fmt deployment.yaml -w
 
 # Config file rename
 mv .k8s-diff.yaml .kyt.yaml

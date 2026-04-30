@@ -278,8 +278,8 @@ func TestCLI_Version(t *testing.T) {
 	}
 }
 
-// TestCLI_LintFile tests lint command with a file
-func TestCLI_LintFile(t *testing.T) {
+// TestCLI_FmtFile tests fmt command with a file
+func TestCLI_FmtFile(t *testing.T) {
 	buildCmd := exec.Command("go", "build", "-o", "../../bin/ky-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
@@ -287,7 +287,7 @@ func TestCLI_LintFile(t *testing.T) {
 	defer func() { _ = os.Remove("../../bin/ky-test") }()
 
 	cmd := exec.Command("../../bin/ky-test",
-		"lint",
+		"fmt",
 		"../../examples/manifests/basic/deployment.yaml")
 
 	var stdout, stderr bytes.Buffer
@@ -296,7 +296,7 @@ func TestCLI_LintFile(t *testing.T) {
 
 	err := cmd.Run()
 	if err != nil {
-		t.Fatalf("Expected exit code 0 for lint command, got error: %v\nStderr: %s", err, stderr.String())
+		t.Fatalf("Expected exit code 0 for fmt command, got error: %v\nStderr: %s", err, stderr.String())
 	}
 
 	output := stdout.String()
@@ -310,8 +310,8 @@ func TestCLI_LintFile(t *testing.T) {
 	}
 }
 
-// TestCLI_LintStdin tests lint command with stdin
-func TestCLI_LintStdin(t *testing.T) {
+// TestCLI_FmtStdin tests fmt command with stdin
+func TestCLI_FmtStdin(t *testing.T) {
 	buildCmd := exec.Command("go", "build", "-o", "../../bin/ky-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
@@ -324,7 +324,7 @@ func TestCLI_LintStdin(t *testing.T) {
 		t.Fatalf("Failed to read sample YAML: %v", err)
 	}
 
-	cmd := exec.Command("../../bin/ky-test", "lint")
+	cmd := exec.Command("../../bin/ky-test", "fmt")
 	cmd.Stdin = bytes.NewReader(yamlContent)
 
 	var stdout, stderr bytes.Buffer
@@ -333,7 +333,7 @@ func TestCLI_LintStdin(t *testing.T) {
 
 	err = cmd.Run()
 	if err != nil {
-		t.Fatalf("Expected exit code 0 for lint command, got error: %v\nStderr: %s", err, stderr.String())
+		t.Fatalf("Expected exit code 0 for fmt command, got error: %v\nStderr: %s", err, stderr.String())
 	}
 
 	output := stdout.String()
