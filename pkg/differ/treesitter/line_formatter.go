@@ -169,11 +169,14 @@ func (lf *LineFormatter) buildLineDiffs(root *DiffNode, sourceLines, targetLines
 
 				// Determine if this specific line changed
 				lineType := Modified
-				if srcLine == tgtLine && srcLine != "" {
+				if srcLine == tgtLine {
+					// Lines are identical (including both empty)
 					lineType = Unchanged
-				} else if srcLine == "" {
+				} else if srcLine == "" && tgtLine != "" {
+					// Only target has content
 					lineType = Added
-				} else if tgtLine == "" {
+				} else if srcLine != "" && tgtLine == "" {
+					// Only source has content
 					lineType = Removed
 				}
 
