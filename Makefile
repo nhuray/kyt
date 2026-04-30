@@ -1,8 +1,14 @@
-.PHONY: build test test-verbose test-coverage lint install clean help
+.PHONY: build build-ky build-k8s-diff test test-verbose test-coverage lint install clean help
 
-# Binary name
-BINARY_NAME=k8s-diff
-BINARY_PATH=bin/$(BINARY_NAME)
+# Binary names
+KY_BINARY=ky
+KY_PATH=bin/$(KY_BINARY)
+LEGACY_BINARY=k8s-diff
+LEGACY_PATH=bin/$(LEGACY_BINARY)
+
+# Default binary (new ky tool)
+BINARY_NAME=$(KY_BINARY)
+BINARY_PATH=$(KY_PATH)
 
 # Version information
 VERSION ?= dev
@@ -18,10 +24,19 @@ help: ## Show this help message
 	@echo "Available targets:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
 
-build: ## Build the binary
-	@echo "Building $(BINARY_NAME)..."
-	@go build $(LDFLAGS) -o $(BINARY_PATH) ./cmd/$(BINARY_NAME)
-	@echo "✓ Binary built: $(BINARY_PATH)"
+build: build-ky ## Build the ky binary (default)
+
+build-ky: ## Build the ky binary
+	@echo "Building $(KY_BINARY)..."
+	@mkdir -p bin
+	@go build $(LDFLAGS) -o $(KY_PATH) ./cmd/$(KY_BINARY)
+	@echo "✓ Binary built: $(KY_PATH)"
+
+build-k8s-diff: ## Build the legacy k8s-diff binary
+	@echo "Building $(LEGACY_BINARY)..."
+	@mkdir -p bin
+	@go build $(LDFLAGS) -o $(LEGACY_PATH) ./cmd/$(LEGACY_BINARY)
+	@echo "✓ Binary built: $(LEGACY_PATH)"
 
 test: ## Run tests
 	@echo "Running tests..."
@@ -46,22 +61,26 @@ lint: ## Run linter (requires golangci-lint)
 		exit 1; \
 	fi
 
-install: build ## Install binary to GOPATH/bin
-	@echo "Installing $(BINARY_NAME)..."
-	@go install $(LDFLAGS) ./cmd/$(BINARY_NAME)
-	@echo "✓ Installed: $(shell which $(BINARY_NAME))"
+install: build-ky ## Install ky binary to GOPATH/bin
+	@echo "Installing $(KY_BINARY)..."
+	@go install $(LDFLAGS) ./cmd/$(KY_BINARY)
+	@echo "✓ Installed: $(shell which $(KY_BINARY) 2>/dev/null || echo 'ky')"
 
 clean: ## Clean build artifacts
 	@echo "Cleaning..."
 	@rm -rf bin/ dist/ coverage.out coverage.html
 	@echo "✓ Cleaned"
 
-run: build ## Build and run with example arguments
-	@echo "Running $(BINARY_NAME)..."
-	@$(BINARY_PATH) examples/manifests/basic examples/manifests/multi-doc
+run: build-ky ## Build and run ky diff with example arguments
+	@echo "Running $(KY_BINARY) diff..."
+	@$(KY_PATH) diff examples/manifests/basic examples/manifests/multi-doc
 
-run-json: build ## Build and run with JSON output
-	@echo "Running $(BINARY_NAME) with JSON output..."
-	@$(BINARY_PATH) -o json examples/manifests/basic examples/manifests/multi-doc
+run-json: build-ky ## Build and run ky diff with JSON output
+	@echo "Running $(KY_BINARY) diff with JSON output..."
+	@$(KY_PATH) diff -o json examples/manifests/basic examples/manifests/multi-doc
+
+run-lint: build-ky ## Build and run ky lint
+	@echo "Running $(KY_BINARY) lint..."
+	@$(KY_PATH) lint examples/manifests/basic
 
 .DEFAULT_GOAL := help

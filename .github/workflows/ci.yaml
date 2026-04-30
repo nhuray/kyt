@@ -61,12 +61,12 @@ jobs:
           cache: true
 
       - name: Build
-        run: make build
+        run: make build-ky
 
       - name: Verify binary
         run: |
-          ./bin/k8s-diff version
-          file ./bin/k8s-diff
+          ./bin/ky version
+          file ./bin/ky
 
   lint:
     name: Lint

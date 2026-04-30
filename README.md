@@ -1,10 +1,10 @@
-# k8s-diff
+# ky (Kubernetes YAML toolkit)
 
-A CLI tool for comparing Kubernetes manifests with smart ignore rules.
+A powerful CLI tool for working with Kubernetes manifests.
 
 ## Overview
 
-`k8s-diff` is a Go-based tool that intelligently compares Kubernetes manifests by applying configurable ignore rules before computing differences. It uses [ArgoCD](https://argo-cd.readthedocs.io/)-compatible ignore rules (JSON Pointers and JQ path expressions) and leverages [difftastic](https://difftastic.wilfred.me.uk/) for beautiful structural diffs.
+`ky` is a Go-based toolkit that helps you normalize, compare, and manage Kubernetes manifests. It uses [ArgoCD](https://argo-cd.readthedocs.io/)-compatible ignore rules (JSON Pointers and JQ path expressions) and leverages [difftastic](https://difftastic.wilfred.me.uk/) for beautiful structural diffs.
 
 **Key Features:**
 
@@ -13,20 +13,24 @@ A CLI tool for comparing Kubernetes manifests with smart ignore rules.
 - 🎨 **JQ Path Expressions**: Powerful filtering with wildcards and conditionals
 - 📊 **Multiple Output Formats**: CLI (with colors), JSON
 - 🎯 **Smart Normalization**: Sorts keys, removes managed fields, applies ignore rules
-- ⚡ **Fast & Reliable**: Written in Go with 52 passing tests
+- 🔧 **Lint & Format**: Normalize manifests with `ky lint`
+- 🔀 **Pipe-friendly**: Works seamlessly with kubectl, kustomize, helm
+- 🤖 **Smart Similarity Matching**: Automatically detects renamed resources
+- ⚡ **Fast & Reliable**: Written in Go with 60+ passing tests
 
 ## Use Cases
 
-- **Validate Helm vs Kustomize migrations**: Compare rendered manifests while ignoring expected differences (labels, annotations)
+- **Validate Helm vs Kustomize migrations**: Compare rendered manifests while ignoring expected differences
 - **Detect configuration drift**: Compare desired state with actual cluster state
 - **CI/CD validation**: Ensure manifest changes are intentional
+- **Normalize manifests**: Clean up and standardize YAML files
 - **Release validation**: Compare what's deployed vs what should be deployed
 
 ## Status
 
 ✅ **Core functionality complete!** - See [docs/PLAN.md](docs/PLAN.md) for implementation details.
 
-- ✅ Phases 1-8 complete (Setup, Parsing, Config, Normalization, Diff, Output, CLI, Testing)
+- ✅ Phases 1-8.6 complete (Setup, Parsing, Config, Normalization, Diff, Output, CLI, Testing, Tool Refactoring)
 - 🔨 Phase 9 in progress (Documentation)
 - 📦 Phase 10 planned (Build & Release)
 
@@ -36,56 +40,98 @@ A CLI tool for comparing Kubernetes manifests with smart ignore rules.
 # Build from source
 git clone https://github.com/nhuray/k8s-diff.git
 cd k8s-diff
-go build -o bin/k8s-diff ./cmd/k8s-diff
+make build
 
 # Compare two manifest files
-./bin/k8s-diff source.yaml target.yaml
+./bin/ky diff source.yaml target.yaml
 
 # Compare directories
-./bin/k8s-diff ./kustomize-output ./helm-output
+./bin/ky diff ./kustomize-output ./helm-output
+
+# Normalize a manifest file
+./bin/ky lint deployment.yaml
+
+# Pipe manifests through ky
+kustomize build . | ky lint | kubectl apply -f -
 
 # Use custom config
-./bin/k8s-diff source.yaml target.yaml --config my-rules.yaml
+./bin/ky diff -c .ky.yaml source.yaml target.yaml
 
 # Output JSON for CI/CD
-./bin/k8s-diff source.yaml target.yaml --output json
-
-# Show identical resources
-./bin/k8s-diff source.yaml target.yaml --show-identical
-
-# Verbose mode for debugging
-./bin/k8s-diff -v source.yaml target.yaml
-
-# Use unified diff instead of difftastic
-./bin/k8s-diff --diff-tool diff source.yaml target.yaml
-
-# Change difftastic display mode
-./bin/k8s-diff --display inline source.yaml target.yaml
+./bin/ky diff -o json source.yaml target.yaml
 ```
 
-### Difftastic Integration
+## Commands
 
-The tool automatically detects and uses [difftastic](https://difftastic.wilfred.me.uk/) if available, providing beautiful syntax-aware structural diffs. If difftastic is not found, it gracefully falls back to standard unified diff.
+### `ky diff` - Compare manifests
 
-**Install difftastic:**
+Compare two Kubernetes manifest files or directories with smart ignore rules.
 
 ```bash
-# macOS
-brew install difftastic
+# Basic comparison
+ky diff source.yaml target.yaml
 
-# Other platforms: see https://difftastic.wilfred.me.uk/installation.html
+# Compare directories
+ky diff ./helm-output ./kustomize-output
+
+# Show identical resources
+ky diff --show-identical source.yaml target.yaml
+
+# JSON output for CI/CD
+ky diff -o json source.yaml target.yaml
+
+# Verbose mode for debugging
+ky diff -v source.yaml target.yaml
+
+# Disable similarity matching (exact name match only)
+ky diff --exact-match source.yaml target.yaml
+
+# Use unified diff instead of difftastic
+ky diff --diff-tool diff source.yaml target.yaml
+
+# Change difftastic display mode
+ky diff --display inline source.yaml target.yaml
 ```
 
-### Exit Codes
-
+**Exit Codes:**
 - `0` - No differences found
 - `1` - Differences detected
 - `2` - Error (invalid YAML, missing files, etc.)
 
-## Configuration Example
+### `ky lint` - Normalize manifests
+
+Normalize Kubernetes manifests by applying ignore rules and transformations.
+
+```bash
+# Normalize a file to stdout
+ky lint deployment.yaml
+
+# Normalize a directory to stdout
+ky lint ./manifests
+
+# Normalize and write back to source files
+ky lint -w ./manifests
+
+# Normalize from stdin
+cat deployment.yaml | ky lint
+
+# Chain with other tools
+kustomize build . | ky lint | kubectl apply -f -
+helm template . | ky lint > normalized.yaml
+```
+
+### `ky version` - Version information
+
+```bash
+ky version
+```
+
+## Configuration
+
+The tool searches for `.ky.yaml` (or legacy `.k8s-diff.yaml`) in the current directory and parent directories.
 
 ```yaml
-# .k8s-diff.yaml
+# .ky.yaml
 ignoreDifferences:
   # Ignore all labels and annotations
   - group: ""
@@ -99,7 +145,16 @@ ignoreDifferences:
     kind: "Deployment"
     jqPathExpressions:
       - .spec.template.spec.containers[] | select(.name == "istio-proxy")
+
+  # Ignore specific fields in Services
+  - group: ""
+    kind: "Service"
+    jsonPointers:
+      - /spec/clusterIP
+      - /spec/clusterIPs
 ```
+
+See [examples/.ky.yaml](examples/.ky.yaml) for a complete configuration example.
 
 ## Installation
 
@@ -113,22 +168,35 @@ cd k8s-diff
 make build
 
 # Or directly with Go
-go build -o bin/k8s-diff ./cmd/k8s-diff
+go build -o bin/ky ./cmd/ky
 
 # Optional: Install to your PATH
 make install
-# Or manually: cp bin/k8s-diff /usr/local/bin/
+# Or manually: cp bin/ky /usr/local/bin/
 ```
 
 ### Using Go Install
 
 ```bash
-go install github.com/nhuray/k8s-diff/cmd/k8s-diff@latest
+go install github.com/nhuray/k8s-diff/cmd/ky@latest
 ```
 
 ### Binary Releases
 
 _(Coming soon)_ Download pre-built binaries from [GitHub Releases](https://github.com/nhuray/k8s-diff/releases)
+
+### Difftastic Integration
+
+The `ky diff` command automatically detects and uses [difftastic](https://difftastic.wilfred.me.uk/) if available, providing beautiful syntax-aware structural diffs. If difftastic is not found, it gracefully falls back to standard unified diff.
+
+**Install difftastic:**
+
+```bash
+# macOS
+brew install difftastic
+
+# Other platforms: see https://difftastic.wilfred.me.uk/installation.html
+```
 
 ## Documentation
 
@@ -141,9 +209,9 @@ _(Coming soon)_ Download pre-built binaries from [GitHub Releases](https://githu
 
 The project has comprehensive test coverage:
 
-- **52 tests total** (45 unit + 7 integration)
+- **60+ tests total** (52 unit + 9 integration)
 - All tests passing
-- Covers: config loading, manifest parsing, normalization, diffing, output formatting, CLI
+- Covers: config loading, manifest parsing, normalization, diffing, output formatting, CLI commands
 
 Run tests:
 
@@ -219,4 +287,4 @@ Created by Nicolas Huray ([@nhuray](https://github.com/nhuray))
 
 ---
 
-**Status:** ✅ Core functionality complete! Phases 1-8 done. Documentation and release automation in progress.
+**Status:** ✅ Phase 8.6 complete! Tool refactored to `ky` with subcommands. Documentation and release automation in progress.

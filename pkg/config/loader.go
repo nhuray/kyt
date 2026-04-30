@@ -10,7 +10,9 @@ import (
 
 const (
 	// DefaultConfigFileName is the default config file name
-	DefaultConfigFileName = ".k8s-diff.yaml"
+	DefaultConfigFileName = ".ky.yaml"
+	// LegacyConfigFileName is the legacy config file name (for backward compatibility)
+	LegacyConfigFileName = ".k8s-diff.yaml"
 )
 
 // Loader handles loading and validating configuration
@@ -118,6 +120,7 @@ func (l *Loader) LoadWithDefaults(path string) (*Config, error) {
 
 // SearchConfig searches for a config file in the current directory and parent directories
 // This mimics behavior of tools like git, searching upwards for config files
+// Looks for .ky.yaml first, then falls back to .k8s-diff.yaml for backward compatibility
 func (l *Loader) SearchConfig(startDir string) (*Config, string, error) {
 	dir, err := filepath.Abs(startDir)
 	if err != nil {
@@ -125,6 +128,7 @@ func (l *Loader) SearchConfig(startDir string) (*Config, string, error) {
 	}
 
 	for {
+		// Try new config file name first
 		configPath := filepath.Join(dir, DefaultConfigFileName)
 		if _, err := os.Stat(configPath); err == nil {
 			// Found config file
@@ -133,6 +137,18 @@ func (l *Loader) SearchConfig(startDir string) (*Config, string, error) {
 				return nil, "", err
 			}
 			return cfg, configPath, nil
+		}
+
+		// Try legacy config file name for backward compatibility
+		legacyConfigPath := filepath.Join(dir, LegacyConfigFileName)
+		if _, err := os.Stat(legacyConfigPath); err == nil {
+			// Found legacy config file
+			cfg, err := l.Load(legacyConfigPath)
+			if err != nil {
+				return nil, "", err
+			}
+			// Note: We could add a deprecation warning here if desired
+			return cfg, legacyConfigPath, nil
 		}
 
 		// Move to parent directory
