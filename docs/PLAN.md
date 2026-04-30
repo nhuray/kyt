@@ -58,8 +58,8 @@ k8s-diff/
 │       └── json.go            # JSON output
 ├── examples/
 │   ├── .k8s-diff.yaml         # Example config
-│   ├── source.yaml            # Example source manifest
-│   └── target.yaml            # Example target manifest
+│   ├── left.yaml            # Example source manifest
+│   └── right.yaml            # Example target manifest
 └── docs/
     ├── PLAN.md                # This file
     ├── configuration.md       # Config documentation
@@ -517,7 +517,7 @@ All 8 tests passing (0.476s)
 **Main Command:**
 
 ```bash
-k8s-diff <source> <target> [flags]
+k8s-diff <left> <right> [flags]
 ```
 
 **Flags:**
@@ -924,6 +924,620 @@ Modified Resources (3):
 
 ---
 
+## Phase 8.6: Tool Refactoring - Rename to `ky` with Subcommands
+
+### 8.6.1 Motivation
+
+**Current limitation:** Tool does two distinct things (normalize + compare) but only exposes one command (`k8s-diff`). This limits composability and makes the tool less intuitive.
+
+**Problems:**
+
+- Tool name `k8s-diff` implies only diffing, but it also normalizes
+- Can't normalize manifests without comparing them
+- Not pipe-friendly for common workflows
+- Verbose name `k8s-diff` is cumbersome to type repeatedly
+
+**Goals:**
+
+1. **Better UX:** Split normalize and compare into separate commands
+2. **Pipe-friendly:** Enable stdin/stdout workflows for normalization
+3. **Shorter name:** `ky` (Kubernetes YAML) is easier to type
+4. **Composability:** Allow chaining with kustomize, helm, kubectl
+
+### 8.6.2 New Tool Design
+
+#### Tool Name: `ky` (Kubernetes YAML)
+
+**Command Structure:**
+
+```
+ky                           # Read stdin, normalize, write stdout
+├── lint <path>             # Normalize file/directory to stdout
+├── diff <left> <right>  # Compare manifests (existing functionality)
+└── version                 # Version info
+```
+
+#### Usage Examples:
+
+**Normalize via pipe (most common):**
+
+```bash
+# Normalize kustomize output
+kustomize build path/to/directory | ky
+
+# Normalize helm output
+helm template . | ky
+
+# Chain with kubectl
+kustomize build . | ky | kubectl apply -f -
+```
+
+**Normalize files:**
+
+```bash
+# Output to stdout (default)
+ky lint path/to/file.yaml
+
+# Write in-place
+ky lint path/to/file.yaml -w
+
+# Normalize directory
+ky lint path/to/directory/
+```
+
+**Compare manifests:**
+
+```bash
+# Compare files
+ky diff path/to/first.yaml path/to/second.yaml
+
+# Compare directories (with all existing options)
+ky diff ./left ./right -o json -v
+
+# Compare with config
+ky diff -c .ky.yaml ./left ./right
+```
+
+### 8.6.3 Architectural Changes
+
+#### Repository & Module Rename
+
+**Before:**
+
+```
+Repository: github.com/nhuray/k8s-diff
+Module:     github.com/nhuray/k8s-diff
+Binary:     k8s-diff
+Config:     .k8s-diff.yaml
+```
+
+**After:**
+
+```
+Repository: github.com/nhuray/ky
+Module:     github.com/nhuray/ky
+Binary:     ky
+Config:     .ky.yaml
+```
+
+#### Directory Structure
+
+**Before:**
+
+```
+k8s-diff/
+├── cmd/
+│   └── k8s-diff/
+│       └── main.go      # Single file, ~260 lines
+```
+
+**After:**
+
+```
+ky/
+├── cmd/
+│   └── ky/
+│       ├── main.go      # Root command + stdin normalize (~80 lines)
+│       ├── lint.go      # Lint subcommand (~120 lines)
+│       ├── diff.go      # Diff subcommand (~150 lines)
+│       ├── version.go   # Version subcommand (~30 lines)
+│       └── main_test.go # Integration tests (updated)
+```
+
+### 8.6.4 Implementation Tasks
+
+#### Task 1: Create New Command Structure
+
+**New Files:**
+
+- [ ] `cmd/ky/main.go` - Root command with stdin normalization
+
+  ```go
+  var rootCmd = &cobra.Command{
+      Use:   "ky [path]",
+      Short: "ky - Kubernetes YAML toolkit",
+      Long: `Normalize and compare Kubernetes manifests.
+
+  When called with no arguments, reads from stdin and writes to stdout.
+  Perfect for piping with kustomize, helm, etc.`,
+      RunE: runNormalize,  // Default: normalize stdin→stdout
+  }
+
+  func runNormalize(cmd *cobra.Command, args []string) error {
+      // Read from stdin
+      // Parse YAML
+      // Normalize
+      // Output to stdout
+  }
+  ```
+
+- [ ] `cmd/ky/lint.go` - Lint subcommand
+
+  ```go
+  var lintCmd = &cobra.Command{
+      Use:   "lint <path>",
+      Short: "Normalize Kubernetes manifests",
+      Args:  cobra.ExactArgs(1),
+      RunE:  runLint,
+  }
+
+  var (
+      writeInPlace bool
+      lintConfig   string
+      lintVerbose  bool
+  )
+
+  func init() {
+      lintCmd.Flags().BoolVarP(&writeInPlace, "write", "w", false,
+          "write changes in-place")
+      lintCmd.Flags().StringVarP(&lintConfig, "config", "c", "",
+          "config file (default: .ky.yaml)")
+      lintCmd.Flags().BoolVarP(&lintVerbose, "verbose", "v", false,
+          "verbose output to stderr")
+      rootCmd.AddCommand(lintCmd)
+  }
+  ```
+
+- [ ] `cmd/ky/diff.go` - Diff subcommand (extracted from current main.go)
+
+  ```go
+  var diffCmd = &cobra.Command{
+      Use:   "diff <left> <right>",
+      Short: "Compare Kubernetes manifests",
+      Args:  cobra.ExactArgs(2),
+      RunE:  runDiff,
+  }
+
+  // All existing diff flags and logic
+  func init() {
+      diffCmd.Flags().StringVarP(&configFile, "config", "c", "", "config file")
+      diffCmd.Flags().StringVarP(&outputFormat, "output", "o", "cli", "output format")
+      // ... all other existing flags
+      rootCmd.AddCommand(diffCmd)
+  }
+  ```
+
+- [ ] `cmd/ky/version.go` - Version subcommand (extracted)
+
+  ```go
+  var versionCmd = &cobra.Command{
+      Use:   "version",
+      Short: "Print version information",
+      Run:   runVersion,
+  }
+  ```
+
+- [ ] `pkg/manifest/writer.go` - YAML output writer
+
+  ```go
+  package manifest
+
+  // WriteYAML writes resources as multi-document YAML to a writer
+  func WriteYAML(w io.Writer, resources []*unstructured.Unstructured) error
+
+  // WriteYAMLSeparated writes each resource with --- separator
+  func WriteYAMLSeparated(w io.Writer, resources []*unstructured.Unstructured) error
+  ```
+
+**Modified Files:**
+
+- [ ] Delete `cmd/k8s-diff/` entirely
+- [ ] `go.mod` - Update module name to `github.com/nhuray/ky`
+- [ ] Update all imports throughout the codebase to use new module path
+- [ ] `Makefile` - Update BINARY_NAME to `ky`
+- [ ] `README.md` - Update all examples to use `ky`
+- [ ] Config examples: Rename `.k8s-diff.yaml` → `.ky.yaml`
+
+#### Task 2: Implement Stdin/Stdout Normalization
+
+**Root command behavior:**
+
+```bash
+# No args = stdin → stdout
+cat manifest.yaml | ky > normalized.yaml
+
+# With path = file/directory → stdout
+ky some/path.yaml
+```
+
+**Implementation:**
+
+```go
+func runNormalize(cmd *cobra.Command, args []string) error {
+    var input io.Reader
+    var sourcePath string
+
+    if len(args) == 0 {
+        // Read from stdin
+        input = os.Stdin
+        sourcePath = "<stdin>"
+    } else {
+        // Read from file/directory
+        sourcePath = args[0]
+    }
+
+    // Parse manifests
+    parser := manifest.NewParser()
+    var manifestSet *manifest.ManifestSet
+    var err error
+
+    if input != nil {
+        manifestSet, err = parser.ParseReader(input)
+    } else {
+        // Check if path is file or directory
+        info, err := os.Stat(sourcePath)
+        if err != nil {
+            return fmt.Errorf("failed to stat path: %w", err)
+        }
+
+        if info.IsDir() {
+            manifestSet, err = parser.ParseDirectory(sourcePath)
+        } else {
+            manifestSet, err = parser.ParseFile(sourcePath)
+        }
+    }
+
+    if err != nil {
+        return fmt.Errorf("failed to parse manifests: %w", err)
+    }
+
+    // Load config
+    cfg, err := loadConfig()
+    if err != nil {
+        return err
+    }
+
+    // Normalize
+    norm := normalizer.New(cfg)
+    normalized := make([]*unstructured.Unstructured, 0, len(manifestSet.Resources))
+    for _, obj := range manifestSet.Resources {
+        n, err := norm.Normalize(obj)
+        if err != nil {
+            return fmt.Errorf("failed to normalize: %w", err)
+        }
+        normalized = append(normalized, n)
+    }
+
+    // Write to stdout
+    return manifest.WriteYAML(os.Stdout, normalized)
+}
+```
+
+#### Task 3: Implement Lint Command
+
+**Lint command with -w flag:**
+
+```go
+func runLint(cmd *cobra.Command, args []string) error {
+    path := args[0]
+
+    // Verbose output to stderr
+    if lintVerbose {
+        fmt.Fprintf(os.Stderr, "Linting: %s\n", path)
+    }
+
+    // Parse + normalize (same as root command)
+    // ... (similar logic to runNormalize)
+
+    if writeInPlace {
+        // Write back to original file(s)
+        if isDir {
+            return writeNormalizedToDirectory(path, normalized)
+        } else {
+            return writeNormalizedToFile(path, normalized)
+        }
+    } else {
+        // Write to stdout
+        return manifest.WriteYAML(os.Stdout, normalized)
+    }
+}
+```
+
+#### Task 4: Module & Repository Rename
+
+**Steps:**
+
+1. **Local rename:**
+
+   ```bash
+   # Rename directory
+   mv k8s-diff ky
+
+   # Update go.mod
+   module github.com/nhuray/ky
+
+   # Update all imports
+   find . -name "*.go" -exec sed -i '' 's|github.com/nhuray/k8s-diff|github.com/nhuray/ky|g' {} +
+
+   # Rename config examples
+   mv examples/.k8s-diff.yaml examples/.ky.yaml
+   mv examples/.k8s-diff.minimal.yaml examples/.ky.minimal.yaml
+   mv examples/.k8s-diff.helm-migration.yaml examples/.ky.helm-migration.yaml
+   ```
+
+2. **GitHub rename:**
+   - Go to repository settings
+   - Rename `k8s-diff` → `ky`
+   - Update README badges and links
+
+3. **Test everything:**
+   ```bash
+   go mod tidy
+   make test
+   make build
+   ./bin/ky --help
+   ```
+
+#### Task 5: Update Tests
+
+**Integration test updates:**
+
+- [ ] `cmd/ky/main_test.go` - Update all test commands
+
+  ```go
+  func TestKy_Stdin(t *testing.T) {
+      cmd := exec.Command("../../bin/ky")
+      cmd.Stdin = strings.NewReader(yamlContent)
+      output, err := cmd.Output()
+      // Verify normalized output
+  }
+
+  func TestKy_Lint_File(t *testing.T) {
+      cmd := exec.Command("../../bin/ky", "lint", "testdata/deployment.yaml")
+      // ...
+  }
+
+  func TestKy_Lint_WriteInPlace(t *testing.T) {
+      cmd := exec.Command("../../bin/ky", "lint", "-w", tmpFile)
+      // ...
+  }
+
+  func TestKy_Diff(t *testing.T) {
+      cmd := exec.Command("../../bin/ky", "diff", source, target)
+      // All existing diff tests
+  }
+  ```
+
+- [ ] Update all existing tests to use `ky` command
+- [ ] Add tests for stdin normalization
+- [ ] Add tests for lint -w flag
+
+#### Task 6: Documentation Updates
+
+**README.md:**
+
+- [ ] Update project title: "ky - Kubernetes YAML Toolkit"
+- [ ] Update installation: `go install github.com/nhuray/ky/cmd/ky@latest`
+- [ ] Update all usage examples to use `ky`
+- [ ] Add new sections:
+  - Normalizing manifests
+  - Pipe-friendly workflows
+  - Lint command usage
+  - Diff command usage
+
+**PLAN.md:**
+
+- [ ] Update repository path
+- [ ] Update module name
+- [ ] Mark Phase 8.6 as complete
+
+**Config examples:**
+
+- [ ] Rename all `.k8s-diff.yaml` → `.ky.yaml`
+- [ ] Update comments in config files
+
+**Makefile:**
+
+- [ ] Update BINARY_NAME=ky
+- [ ] Update help text
+
+### 8.6.5 Backward Compatibility
+
+**Decision: NO backward compatibility**
+
+- Clean break from `k8s-diff` to `ky`
+- No deprecated aliases or warnings
+- Users must update their scripts
+- Simpler codebase, clearer semantics
+
+**Rationale:**
+
+- Tool is still in active development (not widely used yet)
+- Clean naming is more important long-term
+- Maintaining aliases adds complexity
+- Breaking change now better than later
+
+### 8.6.6 Config File Behavior
+
+**Config file search order:**
+
+1. `--config` flag if specified
+2. `.ky.yaml` in current directory
+3. `.ky.yaml` in parent directories (walk up)
+4. `~/.ky.yaml` in home directory
+5. Use defaults if no config found
+
+**For `diff` command only:**
+
+- Backward compat: Also check for `.k8s-diff.yaml` (with deprecation warning)
+- Remove in next major version
+
+### 8.6.7 Expected Output Examples
+
+#### Root command (stdin):
+
+```bash
+$ cat deployment.yaml | ky
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: default
+spec:
+  replicas: 1
+  # ... normalized output
+---
+```
+
+#### Lint command:
+
+```bash
+$ ky lint deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+# ... normalized to stdout
+
+$ ky lint deployment.yaml -w
+# File written in-place (no stdout)
+
+$ ky lint ./manifests/ | kubectl apply -f -
+# Pipe normalized directory to kubectl
+```
+
+#### Diff command (unchanged semantics):
+
+```bash
+$ ky diff left.yaml right.yaml
+================================================================
+  ky diff Report
+================================================================
+
+Modified Resources (1):
+  • Deployment.apps/redis (exact match)
+# ... rest of diff output
+```
+
+### 8.6.8 Migration Guide for Users
+
+**For users updating from `k8s-diff` to `ky`:**
+
+```bash
+# Old command
+k8s-diff ./left ./right
+
+# New command
+ky diff ./left ./right
+
+# New capability: normalize
+kustomize build . | ky > normalized.yaml
+ky lint deployment.yaml -w
+
+# Config file rename
+mv .k8s-diff.yaml .ky.yaml
+```
+
+**Update scripts:**
+
+```bash
+# Find and replace in scripts
+find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
+```
+
+### 8.6.9 Testing Strategy
+
+**Unit tests:** No changes needed (pkg/ unchanged)
+
+**Integration tests:**
+
+- Update all command invocations to use `ky`
+- Add ~10 new tests for stdin/lint functionality
+- Verify all diff tests still pass
+- Test -w flag writes correctly
+- Test verbose output goes to stderr
+
+**Manual testing checklist:**
+
+- [ ] `ky < file.yaml` works
+- [ ] `ky lint file.yaml` outputs to stdout
+- [ ] `ky lint file.yaml -w` writes in-place
+- [ ] `ky lint directory/` works
+- [ ] `ky diff left right` works (all flags)
+- [ ] `ky version` works
+- [ ] Config file `.ky.yaml` is found
+- [ ] Pipe chains work: `helm template . | ky | kubectl apply -f -`
+
+### 8.6.10 Effort Estimate
+
+- **Task 1: Command restructure** - 3-4 hours
+  - Create new command files
+  - Extract logic from main.go
+- **Task 2: Stdin/stdout** - 2-3 hours
+  - Implement normalize with stdin
+  - Handle path vs stdin logic
+- **Task 3: Lint command** - 2 hours
+  - Implement -w flag
+  - File/directory writing
+- **Task 4: Rename module** - 2 hours
+  - Update go.mod
+  - Update all imports
+  - Rename files and directories
+- **Task 5: Update tests** - 3-4 hours
+  - Update all test commands
+  - Add new lint/stdin tests
+  - Verify everything passes
+- **Task 6: Documentation** - 2-3 hours
+  - Update README
+  - Update examples
+  - Update config files
+
+**Total: ~14-18 hours**
+
+### 8.6.11 Dependencies & Risks
+
+**Dependencies:**
+
+- Must complete before Phase 9 (Documentation)
+- Must complete before Phase 10 (Release)
+- Phase 8.5 (Similarity) can proceed independently
+
+**Risks:**
+
+- **High churn:** Many files change, potential for bugs
+- **Test breakage:** All integration tests need updates
+- **Migration pain:** Users must update scripts
+
+**Mitigations:**
+
+- Thorough testing at each step
+- Keep pkg/ unchanged (only cmd/ and imports)
+- Clear migration guide in README
+- Test common workflows manually
+
+### 8.6.12 Success Criteria
+
+- [ ] Binary named `ky` builds successfully
+- [ ] `ky` (no args) reads stdin and outputs normalized YAML
+- [ ] `ky lint <path>` outputs normalized YAML to stdout
+- [ ] `ky lint <path> -w` writes in-place
+- [ ] `ky diff <left> <right>` works with all existing flags
+- [ ] All 52+ tests pass with updated commands
+- [ ] Module path is `github.com/nhuray/ky`
+- [ ] Config file `.ky.yaml` is recognized
+- [ ] Documentation updated completely
+- [ ] GitHub repo renamed to `ky`
+
+---
+
 ## Phase 9: Documentation (Day 10-11) 🔄
 
 ### 9.1 README.md ✅
@@ -1087,6 +1701,7 @@ Modified Resources (3):
 | 7         | 1-2            | CLI Implementation ✅          |
 | 8         | 1-2            | Testing & Examples ✅          |
 | 8.5       | 1-2            | Similarity Matching 🔨         |
+| 8.6       | 2              | Refactor to `ky` with subcommands 🔨 |
 | 9         | 1-2            | Documentation 🔄               |
 | 10        | 1-2            | Build & Release 🔄             |
 | **Total** | **13-16 days** | **MVP Ready + Smart Matching** |
@@ -1097,7 +1712,7 @@ Modified Resources (3):
 
 The following items are explicitly out of scope for the MVP but may be added later:
 
-- CLI subcommands (`validate-config`, `example-config`, etc.)
+- Additional subcommands (`validate`, `format`, etc.)
 - Nx executor integration (will be done in the deployments repo later)
 - kubectl plugin packaging
 - Advanced performance optimizations
