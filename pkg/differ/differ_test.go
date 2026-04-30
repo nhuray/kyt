@@ -28,7 +28,7 @@ func TestDiff_AddedResources(t *testing.T) {
 			},
 		},
 	}
-	target.Add(targetRes)
+	_ = target.Add(targetRes)
 
 	result, err := differ.Diff(source, target)
 	if err != nil {
@@ -71,7 +71,7 @@ func TestDiff_RemovedResources(t *testing.T) {
 			},
 		},
 	}
-	source.Add(sourceRes)
+	_ = source.Add(sourceRes)
 
 	result, err := differ.Diff(source, target)
 	if err != nil {
@@ -145,8 +145,8 @@ func TestDiff_ModifiedResources(t *testing.T) {
 		},
 	}
 
-	source.Add(sourceRes)
-	target.Add(targetRes)
+	_ = source.Add(sourceRes)
+	_ = target.Add(targetRes)
 
 	result, err := differ.Diff(source, target)
 	if err != nil {
@@ -202,8 +202,8 @@ func TestDiff_IdenticalResources(t *testing.T) {
 		},
 	}
 
-	source.Add(res.DeepCopy())
-	target.Add(res.DeepCopy())
+	_ = source.Add(res.DeepCopy())
+	_ = target.Add(res.DeepCopy())
 
 	result, err := differ.Diff(source, target)
 	if err != nil {
@@ -255,7 +255,7 @@ func TestDiff_MixedChanges(t *testing.T) {
 			},
 		},
 	}
-	source.Add(removedRes)
+	_ = source.Add(removedRes)
 
 	// Add resource only in target (added)
 	addedRes := &unstructured.Unstructured{
@@ -268,7 +268,7 @@ func TestDiff_MixedChanges(t *testing.T) {
 			},
 		},
 	}
-	target.Add(addedRes)
+	_ = target.Add(addedRes)
 
 	// Add identical resource to both
 	identicalRes := &unstructured.Unstructured{
@@ -281,8 +281,8 @@ func TestDiff_MixedChanges(t *testing.T) {
 			},
 		},
 	}
-	source.Add(identicalRes.DeepCopy())
-	target.Add(identicalRes.DeepCopy())
+	_ = source.Add(identicalRes.DeepCopy())
+	_ = target.Add(identicalRes.DeepCopy())
 
 	// Add modified resource to both
 	modifiedSource := &unstructured.Unstructured{
@@ -313,8 +313,8 @@ func TestDiff_MixedChanges(t *testing.T) {
 		},
 	}
 
-	source.Add(modifiedSource)
-	target.Add(modifiedTarget)
+	_ = source.Add(modifiedSource)
+	_ = target.Add(modifiedTarget)
 
 	result, err := differ.Diff(source, target)
 	if err != nil {
@@ -502,7 +502,7 @@ func TestDiff_SimilarityMatching(t *testing.T) {
 			},
 		},
 	}
-	source.Add(deployV1)
+	_ = source.Add(deployV1)
 
 	// Add Deployment with name v2 in target (similar structure, different name and image)
 	deployV2 := &unstructured.Unstructured{
@@ -528,7 +528,7 @@ func TestDiff_SimilarityMatching(t *testing.T) {
 			},
 		},
 	}
-	target.Add(deployV2)
+	_ = target.Add(deployV2)
 
 	result, err := differ.Diff(source, target)
 	if err != nil {
@@ -602,7 +602,7 @@ func TestDiff_SimilarityMatching_Disabled(t *testing.T) {
 			},
 		},
 	}
-	source.Add(configV1)
+	_ = source.Add(configV1)
 
 	// Add ConfigMap with name v2 in target (similar structure, different name)
 	configV2 := &unstructured.Unstructured{
@@ -619,7 +619,7 @@ func TestDiff_SimilarityMatching_Disabled(t *testing.T) {
 			},
 		},
 	}
-	target.Add(configV2)
+	_ = target.Add(configV2)
 
 	result, err := differ.Diff(source, target)
 	if err != nil {
@@ -669,7 +669,7 @@ func TestDiff_SimilarityMatching_BelowThreshold(t *testing.T) {
 			},
 		},
 	}
-	source.Add(config1)
+	_ = source.Add(config1)
 
 	// Add ConfigMap with mostly different data in target
 	config2 := &unstructured.Unstructured{
@@ -687,7 +687,7 @@ func TestDiff_SimilarityMatching_BelowThreshold(t *testing.T) {
 			},
 		},
 	}
-	target.Add(config2)
+	_ = target.Add(config2)
 
 	result, err := differ.Diff(source, target)
 	if err != nil {

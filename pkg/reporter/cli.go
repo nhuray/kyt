@@ -64,13 +64,13 @@ func (r *CLIReporter) printHeader(w io.Writer, result *differ.DiffResult, useCol
 	separator := "================================================================"
 
 	if useColor {
-		fmt.Fprintf(w, "%s%s%s\n", colorBold, separator, colorReset)
-		fmt.Fprintf(w, "%s%s  k8s-diff Report%s\n", colorBold, colorCyan, colorReset)
-		fmt.Fprintf(w, "%s%s%s\n\n", colorBold, separator, colorReset)
+		_, _ = fmt.Fprintf(w, "%s%s%s\n", colorBold, separator, colorReset)
+		_, _ = fmt.Fprintf(w, "%s%s  k8s-diff Report%s\n", colorBold, colorCyan, colorReset)
+		_, _ = fmt.Fprintf(w, "%s%s%s\n\n", colorBold, separator, colorReset)
 	} else {
-		fmt.Fprintf(w, "%s\n", separator)
-		fmt.Fprintf(w, "  k8s-diff Report\n")
-		fmt.Fprintf(w, "%s\n\n", separator)
+		_, _ = fmt.Fprintf(w, "%s\n", separator)
+		_, _ = fmt.Fprintf(w, "  k8s-diff Report\n")
+		_, _ = fmt.Fprintf(w, "%s\n\n", separator)
 	}
 }
 
@@ -84,19 +84,19 @@ func (r *CLIReporter) printSection(w io.Writer, title string, keys []manifest.Re
 	})
 
 	if useColor {
-		fmt.Fprintf(w, "%s%s%s (%d):\n", colorBold, title, colorReset, len(sorted))
+		_, _ = fmt.Fprintf(w, "%s%s%s (%d):\n", colorBold, title, colorReset, len(sorted))
 	} else {
-		fmt.Fprintf(w, "%s (%d):\n", title, len(sorted))
+		_, _ = fmt.Fprintf(w, "%s (%d):\n", title, len(sorted))
 	}
 
 	for _, key := range sorted {
 		if useColor {
-			fmt.Fprintf(w, "  %s●%s %s\n", color, colorReset, key.String())
+			_, _ = fmt.Fprintf(w, "  %s●%s %s\n", color, colorReset, key.String())
 		} else {
-			fmt.Fprintf(w, "  • %s\n", key.String())
+			_, _ = fmt.Fprintf(w, "  • %s\n", key.String())
 		}
 	}
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 }
 
 // printModified prints modified resources with their diffs
@@ -109,33 +109,33 @@ func (r *CLIReporter) printModified(w io.Writer, modified []differ.ResourceDiff,
 	})
 
 	if useColor {
-		fmt.Fprintf(w, "%sModified Resources%s (%d):\n\n", colorBold, colorReset, len(sorted))
+		_, _ = fmt.Fprintf(w, "%sModified Resources%s (%d):\n\n", colorBold, colorReset, len(sorted))
 	} else {
-		fmt.Fprintf(w, "Modified Resources (%d):\n\n", len(sorted))
+		_, _ = fmt.Fprintf(w, "Modified Resources (%d):\n\n", len(sorted))
 	}
 
 	for i, diff := range sorted {
 		if i > 0 {
-			fmt.Fprintln(w)
+			_, _ = fmt.Fprintln(w)
 		}
 
 		// Print resource header
 		matchInfo := r.formatMatchInfo(&diff)
 		if useColor {
-			fmt.Fprintf(w, "%s%s───────────────────────────────────────────────────────────────%s\n",
+			_, _ = fmt.Fprintf(w, "%s%s───────────────────────────────────────────────────────────────%s\n",
 				colorBold, colorYellow, colorReset)
-			fmt.Fprintf(w, "%s%s● %s%s\n", colorBold, colorYellow, matchInfo, colorReset)
-			fmt.Fprintf(w, "%s%s───────────────────────────────────────────────────────────────%s\n\n",
+			_, _ = fmt.Fprintf(w, "%s%s● %s%s\n", colorBold, colorYellow, matchInfo, colorReset)
+			_, _ = fmt.Fprintf(w, "%s%s───────────────────────────────────────────────────────────────%s\n\n",
 				colorBold, colorYellow, colorReset)
 		} else {
-			fmt.Fprintf(w, "───────────────────────────────────────────────────────────────\n")
-			fmt.Fprintf(w, "• %s\n", matchInfo)
-			fmt.Fprintf(w, "───────────────────────────────────────────────────────────────\n\n")
+			_, _ = fmt.Fprintf(w, "───────────────────────────────────────────────────────────────\n")
+			_, _ = fmt.Fprintf(w, "• %s\n", matchInfo)
+			_, _ = fmt.Fprintf(w, "───────────────────────────────────────────────────────────────\n\n")
 		}
 
 		// Print diff (already contains color codes from difftastic if enabled)
-		fmt.Fprint(w, diff.DiffText)
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprint(w, diff.DiffText)
+		_, _ = fmt.Fprintln(w)
 	}
 }
 
@@ -144,11 +144,11 @@ func (r *CLIReporter) printFooter(w io.Writer, result *differ.DiffResult, useCol
 	separator := "================================================================"
 
 	if useColor {
-		fmt.Fprintf(w, "%s%s%s\n", colorBold, separator, colorReset)
-		fmt.Fprintf(w, "%s%sSummary:%s\n", colorBold, colorCyan, colorReset)
+		_, _ = fmt.Fprintf(w, "%s%s%s\n", colorBold, separator, colorReset)
+		_, _ = fmt.Fprintf(w, "%s%sSummary:%s\n", colorBold, colorCyan, colorReset)
 	} else {
-		fmt.Fprintf(w, "%s\n", separator)
-		fmt.Fprintf(w, "Summary:\n")
+		_, _ = fmt.Fprintf(w, "%s\n", separator)
+		_, _ = fmt.Fprintf(w, "Summary:\n")
 	}
 
 	summary := result.Summary
@@ -161,23 +161,23 @@ func (r *CLIReporter) printFooter(w io.Writer, result *differ.DiffResult, useCol
 	r.printSummaryLine(w, "Identical", summary.IdenticalCount, useColor, colorGray)
 
 	if useColor {
-		fmt.Fprintf(w, "%s%s%s\n", colorBold, separator, colorReset)
+		_, _ = fmt.Fprintf(w, "%s%s%s\n", colorBold, separator, colorReset)
 	} else {
-		fmt.Fprintf(w, "%s\n", separator)
+		_, _ = fmt.Fprintf(w, "%s\n", separator)
 	}
 
 	// Print status message
 	if !result.HasDifferences() {
 		if useColor {
-			fmt.Fprintf(w, "\n%s%s✓ No differences found%s\n", colorBold, colorGreen, colorReset)
+			_, _ = fmt.Fprintf(w, "\n%s%s✓ No differences found%s\n", colorBold, colorGreen, colorReset)
 		} else {
-			fmt.Fprintf(w, "\n✓ No differences found\n")
+			_, _ = fmt.Fprintf(w, "\n✓ No differences found\n")
 		}
 	} else {
 		if useColor {
-			fmt.Fprintf(w, "\n%s%s! Differences detected%s\n", colorBold, colorYellow, colorReset)
+			_, _ = fmt.Fprintf(w, "\n%s%s! Differences detected%s\n", colorBold, colorYellow, colorReset)
 		} else {
-			fmt.Fprintf(w, "\n! Differences detected\n")
+			_, _ = fmt.Fprintf(w, "\n! Differences detected\n")
 		}
 	}
 }
@@ -185,9 +185,9 @@ func (r *CLIReporter) printFooter(w io.Writer, result *differ.DiffResult, useCol
 // printSummaryLine prints a single line of the summary
 func (r *CLIReporter) printSummaryLine(w io.Writer, label string, count int, useColor bool, color string) {
 	if useColor && color != "" {
-		fmt.Fprintf(w, "  %-15s %s%d%s\n", label+":", color, count, colorReset)
+		_, _ = fmt.Fprintf(w, "  %-15s %s%d%s\n", label+":", color, count, colorReset)
 	} else {
-		fmt.Fprintf(w, "  %-15s %d\n", label+":", count)
+		_, _ = fmt.Fprintf(w, "  %-15s %d\n", label+":", count)
 	}
 }
 

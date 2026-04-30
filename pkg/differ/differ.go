@@ -183,7 +183,7 @@ func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, sourceJSON, ta
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	sourceFile := filepath.Join(tmpDir, "source.json")
 	targetFile := filepath.Join(tmpDir, "target.json")
@@ -236,7 +236,7 @@ func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceJSON, targe
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	sourceFile := filepath.Join(tmpDir, "source.json")
 	targetFile := filepath.Join(tmpDir, "target.json")
