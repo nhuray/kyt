@@ -58,8 +58,8 @@ k8s-diff/
 │       └── json.go            # JSON output
 ├── examples/
 │   ├── .k8s-diff.yaml         # Example config
-│   ├── source.yaml            # Example source manifest
-│   └── target.yaml            # Example target manifest
+│   ├── left.yaml            # Example source manifest
+│   └── right.yaml            # Example target manifest
 └── docs/
     ├── PLAN.md                # This file
     ├── configuration.md       # Config documentation
@@ -517,7 +517,7 @@ All 8 tests passing (0.476s)
 **Main Command:**
 
 ```bash
-k8s-diff <source> <target> [flags]
+k8s-diff <left> <right> [flags]
 ```
 
 **Flags:**
@@ -953,7 +953,7 @@ Modified Resources (3):
 ```
 ky                           # Read stdin, normalize, write stdout
 ├── lint <path>             # Normalize file/directory to stdout
-├── diff <source> <target>  # Compare manifests (existing functionality)
+├── diff <left> <right>  # Compare manifests (existing functionality)
 └── version                 # Version info
 ```
 
@@ -992,10 +992,10 @@ ky lint path/to/directory/
 ky diff path/to/first.yaml path/to/second.yaml
 
 # Compare directories (with all existing options)
-ky diff ./source ./target -o json -v
+ky diff ./left ./right -o json -v
 
 # Compare with config
-ky diff -c .ky.yaml ./source ./target
+ky diff -c .ky.yaml ./left ./right
 ```
 
 ### 8.6.3 Architectural Changes
@@ -1102,7 +1102,7 @@ ky/
 
   ```go
   var diffCmd = &cobra.Command{
-      Use:   "diff <source> <target>",
+      Use:   "diff <left> <right>",
       Short: "Compare Kubernetes manifests",
       Args:  cobra.ExactArgs(2),
       RunE:  runDiff,
@@ -1417,7 +1417,7 @@ $ ky lint ./manifests/ | kubectl apply -f -
 #### Diff command (unchanged semantics):
 
 ```bash
-$ ky diff source.yaml target.yaml
+$ ky diff left.yaml right.yaml
 ================================================================
   ky diff Report
 ================================================================
@@ -1433,10 +1433,10 @@ Modified Resources (1):
 
 ```bash
 # Old command
-k8s-diff ./source ./target
+k8s-diff ./left ./right
 
 # New command
-ky diff ./source ./target
+ky diff ./left ./right
 
 # New capability: normalize
 kustomize build . | ky > normalized.yaml
@@ -1471,7 +1471,7 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
 - [ ] `ky lint file.yaml` outputs to stdout
 - [ ] `ky lint file.yaml -w` writes in-place
 - [ ] `ky lint directory/` works
-- [ ] `ky diff source target` works (all flags)
+- [ ] `ky diff left right` works (all flags)
 - [ ] `ky version` works
 - [ ] Config file `.ky.yaml` is found
 - [ ] Pipe chains work: `helm template . | ky | kubectl apply -f -`
@@ -1529,7 +1529,7 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
 - [ ] `ky` (no args) reads stdin and outputs normalized YAML
 - [ ] `ky lint <path>` outputs normalized YAML to stdout
 - [ ] `ky lint <path> -w` writes in-place
-- [ ] `ky diff <source> <target>` works with all existing flags
+- [ ] `ky diff <left> <right>` works with all existing flags
 - [ ] All 52+ tests pass with updated commands
 - [ ] Module path is `github.com/nhuray/ky`
 - [ ] Config file `.ky.yaml` is recognized
