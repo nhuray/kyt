@@ -620,43 +620,6 @@ func (lf *LineFormatter) formatSegmentWithKeys(text string, changeType ChangeTyp
 	}
 }
 
-// formatSegmentsWithPadding formats segments and pads the result
-func (lf *LineFormatter) formatSegmentsWithPadding(segments []DiffSegment, width int, baseColor color.Attribute) string {
-	// Calculate the plain text length (without ANSI codes)
-	plainLen := 0
-	for _, seg := range segments {
-		plainLen += len(seg.Text)
-	}
-
-	// Format segments with appropriate colors
-	var formatted string
-	for _, seg := range segments {
-		switch seg.Type {
-		case Unchanged:
-			// Use base color for unchanged parts in modified lines
-			formatted += color.New(baseColor).Sprint(seg.Text)
-		case Removed:
-			// Use base color with underline for removed characters
-			formatted += color.New(baseColor, color.Underline).Sprint(seg.Text)
-		case Added:
-			// Added segments don't appear on source side
-		default:
-			formatted += color.New(baseColor).Sprint(seg.Text)
-		}
-	}
-
-	// Add padding
-	if plainLen < width {
-		formatted += strings.Repeat(" ", width-plainLen)
-	} else if plainLen > width {
-		// Truncate if too long (this is tricky with ANSI codes, so we simplify)
-		// For now, just add ellipsis marker
-		formatted = lf.colorize(lf.pad(plainTextFromSegments(segments), width), baseColor)
-	}
-
-	return formatted
-}
-
 // plainTextFromSegments extracts plain text from segments
 func plainTextFromSegments(segments []DiffSegment) string {
 	var result string
@@ -686,13 +649,6 @@ func (lf *LineFormatter) colorize(s string, c color.Attribute) string {
 	col := color.New(c)
 	col.EnableColor()
 	return col.Sprint(s)
-}
-
-// formatHeader formats the header
-func (lf *LineFormatter) formatHeader(left, right string, width int) string {
-	leftHeader := lf.colorize(lf.pad(left, width), color.Bold)
-	rightHeader := lf.colorize(right, color.Bold)
-	return leftHeader + " │ " + rightHeader
 }
 
 // formatSimplifiedHeader formats a simplified header showing Kind: namespace/name

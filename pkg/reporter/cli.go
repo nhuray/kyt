@@ -215,25 +215,6 @@ func (r *CLIReporter) printSummaryLine(w io.Writer, label string, count int, use
 	}
 }
 
-// formatMatchInfo formats the match information for display
-func (r *CLIReporter) formatMatchInfo(diff *differ.ResourceDiff) string {
-	if diff.MatchType == "exact" || diff.MatchType == "" {
-		// Exact match or legacy format - just show the key
-		return diff.Key.String()
-	}
-
-	// Similarity match - show source → target with score
-	if diff.SourceKey.String() == diff.TargetKey.String() {
-		// Keys are same (shouldn't happen, but handle gracefully)
-		return fmt.Sprintf("%s (similarity: %.2f)", diff.Key.String(), diff.SimilarityScore)
-	}
-
-	return fmt.Sprintf("%s → %s (similarity: %.2f)",
-		diff.SourceKey.String(),
-		diff.TargetKey.String(),
-		diff.SimilarityScore)
-}
-
 // ANSI color codes
 const (
 	colorReset  = "\033[0m"

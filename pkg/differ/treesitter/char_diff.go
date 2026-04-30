@@ -1,9 +1,5 @@
 package treesitter
 
-import (
-	"github.com/fatih/color"
-)
-
 // DiffSegment represents a segment of text with its change type
 type DiffSegment struct {
 	Text string
@@ -87,39 +83,4 @@ func simpleDiff(source, target string) ([]DiffSegment, []DiffSegment) {
 	}
 
 	return sourceSegs, targetSegs
-}
-
-// formatSegments formats segments with appropriate colors and styles
-func formatSegments(segments []DiffSegment, useColor bool) string {
-	if !useColor {
-		var result string
-		for _, seg := range segments {
-			result += seg.Text
-		}
-		return result
-	}
-
-	var result string
-	for _, seg := range segments {
-		switch seg.Type {
-		case Unchanged:
-			result += seg.Text
-		case Added:
-			// Green with underline for added characters
-			result += color.New(color.FgGreen, color.Underline).Sprint(seg.Text)
-		case Removed:
-			// Red with underline for removed characters
-			result += color.New(color.FgRed, color.Underline).Sprint(seg.Text)
-		default:
-			result += seg.Text
-		}
-	}
-	return result
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
