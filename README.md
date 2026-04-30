@@ -1,10 +1,18 @@
 # kyt (Kubernetes YAML Toolkit)
 
-A powerful CLI tool for working with Kubernetes manifests.
+A powerful CLI tool for formatting and comparing Kubernetes manifests with intelligent ignore rules.
 
 ## Overview
 
-`kyt` is a Go-based toolkit that helps you normalize, compare, and manage Kubernetes manifests. It uses [ArgoCD](https://argo-cd.readthedocs.io/)-compatible ignore rules (JSON Pointers and JQ path expressions) and leverages [difftastic](https://difftastic.wilfred.me.uk/) for beautiful structural diffs.
+`kyt` is a Go-based toolkit designed to solve a common problem in Kubernetes workflows: **comparing and managing YAML manifests while ignoring irrelevant differences**.
+
+When working with tools like Helm, Kustomize, or ArgoCD, you often need to compare manifests to detect drift, validate changes, or ensure consistency. However, raw YAML diffs are noisy - filled with differences in field ordering, timestamps, managed fields, and other metadata that doesn't matter for your use case.
+
+**kyt solves this by:**
+
+1. **Formatting manifests** - Normalizes YAML by sorting keys, removing default/managed fields, and applying custom ignore rules
+2. **Smart comparison** - Compares only what matters by using ArgoCD-compatible ignore rules (JSON Pointers and JQ expressions)
+3. **Beautiful diffs** - Leverages [difftastic](https://difftastic.wilfred.me.uk/) for structural, syntax-aware diffs that are easy to read
 
 **Key Features:**
 
@@ -20,11 +28,11 @@ A powerful CLI tool for working with Kubernetes manifests.
 
 ## Use Cases
 
-- **Validate Helm vs Kustomize migrations**: Compare rendered manifests while ignoring expected differences
-- **Detect configuration drift**: Compare desired state with actual cluster state
-- **CI/CD validation**: Ensure manifest changes are intentional
-- **Normalize manifests**: Clean up and standardize YAML files
-- **Release validation**: Compare what's deployed vs what should be deployed
+- **Compare Helm vs Kustomize outputs**: Validate migrations by comparing rendered manifests while ignoring expected differences (field order, formatting, etc.)
+- **Detect configuration drift**: Compare desired state (Git) with actual cluster state (`kubectl get`), ignoring dynamic fields like timestamps and resource versions
+- **CI/CD validation**: Ensure manifest changes are intentional by comparing PR changes against production, with rules to ignore acceptable differences
+- **Pre-deployment validation**: Compare what's currently deployed vs what will be deployed, filtering out noise
+- **Format and standardize**: Clean up YAML files by sorting keys, removing managed fields, and applying consistent formatting
 
 ## Status
 
@@ -200,10 +208,10 @@ brew install difftastic
 
 ## Documentation
 
+- **[fmt Command Guide](docs/fmt.md)** - Complete guide to formatting manifests with configuration options
+- **[diff Command Guide](docs/diff.md)** - Advanced comparison techniques with JQ expressions and examples
 - [Implementation Plan](docs/PLAN.md) - Detailed development roadmap with progress
 - [Example Configs](examples/) - Sample configurations and manifests
-- Configuration Guide - _(Coming soon in docs/configuration.md)_
-- Usage Examples - _(Coming soon in docs/usage.md)_
 
 ## Testing
 
