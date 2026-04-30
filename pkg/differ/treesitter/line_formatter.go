@@ -48,9 +48,18 @@ func (lf *LineFormatter) FormatSideBySide(root *DiffNode, sourceLabel, targetLab
 	// Build line-based diff from tree
 	lineDiffs := lf.buildLineDiffs(root, sourceLines, targetLines)
 
-	// Format each line pair
-	for _, ld := range lineDiffs {
-		lf.formatLinePair(&buf, ld, halfWidth)
+	// Group into hunks (context around changes)
+	hunks := lf.buildHunks(lineDiffs, 3) // 3 lines of context
+
+	// Format each hunk
+	for i, hunk := range hunks {
+		if i > 0 {
+			// Add separator between hunks
+			buf.WriteString("\n")
+		}
+		for _, ld := range hunk {
+			lf.formatLinePair(&buf, ld, halfWidth)
+		}
 	}
 
 	return buf.String()
@@ -192,6 +201,61 @@ func (lf *LineFormatter) buildLineDiffs(root *DiffNode, sourceLines, targetLines
 	}
 
 	return result
+}
+
+// buildHunks groups line diffs into hunks with context around changes
+// contextLines specifies how many unchanged lines to show around each change
+func (lf *LineFormatter) buildHunks(lineDiffs []LineDiff, contextLines int) [][]LineDiff {
+	if len(lineDiffs) == 0 {
+		return nil
+	}
+
+	// Find indices of changed lines
+	var changedIndices []int
+	for i, ld := range lineDiffs {
+		if ld.Type != Unchanged {
+			changedIndices = append(changedIndices, i)
+		}
+	}
+
+	// If no changes, return empty (or could return all lines with small files)
+	if len(changedIndices) == 0 {
+		return nil
+	}
+
+	// Build ranges for each hunk (change + context)
+	type hunkRange struct {
+		start int
+		end   int
+	}
+	var ranges []hunkRange
+
+	for _, idx := range changedIndices {
+		start := idx - contextLines
+		if start < 0 {
+			start = 0
+		}
+		end := idx + contextLines
+		if end >= len(lineDiffs) {
+			end = len(lineDiffs) - 1
+		}
+
+		// Merge with previous range if they overlap
+		if len(ranges) > 0 && start <= ranges[len(ranges)-1].end+1 {
+			ranges[len(ranges)-1].end = end
+		} else {
+			ranges = append(ranges, hunkRange{start: start, end: end})
+		}
+	}
+
+	// Convert ranges to hunks
+	var hunks [][]LineDiff
+	for _, r := range ranges {
+		hunk := lineDiffs[r.start : r.end+1]
+		hunks = append(hunks, hunk)
+	}
+
+	return hunks
 }
 
 // deduplicateRanges removes overlapping ranges, keeping only the most specific (smallest) ones
