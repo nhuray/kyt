@@ -240,8 +240,8 @@ func TestManifestSetMerge(t *testing.T) {
 		},
 	}
 
-	ms1.Add(obj1)
-	ms2.Add(obj2)
+	_ = ms1.Add(obj1)
+	_ = ms2.Add(obj2)
 
 	// Merge should succeed
 	err := ms1.Merge(ms2)

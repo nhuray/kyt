@@ -16,7 +16,7 @@ func TestCLI_IdenticalManifests(t *testing.T) {
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer os.Remove("../../bin/k8s-diff-test")
+	defer func() { _ = os.Remove("../../bin/k8s-diff-test") }()
 
 	// Run the comparison
 	cmd := exec.Command("../../bin/k8s-diff-test",
@@ -51,7 +51,7 @@ func TestCLI_DifferentManifests(t *testing.T) {
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer os.Remove("../../bin/k8s-diff-test")
+	defer func() { _ = os.Remove("../../bin/k8s-diff-test") }()
 
 	cmd := exec.Command("../../bin/k8s-diff-test",
 		"../../examples/manifests/basic",
@@ -97,7 +97,7 @@ func TestCLI_JSONOutput(t *testing.T) {
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer os.Remove("../../bin/k8s-diff-test")
+	defer func() { _ = os.Remove("../../bin/k8s-diff-test") }()
 
 	cmd := exec.Command("../../bin/k8s-diff-test",
 		"-o", "json",
@@ -146,7 +146,7 @@ func TestCLI_ShowIdentical(t *testing.T) {
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer os.Remove("../../bin/k8s-diff-test")
+	defer func() { _ = os.Remove("../../bin/k8s-diff-test") }()
 
 	cmd := exec.Command("../../bin/k8s-diff-test",
 		"--show-identical",
@@ -176,7 +176,7 @@ func TestCLI_InvalidYAML(t *testing.T) {
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer os.Remove("../../bin/k8s-diff-test")
+	defer func() { _ = os.Remove("../../bin/k8s-diff-test") }()
 
 	// Create a temp file with invalid YAML
 	tmpDir := t.TempDir()
@@ -217,7 +217,7 @@ func TestCLI_MissingFile(t *testing.T) {
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer os.Remove("../../bin/k8s-diff-test")
+	defer func() { _ = os.Remove("../../bin/k8s-diff-test") }()
 
 	cmd := exec.Command("../../bin/k8s-diff-test",
 		"../../examples/manifests/basic",
@@ -251,7 +251,7 @@ func TestCLI_Version(t *testing.T) {
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
-	defer os.Remove("../../bin/k8s-diff-test")
+	defer func() { _ = os.Remove("../../bin/k8s-diff-test") }()
 
 	cmd := exec.Command("../../bin/k8s-diff-test", "version")
 

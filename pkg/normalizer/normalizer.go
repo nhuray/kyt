@@ -238,13 +238,14 @@ func unescapeJSONPointer(s string) string {
 	result := ""
 	for i := 0; i < len(s); i++ {
 		if s[i] == '~' && i+1 < len(s) {
-			if s[i+1] == '1' {
+			switch s[i+1] {
+			case '1':
 				result += "/"
 				i++
-			} else if s[i+1] == '0' {
+			case '0':
 				result += "~"
 				i++
-			} else {
+			default:
 				result += string(s[i])
 			}
 		} else {

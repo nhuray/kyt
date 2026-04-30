@@ -1,6 +1,6 @@
 module github.com/nhuray/k8s-diff
 
-go 1.26.2
+go 1.26.0
 
 require (
 	github.com/itchyny/gojq v0.12.19
