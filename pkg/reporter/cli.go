@@ -120,16 +120,38 @@ func (r *CLIReporter) printModified(w io.Writer, modified []differ.ResourceDiff,
 		}
 
 		// Print resource header
-		matchInfo := r.formatMatchInfo(&diff)
+		// Extract kind and format the header more concisely
+		kind := diff.Key.Kind
+		sourceName := diff.Key.Name
+		targetName := diff.Key.Name
+
+		// For similarity matches, show source → target
+		if diff.MatchType == "similarity" && diff.SourceKey.String() != diff.TargetKey.String() {
+			sourceName = diff.SourceKey.Name
+			targetName = diff.TargetKey.Name
+		}
+
+		// Format the comparison header
+		var comparisonText string
+		if sourceName != targetName {
+			comparisonText = fmt.Sprintf("Comparing %s: `%s` → `%s`", kind, sourceName, targetName)
+		} else {
+			comparisonText = fmt.Sprintf("Comparing %s: `%s`", kind, sourceName)
+		}
+
+		if diff.SimilarityScore > 0 {
+			comparisonText += fmt.Sprintf(" (similarity: %.2f)", diff.SimilarityScore)
+		}
+
 		if useColor {
 			_, _ = fmt.Fprintf(w, "%s%s───────────────────────────────────────────────────────────────%s\n",
 				colorBold, colorYellow, colorReset)
-			_, _ = fmt.Fprintf(w, "%s%s● %s%s\n", colorBold, colorYellow, matchInfo, colorReset)
+			_, _ = fmt.Fprintf(w, "%s%s● %s%s\n", colorBold, colorYellow, comparisonText, colorReset)
 			_, _ = fmt.Fprintf(w, "%s%s───────────────────────────────────────────────────────────────%s\n\n",
 				colorBold, colorYellow, colorReset)
 		} else {
 			_, _ = fmt.Fprintf(w, "───────────────────────────────────────────────────────────────\n")
-			_, _ = fmt.Fprintf(w, "• %s\n", matchInfo)
+			_, _ = fmt.Fprintf(w, "● %s\n", comparisonText)
 			_, _ = fmt.Fprintf(w, "───────────────────────────────────────────────────────────────\n\n")
 		}
 

@@ -35,8 +35,8 @@ func (lf *LineFormatter) FormatSideBySide(root *DiffNode, sourceLabel, targetLab
 
 	halfWidth := lf.width / 2
 
-	// Header
-	buf.WriteString(lf.formatHeader(sourceLabel, targetLabel, halfWidth))
+	// Simplified header showing resource names with namespace
+	buf.WriteString(lf.formatSimplifiedHeader(sourceLabel, targetLabel, halfWidth))
 	buf.WriteString("\n")
 	buf.WriteString(lf.colorize(strings.Repeat("─", lf.width), color.FgHiBlack))
 	buf.WriteString("\n")
@@ -693,4 +693,62 @@ func (lf *LineFormatter) formatHeader(left, right string, width int) string {
 	leftHeader := lf.colorize(lf.pad(left, width), color.Bold)
 	rightHeader := lf.colorize(right, color.Bold)
 	return leftHeader + " │ " + rightHeader
+}
+
+// formatSimplifiedHeader formats a simplified header showing Kind: namespace/name
+// Extracts the relevant info from labels like "a/ConfigMap.core/redis-health (namespace: redis-ha)"
+func (lf *LineFormatter) formatSimplifiedHeader(sourceLabel, targetLabel string, width int) string {
+	// Parse source label: "a/ConfigMap.core/redis-health (namespace: redis-ha)"
+	sourceParts := lf.parseResourceLabel(sourceLabel)
+	targetParts := lf.parseResourceLabel(targetLabel)
+
+	// Format: "ConfigMap: `redis-ha/redis-health`"
+	sourceText := fmt.Sprintf("%s: `%s`", sourceParts.kind, sourceParts.fullName)
+	targetText := fmt.Sprintf("%s: `%s`", targetParts.kind, targetParts.fullName)
+
+	// Pad to half width
+	leftHeader := lf.pad(sourceText, width)
+	return leftHeader + " │  " + targetText
+}
+
+// resourceParts holds parsed components of a resource label
+type resourceParts struct {
+	kind      string
+	name      string
+	namespace string
+	fullName  string // namespace/name or just name if cluster-scoped
+}
+
+// parseResourceLabel parses a label like "a/ConfigMap.core/redis-health (namespace: redis-ha)"
+func (lf *LineFormatter) parseResourceLabel(label string) resourceParts {
+	parts := resourceParts{}
+
+	// Remove "a/" or "b/" prefix
+	if strings.HasPrefix(label, "a/") || strings.HasPrefix(label, "b/") {
+		label = label[2:]
+	}
+
+	// Extract namespace if present: "... (namespace: redis-ha)"
+	if idx := strings.Index(label, " (namespace: "); idx > 0 {
+		parts.namespace = strings.TrimSuffix(label[idx+len(" (namespace: "):], ")")
+		label = label[:idx]
+	}
+
+	// Parse "ConfigMap.core/redis-health"
+	if idx := strings.Index(label, "."); idx > 0 {
+		parts.kind = label[:idx]
+		// Get name after the group/name part
+		if idx2 := strings.Index(label[idx:], "/"); idx2 > 0 {
+			parts.name = label[idx+idx2+1:]
+		}
+	}
+
+	// Build full name with namespace if present
+	if parts.namespace != "" {
+		parts.fullName = parts.namespace + "/" + parts.name
+	} else {
+		parts.fullName = parts.name
+	}
+
+	return parts
 }
