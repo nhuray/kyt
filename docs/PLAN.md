@@ -1704,7 +1704,597 @@ find . -name "*.sh" -exec sed -i '' 's/k8s-diff/ky diff/g' {} +
 | 8.6       | 2              | Refactor to `ky` with subcommands 🔨 |
 | 9         | 1-2            | Documentation 🔄               |
 | 10        | 1-2            | Build & Release 🔄             |
-| **Total** | **13-16 days** | **MVP Ready + Smart Matching** |
+| 11        | 5-6            | Go-Native Tree-Sitter Diff 📝  |
+| **Total** | **18-22 days** | **MVP Ready + Smart Matching + Batteries Included** |
+
+---
+
+## Phase 11: Go-Native Tree-Sitter Diff Implementation (5-6 days) 📝
+
+### 11.1 Overview
+
+**Goal:** Implement a batteries-included, Go-native structural diff using tree-sitter for Kubernetes YAML/JSON manifests as an automatic fallback when difftastic is unavailable.
+
+**Key Principles:**
+- ✅ **Keep difftastic as default** - Premium experience when available
+- ✅ **Automatic fallback** - Seamless degradation without user intervention
+- ✅ **Kubernetes-focused** - Validate inputs are K8s manifests
+- ✅ **Side-by-side display** - With colors for readability
+- ✅ **No external dependencies** - Pure Go solution
+
+**Why this approach:**
+- Users get excellent structural diff even without installing difftastic
+- Better than current fallback (line-based `diff` command)
+- Removes perceived "hard dependency" while keeping best tool as default
+- Foundation for future Kubernetes-specific diff features
+
+### 11.2 Architecture
+
+#### Component Overview
+
+```
+pkg/differ/
+├── differ.go                    # Existing - orchestrates matching and diff
+├── types.go                     # Existing - add new config options
+├── treesitter/                  # NEW - tree-sitter implementation
+│   ├── parser.go               # JSON parsing with go-tree-sitter
+│   ├── diff.go                 # Tree diff algorithm
+│   ├── formatter.go            # Side-by-side output with colors
+│   ├── validator.go            # Kubernetes manifest validation
+│   ├── types.go                # Internal types for diff tree
+│   └── treesitter_test.go      # Comprehensive tests
+└── integration_test.go          # NEW - test fallback chain
+```
+
+#### Diff Generation Flow
+
+```
+Current Flow:
+unstructured.Unstructured → JSON → temp files → difft binary → output
+
+New Fallback Flow:
+unstructured.Unstructured → JSON → go-tree-sitter parse → tree diff → format → output
+```
+
+#### Fallback Priority Chain
+
+```
+1. difftastic (difft binary)     - Best quality, external dependency
+   ↓ (not available)
+2. tree-sitter native (Go)       - Good quality, pure Go
+   ↓ (parsing fails)
+3. unified diff (diff command)   - Basic quality, always available
+```
+
+### 11.3 Implementation Tasks
+
+#### Task 1: Project Setup & Dependencies (0.5 days)
+
+- [ ] Add go-tree-sitter dependencies to go.mod
+  ```bash
+  go get github.com/smacker/go-tree-sitter@latest
+  go get github.com/smacker/go-tree-sitter/json@latest
+  ```
+- [ ] Create `pkg/differ/treesitter/` directory structure
+- [ ] Add CGo build requirements to documentation
+- [ ] Test CGo compilation on multiple platforms
+
+**Dependencies Added:**
+```go
+require (
+    github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82
+    github.com/smacker/go-tree-sitter/json v0.0.0-20240827094217-dd81d9e9be82
+)
+```
+
+**Note:** CGo dependency means:
+- Users need C compiler to build from source
+- Pre-built binaries will be ~5-10MB (vs ~2-3MB currently)
+- Cross-compilation requires CGO_ENABLED=1 and target toolchain
+
+#### Task 2: Kubernetes Resource Validation (0.5 days)
+
+**File:** `pkg/differ/treesitter/validator.go`
+
+- [ ] Implement `ValidateKubernetesResource(obj *unstructured.Unstructured) error`
+- [ ] Check required fields: apiVersion, kind, metadata.name
+- [ ] Return descriptive errors for invalid resources
+- [ ] Write unit tests for validation logic
+
+**Key Functions:**
+```go
+// ValidateKubernetesResource checks if object is a valid K8s resource
+func ValidateKubernetesResource(obj *unstructured.Unstructured) error
+
+// ValidateManifestPair validates both source and target
+func ValidateManifestPair(source, target *unstructured.Unstructured) error
+```
+
+#### Task 3: Tree-Sitter JSON Parser (1 day)
+
+**File:** `pkg/differ/treesitter/parser.go`
+
+- [ ] Create Parser struct wrapping go-tree-sitter parser
+- [ ] Implement `ParseJSON(content []byte) (*sitter.Tree, error)`
+- [ ] Handle parsing errors gracefully
+- [ ] Add helper methods for node traversal
+- [ ] Write unit tests for:
+  - Valid JSON parsing
+  - Invalid JSON handling
+  - Empty JSON
+  - Large nested structures
+
+**Key Types:**
+```go
+type Parser struct {
+    parser *sitter.Parser
+}
+
+func NewParser() *Parser
+func (p *Parser) ParseJSON(content []byte) (*sitter.Tree, error)
+```
+
+#### Task 4: Tree Diff Algorithm (2-3 days)
+
+**File:** `pkg/differ/treesitter/diff.go`
+
+**Core algorithm implementation:**
+
+- [ ] Define `DiffNode` type with ChangeType (Unchanged, Added, Removed, Modified)
+- [ ] Implement `Differ` struct with source/target trees
+- [ ] Implement `Diff() (*DiffNode, error)` entry point
+- [ ] Implement recursive node comparison:
+  - [ ] `diffNodes(source, target *sitter.Node) *DiffNode`
+  - [ ] `diffObject(source, target *sitter.Node) *DiffNode`
+  - [ ] `diffArray(source, target *sitter.Node) *DiffNode`
+  - [ ] `diffPrimitive(source, target *sitter.Node) *DiffNode`
+- [ ] Handle all JSON node types: object, array, string, number, boolean, null
+- [ ] Extract line numbers from nodes for display
+- [ ] Build key maps for object comparison
+- [ ] Compare arrays element-by-element
+
+**Key Types:**
+```go
+type ChangeType int
+
+const (
+    Unchanged ChangeType = iota
+    Added
+    Removed
+    Modified
+)
+
+type DiffNode struct {
+    Type       ChangeType
+    Key        string          // JSON key (for objects)
+    Index      int             // Array index
+    SourceText string          // Text from source
+    TargetText string          // Text from target
+    Children   []*DiffNode     // Child nodes
+    LineNumber LineNumbers     // Source and target line numbers
+}
+
+type LineNumbers struct {
+    SourceStart int
+    SourceEnd   int
+    TargetStart int
+    TargetEnd   int
+}
+
+type Differ struct {
+    sourceTree *sitter.Tree
+    targetTree *sitter.Tree
+    sourceText []byte
+    targetText []byte
+}
+```
+
+**Unit Tests:**
+- [ ] Test primitive value comparison (strings, numbers, booleans, null)
+- [ ] Test object comparison (added/removed/modified keys)
+- [ ] Test array comparison (different lengths, reordered, modified)
+- [ ] Test nested structures (objects in arrays, arrays in objects)
+- [ ] Test edge cases (empty objects, empty arrays, nil values)
+- [ ] Benchmark performance with large structures
+
+#### Task 5: Side-by-Side Formatter with Colors (1-1.5 days)
+
+**File:** `pkg/differ/treesitter/formatter.go`
+
+- [ ] Create `Formatter` struct with configuration
+- [ ] Implement `FormatSideBySide(root *DiffNode, sourceLabel, targetLabel string) string`
+- [ ] Format header with labels
+- [ ] Format body with proper indentation
+- [ ] Apply colors based on change type:
+  - Unchanged: gray (dim)
+  - Added: green
+  - Removed: red
+  - Modified: red (left) / green (right)
+- [ ] Handle terminal width for proper layout
+- [ ] Truncate long lines with "..."
+- [ ] Add vertical separator ` │ ` between sides
+- [ ] Support color on/off mode
+
+**Key Types:**
+```go
+type Formatter struct {
+    width      int  // Terminal width (default: 120)
+    useColor   bool // Enable ANSI colors
+    indentSize int  // Spaces per indent level (default: 2)
+}
+
+func NewFormatter(width int, useColor bool, indentSize int) *Formatter
+func (f *Formatter) FormatSideBySide(root *DiffNode, sourceLabel, targetLabel string) string
+```
+
+**Color Scheme:**
+```
+Unchanged: dim gray (color.FgHiBlack)
+Added:     green (color.FgGreen)
+Removed:   red (color.FgRed)
+Modified:  red (left) + green (right)
+```
+
+**Unit Tests:**
+- [ ] Test formatting with colors enabled/disabled
+- [ ] Test header formatting
+- [ ] Test indentation levels
+- [ ] Test line truncation
+- [ ] Test all change types
+- [ ] Test nested structure formatting
+
+#### Task 6: Integration with Existing Differ (1 day)
+
+**File:** `pkg/differ/differ.go` (modifications)
+
+- [ ] Update `generateDiff()` to implement 3-tier fallback:
+  1. Try difftastic (if enabled and available)
+  2. Try tree-sitter (if difftastic unavailable)
+  3. Fall back to unified diff (always available)
+- [ ] Add `generateTreeSitterDiff()` method
+- [ ] Validate resources before tree-sitter path
+- [ ] Handle errors gracefully with fallback
+- [ ] Pass color and display options through
+
+**File:** `pkg/differ/types.go` (modifications)
+
+- [ ] Update `DiffOptions` to include tree-sitter config:
+  ```go
+  type DiffOptions struct {
+      UseDifftastic     bool
+      UseTreeSitter     bool   // NEW: Enable tree-sitter fallback
+      ColorOutput       bool
+      DifftasticDisplay string
+      ContextLines      int
+  }
+  ```
+
+**New Method:**
+```go
+func (d *Differ) generateTreeSitterDiff(
+    key manifest.ResourceKey,
+    sourceJSON, targetJSON []byte,
+) (string, int, error)
+```
+
+**Integration Tests:**
+- [ ] Test automatic fallback when difftastic unavailable
+- [ ] Test explicit tree-sitter mode
+- [ ] Test fallback chain: difftastic → tree-sitter → unified
+- [ ] Test with real Kubernetes manifests
+- [ ] Verify output quality matches expectations
+
+#### Task 7: Configuration & CLI Updates (0.5 days)
+
+**File:** `pkg/config/types.go`
+
+- [ ] Update `OutputConfig.DiffTool` values:
+  ```yaml
+  output:
+    diffTool: auto  # auto, difft, treesitter, diff
+  ```
+
+**File:** `pkg/config/validator.go`
+
+- [ ] Update validation to accept new diff tool values
+
+**File:** `cmd/ky/diff.go`
+
+- [ ] Update `--diff-tool` flag help text:
+  ```
+  --diff-tool string   Diff tool: auto (try all), difft (difftastic only),
+                       treesitter (Go native), diff (unified) (default "auto")
+  ```
+- [ ] Wire up new options to DiffOptions
+
+**File:** `examples/.ky.yaml`
+
+- [ ] Add example configuration with tree-sitter option
+- [ ] Document diff tool choices
+
+#### Task 8: Comprehensive Testing (1 day)
+
+**Unit Tests** (`pkg/differ/treesitter/treesitter_test.go`):
+
+- [ ] TestParser_ParseJSON
+  - Valid JSON
+  - Invalid JSON
+  - Empty JSON
+  - Nested structures
+- [ ] TestValidator_ValidateResource
+  - Valid K8s resource
+  - Missing apiVersion
+  - Missing kind
+  - Missing name
+- [ ] TestDiffer_DiffPrimitives
+  - Identical values
+  - Different values
+  - Different types
+- [ ] TestDiffer_DiffObjects
+  - Identical objects
+  - Added keys
+  - Removed keys
+  - Modified values
+  - Nested objects
+- [ ] TestDiffer_DiffArrays
+  - Identical arrays
+  - Different lengths
+  - Reordered elements
+  - Modified elements
+- [ ] TestFormatter_FormatSideBySide
+  - Unchanged output
+  - Added lines
+  - Removed lines
+  - Modified lines
+  - With/without colors
+  - Indentation
+  - Line truncation
+
+**Integration Tests** (`pkg/differ/integration_test.go`):
+
+- [ ] TestDiffer_FallbackChain
+  - Difftastic available → uses difftastic
+  - Difftastic unavailable → uses tree-sitter
+  - Tree-sitter fails → uses unified diff
+- [ ] TestDiffer_KubernetesManifests
+  - Deployment comparison
+  - Service comparison
+  - ConfigMap comparison
+  - Complex nested structures
+
+**End-to-End Tests** (`cmd/ky/main_test.go`):
+
+- [ ] TestKy_Diff_TreeSitter
+  - Force tree-sitter mode with `--diff-tool treesitter`
+  - Verify side-by-side output
+  - Verify colors (if TTY)
+  - Verify line numbers
+- [ ] TestKy_Diff_Auto_Fallback
+  - Mock difftastic unavailable
+  - Verify automatic tree-sitter fallback
+  - Verify output quality
+- [ ] TestKy_Diff_InvalidResource
+  - Pass non-K8s manifest
+  - Verify appropriate error or fallback
+
+**Performance Benchmarks** (`pkg/differ/treesitter/bench_test.go`):
+
+- [ ] BenchmarkParser_ParseJSON
+- [ ] BenchmarkDiffer_Diff (small/medium/large resources)
+- [ ] BenchmarkFormatter_Format
+
+**Performance Targets:**
+- Parse time: < 50ms per resource
+- Diff time: < 100ms per comparison
+- Format time: < 50ms
+- Total overhead: < 200ms per resource
+
+#### Task 9: Documentation Updates (0.5 days)
+
+**File:** `README.md`
+
+- [ ] Add "Diff Tools" section explaining:
+  - Three diff backends (difftastic, tree-sitter, unified)
+  - Automatic fallback behavior
+  - How to force specific tool
+- [ ] Update "Dependencies" section:
+  - Note that tree-sitter is built-in
+  - Difftastic is optional but recommended
+- [ ] Update "Installation" section:
+  - Note CGo requirement for building from source
+  - Note pre-built binaries include tree-sitter
+- [ ] Add examples for each diff tool mode
+- [ ] Update features list to highlight "batteries included"
+
+**Example Documentation:**
+
+```markdown
+### Diff Tools
+
+ky supports multiple diff backends with automatic fallback:
+
+1. **difftastic** (default) - Best quality structural diff, syntax-aware
+   - Requires: `difft` binary installed
+   - Install: `brew install difftastic` (macOS) or [see installation](https://difftastic.wilfred.me.uk/installation.html)
+
+2. **tree-sitter** (built-in fallback) - Good quality structural diff
+   - Requires: Nothing! Built into ky
+   - Pure Go implementation with no external dependencies
+
+3. **unified diff** (last resort) - Basic line-based diff
+   - Requires: `diff` command (standard on all systems)
+
+The tool automatically tries each in order. You can also force a specific tool:
+
+```bash
+# Auto-select (default) - tries all in order
+ky diff source.yaml target.yaml
+
+# Force difftastic only (fail if not available)
+ky diff --diff-tool difft source.yaml target.yaml
+
+# Force tree-sitter only (Go-native, always available)
+ky diff --diff-tool treesitter source.yaml target.yaml
+
+# Force unified diff only
+ky diff --diff-tool diff source.yaml target.yaml
+```
+
+### Tree-Sitter Diff Features
+
+The built-in tree-sitter diff provides:
+
+- ✅ Structural awareness (understands JSON syntax and structure)
+- ✅ Side-by-side display with colors
+- ✅ Real line numbers from both files
+- ✅ Accurate change detection (added/removed/modified)
+- ✅ No external dependencies
+- ✅ Automatic validation of Kubernetes manifests
+```
+
+**File:** `docs/PLAN.md`
+
+- [ ] Mark Phase 11 tasks as complete
+- [ ] Update timeline summary
+
+**File:** `Makefile`
+
+- [ ] Document CGo requirement in comments
+- [ ] Add note about C compiler for building
+
+### 11.4 Success Criteria
+
+- [ ] All dependencies added and documented
+- [ ] Validation rejects non-Kubernetes manifests appropriately
+- [ ] JSON parsing works with go-tree-sitter for all K8s resource types
+- [ ] Diff algorithm correctly identifies all change types
+- [ ] Side-by-side formatter produces clean, readable output
+- [ ] Colors work correctly when enabled
+- [ ] Automatic fallback: difftastic → tree-sitter → unified diff
+- [ ] CLI flag `--diff-tool` accepts: auto, difft, treesitter, diff
+- [ ] Configuration file supports new diff tool options
+- [ ] All unit tests pass (parser, diff, formatter, validator)
+- [ ] All integration tests pass (fallback chain, K8s manifests)
+- [ ] All E2E tests pass (CLI behavior)
+- [ ] Performance meets targets (< 200ms per resource)
+- [ ] Benchmarks show acceptable performance
+- [ ] Documentation complete and accurate
+- [ ] Binary builds successfully with CGo on Linux, macOS, Windows
+- [ ] No breaking changes to existing API or CLI
+
+### 11.5 Known Limitations & Future Enhancements
+
+**Current Limitations:**
+
+- Only side-by-side display mode (no inline mode yet)
+- Only JSON parsing (YAML converted to JSON first)
+- No Kubernetes-semantic awareness (treats all fields equally)
+- Fixed color scheme (no customization)
+- Fixed terminal width (120 columns)
+
+**Future Enhancements (Out of Scope for Phase 11):**
+
+- Inline display mode (compact, single-column)
+- Direct YAML parsing with tree-sitter YAML grammar
+- Kubernetes-semantic diff:
+  - Special highlighting for critical fields (replicas, image, etc.)
+  - Field importance weighting
+  - Semantic understanding of K8s patterns
+- Customizable color schemes
+- Configurable terminal width
+- HTML output from tree-sitter diff
+- Diff statistics (% changed, lines added/removed/modified)
+- Split view with synchronized scrolling (for large resources)
+
+### 11.6 Dependencies & Requirements
+
+**Go Dependencies:**
+
+```
+github.com/smacker/go-tree-sitter v0.0.0-latest
+github.com/smacker/go-tree-sitter/json v0.0.0-latest
+github.com/fatih/color v1.x.x (already present)
+```
+
+**Build Requirements:**
+
+- Go 1.21 or later
+- C compiler (gcc, clang, or MSVC)
+- CGo enabled (CGO_ENABLED=1)
+
+**Runtime Requirements:**
+
+- None! Tree-sitter is embedded in the binary
+
+**Binary Size Impact:**
+
+- Current: ~2-3 MB
+- With tree-sitter: ~5-10 MB (acceptable tradeoff)
+
+### 11.7 Risks & Mitigations
+
+| Risk | Impact | Likelihood | Mitigation |
+|------|--------|------------|------------|
+| CGo build complexity | High | Medium | Provide pre-built binaries for all platforms; clear documentation |
+| Tree-sitter parsing fails | Medium | Low | Robust error handling; automatic fallback to unified diff |
+| Performance issues with large resources | Medium | Low | Benchmarking early; optimization; set depth/size limits |
+| Output quality worse than difftastic | Low | Medium | Focus on readability; iterate on formatting; get user feedback |
+| Binary size too large | Low | High | Document size; acceptable for "batteries included" approach |
+| Cross-platform CGo compilation | Medium | Medium | Use GoReleaser with proper CGo toolchains; test on all platforms |
+
+### 11.8 Testing Coverage Goals
+
+| Component | Target Coverage | Test Count |
+|-----------|----------------|------------|
+| Parser | 90%+ | 8-10 tests |
+| Validator | 100% | 5-6 tests |
+| Differ | 85%+ | 15-20 tests |
+| Formatter | 85%+ | 10-12 tests |
+| Integration | N/A | 5-7 tests |
+| E2E | N/A | 4-5 tests |
+
+**Total New Tests:** ~50-60 tests
+
+### 11.9 Effort Breakdown
+
+| Task | Hours | Status |
+|------|-------|--------|
+| 1. Project setup & dependencies | 4 | 📝 |
+| 2. Kubernetes validation | 4 | 📝 |
+| 3. Tree-sitter parser | 8 | 📝 |
+| 4. Tree diff algorithm | 16-20 | 📝 |
+| 5. Side-by-side formatter | 8-10 | 📝 |
+| 6. Integration with differ | 8 | 📝 |
+| 7. Config & CLI updates | 4 | 📝 |
+| 8. Comprehensive testing | 8-10 | 📝 |
+| 9. Documentation updates | 4 | 📝 |
+| **Total** | **64-78 hours** | **5-6 days** |
+
+### 11.10 Milestones
+
+**Milestone 1: Parser & Validation (Day 1-2)**
+- [ ] go-tree-sitter parsing JSON successfully
+- [ ] K8s resource validation working
+- [ ] Basic tests passing
+
+**Milestone 2: Diff Algorithm (Day 2-4)**
+- [ ] Recursive tree diff implemented
+- [ ] All node types handled (object, array, primitive)
+- [ ] Line number extraction working
+- [ ] Comprehensive diff tests passing
+
+**Milestone 3: Formatter (Day 4-5)**
+- [ ] Side-by-side output formatted correctly
+- [ ] Colors applied properly
+- [ ] Indentation and truncation working
+- [ ] Formatter tests passing
+
+**Milestone 4: Integration & Testing (Day 5-6)**
+- [ ] Integrated with existing differ
+- [ ] Fallback chain working
+- [ ] All tests passing (unit + integration + E2E)
+- [ ] Performance benchmarks acceptable
+- [ ] Documentation complete
 
 ---
 
@@ -1719,6 +2309,14 @@ The following items are explicitly out of scope for the MVP but may be added lat
 - Auto-detection of ignore patterns
 - Interactive mode
 - Configuration presets library
+- **Tree-sitter enhancements** (Phase 11+):
+  - Inline display mode
+  - Direct YAML parsing (currently YAML → JSON → parse)
+  - Kubernetes-semantic diff (field importance, special highlighting)
+  - Customizable color schemes
+  - HTML output from tree-sitter
+  - Diff statistics
+- Comment preservation in YAML normalization (too complex, deferred)
 
 ---
 
