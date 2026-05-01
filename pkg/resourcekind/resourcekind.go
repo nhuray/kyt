@@ -35,7 +35,7 @@ func (m *Matcher) registerKinds() {
 	m.register("Pod", "pod", "pods", []string{"po"})
 	m.register("Service", "service", "services", []string{"svc"})
 	m.register("ConfigMap", "configmap", "configmaps", []string{"cm"})
-	m.register("Secret", "secret", "secrets", []string{})
+	m.register("Secret", "secret", "secrets", []string{"sec"})
 	m.register("Namespace", "namespace", "namespaces", []string{"ns"})
 	m.register("Node", "node", "nodes", []string{"no"})
 	m.register("PersistentVolume", "persistentvolume", "persistentvolumes", []string{"pv"})
@@ -47,29 +47,29 @@ func (m *Matcher) registerKinds() {
 	m.register("ResourceQuota", "resourcequota", "resourcequotas", []string{"quota"})
 
 	// Apps resources
-	m.register("Deployment", "deployment", "deployments", []string{"deploy"})
+	m.register("Deployment", "deployment", "deployments", []string{"deploy", "dep"})
 	m.register("StatefulSet", "statefulset", "statefulsets", []string{"sts"})
 	m.register("DaemonSet", "daemonset", "daemonsets", []string{"ds"})
 	m.register("ReplicaSet", "replicaset", "replicasets", []string{"rs"})
 
 	// Batch resources
-	m.register("Job", "job", "jobs", []string{})
+	m.register("Job", "job", "jobs", []string{"jo"})
 	m.register("CronJob", "cronjob", "cronjobs", []string{"cj"})
 
 	// Networking resources
 	m.register("Ingress", "ingress", "ingresses", []string{"ing"})
 	m.register("IngressClass", "ingressclass", "ingressclasses", []string{})
-	m.register("NetworkPolicy", "networkpolicy", "networkpolicies", []string{"netpol"})
+	m.register("NetworkPolicy", "networkpolicy", "networkpolicies", []string{"netpol", "np"})
 
 	// Storage resources
 	m.register("StorageClass", "storageclass", "storageclasses", []string{"sc"})
 	m.register("VolumeAttachment", "volumeattachment", "volumeattachments", []string{})
 
 	// RBAC resources
-	m.register("Role", "role", "roles", []string{})
-	m.register("RoleBinding", "rolebinding", "rolebindings", []string{})
-	m.register("ClusterRole", "clusterrole", "clusterroles", []string{})
-	m.register("ClusterRoleBinding", "clusterrolebinding", "clusterrolebindings", []string{})
+	m.register("Role", "role", "roles", []string{"ro"})
+	m.register("RoleBinding", "rolebinding", "rolebindings", []string{"rb"})
+	m.register("ClusterRole", "clusterrole", "clusterroles", []string{"cr"})
+	m.register("ClusterRoleBinding", "clusterrolebinding", "clusterrolebindings", []string{"crb"})
 
 	// Policy resources
 	m.register("PodDisruptionBudget", "poddisruptionbudget", "poddisruptionbudgets", []string{"pdb"})
