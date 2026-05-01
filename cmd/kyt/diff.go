@@ -8,6 +8,7 @@ import (
 	"github.com/nhuray/kyt/pkg/manifest"
 	"github.com/nhuray/kyt/pkg/normalizer"
 	"github.com/nhuray/kyt/pkg/reporter"
+	"github.com/nhuray/kyt/pkg/resourcekind"
 	"github.com/spf13/cobra"
 )
 
@@ -23,6 +24,8 @@ var (
 	diffSimilarityThreshold       float64
 	diffWidth                     int
 	diffStringSimilarityThreshold int
+	diffIncludeKinds              string
+	diffExcludeKinds              string
 )
 
 var diffCmd = &cobra.Command{
@@ -36,12 +39,19 @@ Supports:
 - Multiple diff tools: difftastic, tree-sitter, unified diff
 - Multiple output formats (CLI, JSON)
 - Smart similarity matching for renamed resources
+- Resource filtering by kind (include/exclude)
 
 Diff Tools:
 - auto: Try difftastic first, fall back to tree-sitter, then unified (default)
 - difft: Use difftastic only (external tool, best quality)
 - treesitter: Use Go-native tree-sitter (built-in, good quality)
 - diff: Use standard unified diff (built-in, basic quality)
+
+Resource Filtering:
+- Use --include to only compare specific resource kinds
+- Use --exclude to skip specific resource kinds
+- Supports short names (cm, svc, deploy), singular (configmap, service), and plural (configmaps, services)
+- Both flags accept comma-separated lists
 
 Examples:
   # Compare two directories (auto mode - tries all diff tools)
@@ -55,6 +65,17 @@ Examples:
 
   # Output as JSON
   kyt diff -o json ./source ./target
+
+  # Compare only ConfigMaps and Secrets
+  kyt diff --include cm,secrets ./source ./target
+
+  # Compare all except Secrets
+  kyt diff --exclude secrets ./source ./target
+
+  # Compare Deployments and Services only (multiple forms supported)
+  kyt diff --include deploy,svc ./source ./target
+  kyt diff --include deployments,services ./source ./target
+  kyt diff --include Deployment,Service ./source ./target
 
   # Compare Helm vs Kustomize
   helm template my-chart > /tmp/helm.yaml
@@ -81,6 +102,8 @@ func init() {
 	diffCmd.Flags().BoolVar(&diffExactMatch, "exact-match", false, "disable similarity matching (only exact name matches)")
 	diffCmd.Flags().Float64Var(&diffSimilarityThreshold, "similarity-threshold", 0.7, "minimum similarity score (0.0-1.0) for matching resources")
 	diffCmd.Flags().IntVar(&diffStringSimilarityThreshold, "string-similarity-threshold", 100, "minimum string length for fuzzy matching (0 = disable)")
+	diffCmd.Flags().StringVar(&diffIncludeKinds, "include", "", "comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')")
+	diffCmd.Flags().StringVar(&diffExcludeKinds, "exclude", "", "comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')")
 
 	rootCmd.AddCommand(diffCmd)
 }
@@ -127,6 +150,37 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	}
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "  Found %d resources in target\n", targetManifests.Len())
+	}
+
+	// Apply resource kind filtering
+	if diffIncludeKinds != "" || diffExcludeKinds != "" {
+		if rootVerbose {
+			fmt.Fprintf(os.Stderr, "Applying resource kind filters...\n")
+		}
+
+		matcher := resourcekind.NewMatcher()
+		var includeFilters, excludeFilters []string
+
+		if diffIncludeKinds != "" {
+			includeFilters = matcher.ParseList(diffIncludeKinds)
+			if rootVerbose {
+				fmt.Fprintf(os.Stderr, "  Include: %v\n", includeFilters)
+			}
+		}
+
+		if diffExcludeKinds != "" {
+			excludeFilters = matcher.ParseList(diffExcludeKinds)
+			if rootVerbose {
+				fmt.Fprintf(os.Stderr, "  Exclude: %v\n", excludeFilters)
+			}
+		}
+
+		sourceManifests = filterManifests(sourceManifests, matcher, includeFilters, excludeFilters)
+		targetManifests = filterManifests(targetManifests, matcher, includeFilters, excludeFilters)
+
+		if rootVerbose {
+			fmt.Fprintf(os.Stderr, "  After filtering: %d source, %d target\n", sourceManifests.Len(), targetManifests.Len())
+		}
 	}
 
 	// Create normalizer
@@ -217,4 +271,36 @@ func parseManifests(path string) (*manifest.ManifestSet, error) {
 	}
 
 	return parser.ParseFile(path)
+}
+
+// filterManifests filters a ManifestSet based on include/exclude filters
+func filterManifests(manifestSet *manifest.ManifestSet, matcher *resourcekind.Matcher, includeFilters, excludeFilters []string) *manifest.ManifestSet {
+	filtered := manifest.NewManifestSet()
+
+	for key, obj := range manifestSet.Resources {
+		kind := obj.GetKind()
+
+		// If include filters are specified, only include matching kinds
+		if len(includeFilters) > 0 {
+			if !matcher.MatchesAny(kind, includeFilters) {
+				continue
+			}
+		}
+
+		// If exclude filters are specified, skip matching kinds
+		if len(excludeFilters) > 0 {
+			if matcher.MatchesAny(kind, excludeFilters) {
+				continue
+			}
+		}
+
+		// Add to filtered set
+		filtered.Resources[key] = obj
+		// Preserve source file information if available
+		if sourcePath, ok := manifestSet.GetSourceFile(key); ok {
+			filtered.SourceFile[key] = sourcePath
+		}
+	}
+
+	return filtered
 }

@@ -53,9 +53,50 @@ Flags:
       --exact-match        disable similarity matching (exact name match only)
       --diff-tool string   diff tool: auto, difft, treesitter, diff (default "auto")
       --display string     difftastic display mode: side-by-side, inline (default "side-by-side")
+      --include string     comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')
+      --exclude string     comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')
   -v, --verbose            verbose output to stderr
   -h, --help               help for diff
 ```
+
+### Resource Filtering
+
+The `--include` and `--exclude` flags allow you to filter which resources are compared. This is useful when you only care about specific resource types or want to skip certain resources.
+
+**Supported name forms:**
+- **Short names**: `cm`, `svc`, `deploy`, `sts`, `ds`, `po`, etc.
+- **Singular**: `configmap`, `service`, `deployment`, etc.
+- **Plural**: `configmaps`, `services`, `deployments`, etc.
+- **Kind names**: `ConfigMap`, `Service`, `Deployment`, etc.
+
+All forms are case-insensitive and can be mixed in the same command.
+
+**Examples:**
+
+```bash
+# Include only ConfigMaps and Secrets
+kyt diff --include cm,secrets ./source ./target
+
+# Exclude Secrets from comparison
+kyt diff --exclude secrets ./source ./target
+
+# Include multiple resource types (using different name forms)
+kyt diff --include deploy,svc,cm ./source ./target
+kyt diff --include deployments,services,configmaps ./source ./target
+kyt diff --include Deployment,Service,ConfigMap ./source ./target
+
+# Compare only StatefulSets and DaemonSets
+kyt diff --include sts,ds ./source ./target
+
+# Exclude multiple types
+kyt diff --exclude secrets,cm,svc ./source ./target
+```
+
+**Note:** 
+- `--include` and `--exclude` can be used together
+- When `--include` is specified, only those resource kinds are compared
+- When `--exclude` is specified, those resource kinds are skipped
+- Filters apply to both source and target manifests
 
 ### Exit Codes
 
@@ -448,6 +489,35 @@ else
   exit 1
 fi
 ```
+
+### Example 6: Comparing Only Specific Resource Types
+
+Compare only certain resource types using the `--include` and `--exclude` flags:
+
+```bash
+# Compare only ConfigMaps and Secrets (useful for config drift detection)
+kyt diff --include cm,secrets ./prod ./staging
+
+# Compare all resources except Secrets (skip sensitive data)
+kyt diff --exclude secrets ./source ./target
+
+# Compare only workload resources
+kyt diff --include deploy,sts,ds,job ./helm-output ./kustomize-output
+
+# Compare infrastructure resources only
+kyt diff --include svc,ing,cm ./old-infra ./new-infra
+
+# Skip testing resources when comparing environments
+kyt diff --exclude job,cronjob,po ./dev ./prod
+```
+
+**Use cases for resource filtering:**
+
+- **Security audits**: Compare only RBAC resources (`--include role,rolebinding,clusterrole,clusterrolebinding`)
+- **Config validation**: Compare only ConfigMaps and Secrets (`--include cm,secrets`)
+- **Workload comparison**: Focus on Deployments and StatefulSets (`--include deploy,sts`)
+- **Skip ephemeral resources**: Exclude Pods and Jobs (`--exclude po,job`)
+- **Network comparison**: Compare only Services and Ingresses (`--include svc,ing`)
 
 ## JQ Expression Cookbook
 

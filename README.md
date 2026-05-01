@@ -24,6 +24,7 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 - 🔧 **Format**: Sort keys consistently with `kyt fmt`
 - 🔀 **Pipe-friendly**: Works seamlessly with kubectl, kustomize, helm
 - 🤖 **Smart Similarity Matching**: Automatically detects renamed resources
+- 🎛️ **Resource Filtering**: Include/exclude specific resource kinds (supports short names like `cm`, `svc`, `deploy`)
 - ⚡ **Fast & Reliable**: Written in Go with 60+ passing tests
 
 ## Use Cases
@@ -91,6 +92,12 @@ kyt diff --diff-tool diff source.yaml target.yaml
 
 # Change difftastic display mode
 kyt diff --display inline source.yaml target.yaml
+
+# Compare only specific resource types
+kyt diff --include cm,svc,deploy source.yaml target.yaml
+
+# Exclude specific resource types
+kyt diff --exclude secrets source.yaml target.yaml
 ```
 
 **Exit Codes:**
