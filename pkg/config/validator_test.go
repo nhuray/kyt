@@ -221,47 +221,47 @@ func TestValidatorValidateIgnoreRule(t *testing.T) {
 	}
 }
 
-func TestValidatorValidateOutputConfig(t *testing.T) {
+func TestValidatorValidateCLIConfig(t *testing.T) {
 	validator := NewValidator()
 
 	tests := []struct {
 		name        string
-		output      OutputConfig
+		output      CLIConfig
 		expectError bool
 	}{
 		{
-			name: "valid cli format",
-			output: OutputConfig{
-				Format: "cli",
+			name: "valid side-by-side display",
+			output: CLIConfig{
+				Display: "side-by-side",
 			},
 			expectError: false,
 		},
 		{
-			name: "valid json format",
-			output: OutputConfig{
-				Format: "json",
+			name: "valid inline display",
+			output: CLIConfig{
+				Display: "inline",
 			},
 			expectError: false,
 		},
 		{
 			name: "valid with context lines",
-			output: OutputConfig{
-				Format:       "diff",
+			output: CLIConfig{
+				Display:      "inline",
 				ContextLines: 5,
 			},
 			expectError: false,
 		},
 		{
-			name: "invalid format",
-			output: OutputConfig{
-				Format: "invalid",
+			name: "invalid display mode",
+			output: CLIConfig{
+				Display: "invalid",
 			},
 			expectError: true,
 		},
 		{
 			name: "invalid negative context lines",
-			output: OutputConfig{
-				Format:       "diff",
+			output: CLIConfig{
+				Display:      "side-by-side",
 				ContextLines: -1,
 			},
 			expectError: true,
@@ -270,7 +270,7 @@ func TestValidatorValidateOutputConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.validateOutputConfig(&tt.output)
+			err := validator.validateCLIConfig(&tt.output)
 			if tt.expectError && err == nil {
 				t.Error("Expected error, got nil")
 			}
@@ -292,17 +292,19 @@ func TestValidatorValidateConfig(t *testing.T) {
 		{
 			name: "valid complete config",
 			config: Config{
-				IgnoreDifferences: []ResourceIgnoreDifferences{
-					{
-						Group: "apps",
-						Kind:  "Deployment",
-						JSONPointers: []string{
-							"/spec/replicas",
+				Diff: DiffConfig{
+					IgnoreDifferences: []ResourceIgnoreDifferences{
+						{
+							Group: "apps",
+							Kind:  "Deployment",
+							JSONPointers: []string{
+								"/spec/replicas",
+							},
 						},
 					},
-				},
-				Output: OutputConfig{
-					Format: "cli",
+					CLI: CLIConfig{
+						Display: "side-by-side",
+					},
 				},
 			},
 			expectError: false,
@@ -310,24 +312,26 @@ func TestValidatorValidateConfig(t *testing.T) {
 		{
 			name: "valid with multiple ignore rules",
 			config: Config{
-				IgnoreDifferences: []ResourceIgnoreDifferences{
-					{
-						Group: "",
-						Kind:  "Service",
-						JSONPointers: []string{
-							"/metadata/labels",
+				Diff: DiffConfig{
+					IgnoreDifferences: []ResourceIgnoreDifferences{
+						{
+							Group: "",
+							Kind:  "Service",
+							JSONPointers: []string{
+								"/metadata/labels",
+							},
+						},
+						{
+							Group: "apps",
+							Kind:  "Deployment",
+							JQPathExpressions: []string{
+								".spec.template.spec.containers[]",
+							},
 						},
 					},
-					{
-						Group: "apps",
-						Kind:  "Deployment",
-						JQPathExpressions: []string{
-							".spec.template.spec.containers[]",
-						},
+					CLI: CLIConfig{
+						Display: "inline",
 					},
-				},
-				Output: OutputConfig{
-					Format: "json",
 				},
 			},
 			expectError: false,
@@ -335,35 +339,39 @@ func TestValidatorValidateConfig(t *testing.T) {
 		{
 			name: "invalid - bad ignore rule",
 			config: Config{
-				IgnoreDifferences: []ResourceIgnoreDifferences{
-					{
-						Group: "apps",
-						// Missing Kind
-						JSONPointers: []string{
-							"/spec/replicas",
+				Diff: DiffConfig{
+					IgnoreDifferences: []ResourceIgnoreDifferences{
+						{
+							Group: "apps",
+							// Missing Kind
+							JSONPointers: []string{
+								"/spec/replicas",
+							},
 						},
 					},
-				},
-				Output: OutputConfig{
-					Format: "cli",
+					CLI: CLIConfig{
+						Display: "side-by-side",
+					},
 				},
 			},
 			expectError: true,
 		},
 		{
-			name: "invalid - bad output config",
+			name: "invalid - bad CLI config",
 			config: Config{
-				IgnoreDifferences: []ResourceIgnoreDifferences{
-					{
-						Group: "apps",
-						Kind:  "Deployment",
-						JSONPointers: []string{
-							"/spec/replicas",
+				Diff: DiffConfig{
+					IgnoreDifferences: []ResourceIgnoreDifferences{
+						{
+							Group: "apps",
+							Kind:  "Deployment",
+							JSONPointers: []string{
+								"/spec/replicas",
+							},
 						},
 					},
-				},
-				Output: OutputConfig{
-					Format: "invalid-format",
+					CLI: CLIConfig{
+						Display: "invalid-mode",
+					},
 				},
 			},
 			expectError: true,
