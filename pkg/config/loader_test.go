@@ -258,15 +258,16 @@ func TestLoaderLoadDefault(t *testing.T) {
 		t.Fatalf("Failed to load default config: %v", err)
 	}
 
-	if cfg.Diff.CLI.Display != "cli" {
-		t.Errorf("Expected default format 'cli', got %s", cfg.Diff.CLI.Display)
+	if cfg.Diff.CLI.Display != "side-by-side" {
+		t.Errorf("Expected default display 'side-by-side', got %s", cfg.Diff.CLI.Display)
 	}
 
 	// Test with existing config file
 	configPath := filepath.Join(tmpDir, DefaultConfigFileName)
 	content := `
+diff:
   cli:
-    display: json
+    display: inline
 `
 	err = os.WriteFile(configPath, []byte(content), 0644)
 	if err != nil {
@@ -278,7 +279,7 @@ func TestLoaderLoadDefault(t *testing.T) {
 		t.Fatalf("Failed to load default config: %v", err)
 	}
 
-	if cfg.Diff.CLI.Display != "json" {
+	if cfg.Diff.CLI.Display != "inline" {
 		t.Errorf("Expected display 'inline', got %s", cfg.Diff.CLI.Display)
 	}
 }
@@ -339,8 +340,9 @@ func TestLoaderSearchConfig(t *testing.T) {
 	// Create config in parent directory
 	configPath := filepath.Join(tmpDir, DefaultConfigFileName)
 	content := `
+diff:
   cli:
-    display: json
+    display: inline
 `
 	err = os.WriteFile(configPath, []byte(content), 0644)
 	if err != nil {
@@ -357,7 +359,7 @@ func TestLoaderSearchConfig(t *testing.T) {
 		t.Errorf("Expected to find config at %s, found at %s", configPath, foundPath)
 	}
 
-	if cfg.Diff.CLI.Display != "json" {
+	if cfg.Diff.CLI.Display != "inline" {
 		t.Errorf("Expected display 'inline', got %s", cfg.Diff.CLI.Display)
 	}
 }
@@ -400,7 +402,7 @@ func TestLoaderSave(t *testing.T) {
 		t.Fatalf("Failed to load saved config: %v", err)
 	}
 
-	if loadedCfg.Diff.CLI.Display != "json" {
+	if loadedCfg.Diff.CLI.Display != "inline" {
 		t.Errorf("Expected display 'inline', got %s", loadedCfg.Diff.CLI.Display)
 	}
 }

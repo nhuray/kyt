@@ -23,7 +23,6 @@ func TestCLIReporter_Report(t *testing.T) {
 		{
 			name: "basic output without colors",
 			options: &Options{
-				Display: "side-by-side",
 				Colorize:      false,
 				ShowIdentical: false,
 			},
@@ -42,7 +41,6 @@ func TestCLIReporter_Report(t *testing.T) {
 		{
 			name: "with identical resources",
 			options: &Options{
-				Display: "side-by-side",
 				Colorize:      false,
 				ShowIdentical: true,
 			},
@@ -142,7 +140,6 @@ func TestJSONReporter_Report(t *testing.T) {
 		{
 			name: "compact JSON",
 			options: &Options{
-				Display: "inline",
 				Compact:       true,
 				ShowIdentical: false,
 			},
@@ -150,7 +147,6 @@ func TestJSONReporter_Report(t *testing.T) {
 		{
 			name: "pretty JSON",
 			options: &Options{
-				Display: "inline",
 				Compact:       false,
 				ShowIdentical: false,
 			},
@@ -158,7 +154,6 @@ func TestJSONReporter_Report(t *testing.T) {
 		{
 			name: "with identical resources",
 			options: &Options{
-				Display: "inline",
 				Compact:       false,
 				ShowIdentical: true,
 			},
