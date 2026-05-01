@@ -215,11 +215,3 @@ func jaroWinklerSimilarity(a, b string) float64 {
 
 	return jaro + float64(prefixLen)*0.1*(1.0-jaro)
 }
-
-// max returns the maximum of two integers
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

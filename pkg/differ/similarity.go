@@ -185,7 +185,8 @@ func (s *SimilarityScorer) compareConfigMapOrSecret(a, b map[string]interface{},
 		var exists bool
 
 		// Special handling for metadata subfields
-		if key == "metadata.name" {
+		switch key {
+		case "metadata.name":
 			aName, aExists, _ := unstructured.NestedString(a, "metadata", "name")
 			bName, bExists, _ := unstructured.NestedString(b, "metadata", "name")
 
@@ -198,7 +199,7 @@ func (s *SimilarityScorer) compareConfigMapOrSecret(a, b map[string]interface{},
 			}
 			exists = true
 
-		} else if key == "metadata.labels" {
+		case "metadata.labels":
 			aLabels, aExists, _ := unstructured.NestedMap(a, "metadata", "labels")
 			bLabels, bExists, _ := unstructured.NestedMap(b, "metadata", "labels")
 
@@ -210,7 +211,7 @@ func (s *SimilarityScorer) compareConfigMapOrSecret(a, b map[string]interface{},
 			}
 			exists = true
 
-		} else {
+		default:
 			// Top-level fields (data, immutable, etc.)
 			aVal, aExists := a[key]
 			bVal, bExists := b[key]
@@ -258,10 +259,11 @@ func (s *SimilarityScorer) calculateConfigMapWeights(a, b map[string]interface{}
 
 	// Data field names based on kind
 	dataFieldCandidates := make(map[string]bool)
-	if kind == "ConfigMap" {
+	switch kind {
+	case "ConfigMap":
 		dataFieldCandidates["data"] = true
 		dataFieldCandidates["binaryData"] = true
-	} else if kind == "Secret" {
+	case "Secret":
 		dataFieldCandidates["data"] = true
 		dataFieldCandidates["stringData"] = true
 	}
