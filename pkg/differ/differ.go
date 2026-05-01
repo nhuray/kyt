@@ -397,7 +397,7 @@ func (d *Differ) generateTreeSitterDiff(key manifest.ResourceKey, source, target
 	// Use display mode from options (matching difftastic behavior)
 	if d.options.DifftasticDisplay == "inline" {
 		// Use inline display (unified diff style)
-		diffText = formatter.FormatInline(diffResult, sourceLabel)
+		diffText = formatter.FormatInline(diffResult, sourceLabel, targetLabel)
 	} else {
 		// Use side-by-side display (default)
 		diffText = formatter.FormatSideBySide(diffResult, sourceLabel, targetLabel)

@@ -67,11 +67,11 @@ func (lf *LineFormatter) FormatSideBySide(root *DiffNode, sourceLabel, targetLab
 
 // FormatInline formats diff output inline (unified diff style) using line numbers from diff tree
 // This matches difftastic's inline display mode
-func (lf *LineFormatter) FormatInline(root *DiffNode, label string) string {
+func (lf *LineFormatter) FormatInline(root *DiffNode, sourceLabel, targetLabel string) string {
 	var buf strings.Builder
 
 	// Simplified header showing resource name
-	buf.WriteString(lf.formatInlineHeader(label))
+	buf.WriteString(lf.formatInlineHeader(sourceLabel, targetLabel))
 	buf.WriteString("\n")
 	buf.WriteString(lf.colorize(strings.Repeat("─", min(lf.width, 80)), color.FgHiBlack))
 	buf.WriteString("\n\n")
@@ -183,12 +183,13 @@ func (lf *LineFormatter) formatLineInline(buf *strings.Builder, ld LineDiff) {
 }
 
 // formatInlineHeader formats header for inline display
-func (lf *LineFormatter) formatInlineHeader(label string) string {
+func (lf *LineFormatter) formatInlineHeader(sourceLabel, targetLabel string) string {
 	// Parse label to extract resource info
-	parts := lf.parseResourceLabel(label)
+	sourceParts := lf.parseResourceLabel(sourceLabel)
+	targetParts := lf.parseResourceLabel(targetLabel)
 
 	// Format: "ConfigMap: `redis-ha/redis-health`"
-	header := fmt.Sprintf("%s: `%s`", parts.kind, parts.fullName)
+	header := fmt.Sprintf("%s: `%s` → `%s`", sourceParts.kind, sourceParts.fullName, targetParts.fullName)
 
 	if lf.useColor {
 		col := color.New(color.Bold)
