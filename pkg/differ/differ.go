@@ -383,7 +383,7 @@ func (d *Differ) generateTreeSitterDiff(key manifest.ResourceKey, source, target
 		return "", 0, fmt.Errorf("failed to generate tree-sitter diff: %w", err)
 	}
 
-	// Format output using line-based formatter for better side-by-side visualization
+	// Format output using line-based formatter
 	formatter := treesitter.NewLineFormatter(d.options.TreeSitterWidth, d.options.ColorOutput, sourceYAML, targetYAML)
 
 	// Create resource keys for both source and target
@@ -392,7 +392,16 @@ func (d *Differ) generateTreeSitterDiff(key manifest.ResourceKey, source, target
 
 	sourceLabel := fmt.Sprintf("a/%s", sourceKey.String())
 	targetLabel := fmt.Sprintf("b/%s", targetKey.String())
-	diffText := formatter.FormatSideBySide(diffResult, sourceLabel, targetLabel)
+
+	var diffText string
+	// Use display mode from options (matching difftastic behavior)
+	if d.options.DifftasticDisplay == "inline" {
+		// Use inline display (unified diff style)
+		diffText = formatter.FormatInline(diffResult, sourceLabel)
+	} else {
+		// Use side-by-side display (default)
+		diffText = formatter.FormatSideBySide(diffResult, sourceLabel, targetLabel)
+	}
 
 	// Count diff lines (approximate - count newlines)
 	diffLines := bytes.Count([]byte(diffText), []byte("\n"))
