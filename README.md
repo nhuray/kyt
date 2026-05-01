@@ -137,26 +137,27 @@ The `fmt` command does not use configuration - it only sorts keys.
 
 ```yaml
 # .kyt.yaml
-ignoreDifferences:
-  # Ignore all labels and annotations
-  - group: ""
-    kind: "*"
-    jsonPointers:
-      - /metadata/labels
-      - /metadata/annotations
-
-  # Ignore Istio sidecar containers
-  - group: "apps"
-    kind: "Deployment"
-    jqPathExpressions:
-      - .spec.template.spec.containers[] | select(.name == "istio-proxy")
-
-  # Ignore specific fields in Services
-  - group: ""
-    kind: "Service"
-    jsonPointers:
-      - /spec/clusterIP
-      - /spec/clusterIPs
+diff:
+    ignoreDifferences:
+      # Ignore all labels and annotations
+      - group: ""
+        kind: "*"
+        jsonPointers:
+          - /metadata/labels
+          - /metadata/annotations
+    
+      # Ignore Istio sidecar containers
+      - group: "apps"
+        kind: "Deployment"
+        jqPathExpressions:
+          - .spec.template.spec.containers[] | select(.name == "istio-proxy")
+    
+      # Ignore specific fields in Services
+      - group: ""
+        kind: "Service"
+        jsonPointers:
+          - /spec/clusterIP
+          - /spec/clusterIPs
 ```
 
 See [examples/.kyt.yaml](examples/.kyt.yaml) for a complete configuration example.
@@ -220,10 +221,6 @@ make install
 ```bash
 kyt version
 ```
-
-### Difftastic (Optional but Recommended)
-
-The `kyt diff` command uses a built-in tree-sitter parser for syntax-aware structural diffs. It automatically falls back to standard unified diff if needed.
 
 ## Documentation
 

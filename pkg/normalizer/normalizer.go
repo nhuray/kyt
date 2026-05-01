@@ -29,7 +29,7 @@ func (n *Normalizer) Normalize(obj *unstructured.Unstructured) (*unstructured.Un
 	}
 
 	// Sort keys if configured
-	if n.config.Normalization.SortKeys {
+	if n.config.Diff.Normalization.SortKeys {
 		if err := n.sortKeys(normalized); err != nil {
 			return nil, fmt.Errorf("failed to sort keys: %w", err)
 		}
@@ -55,7 +55,7 @@ func (n *Normalizer) NormalizeAll(objs []*unstructured.Unstructured) ([]*unstruc
 
 // removeDefaultFields removes fields that are in the removeDefaultFields list
 func (n *Normalizer) removeDefaultFields(obj *unstructured.Unstructured) error {
-	for _, field := range n.config.Normalization.RemoveDefaultFields {
+	for _, field := range n.config.Diff.Normalization.RemoveDefaultFields {
 		if err := removeJSONPointerField(obj, field); err != nil {
 			// Don't fail if field doesn't exist, just continue
 			continue
@@ -72,7 +72,7 @@ func (n *Normalizer) applyIgnoreRules(obj *unstructured.Unstructured) error {
 	namespace := obj.GetNamespace()
 	name := obj.GetName()
 
-	for _, rule := range n.config.IgnoreDifferences {
+	for _, rule := range n.config.Diff.IgnoreDifferences {
 		// Check if this rule matches the resource
 		if !rule.MatchesResource(group, kind, namespace, name) {
 			continue

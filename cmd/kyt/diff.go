@@ -191,9 +191,9 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	// Determine string similarity threshold (flag takes precedence over config)
 	stringSimilarityThreshold := diffStringSimilarityThreshold
-	if stringSimilarityThreshold == 100 && cfg.Output.StringSimilarityThreshold > 0 {
+	if stringSimilarityThreshold == 100 && cfg.Diff.CLI.StringSimilarityThreshold > 0 {
 		// If flag is at default value, use config value
-		stringSimilarityThreshold = cfg.Output.StringSimilarityThreshold
+		stringSimilarityThreshold = cfg.Diff.CLI.StringSimilarityThreshold
 	}
 
 	// Create differ

@@ -9,12 +9,14 @@ import (
 
 func TestNormalize(t *testing.T) {
 	cfg := &config.Config{
+		Diff: config.DiffConfig{
 		Normalization: config.NormalizationConfig{
 			SortKeys: true,
 			RemoveDefaultFields: []string{
 				"/status",
 				"/metadata/creationTimestamp",
 			},
+		},
 		},
 	}
 
@@ -182,8 +184,10 @@ func TestParseJSONPointer(t *testing.T) {
 
 func TestSortKeys(t *testing.T) {
 	cfg := &config.Config{
+		Diff: config.DiffConfig{
 		Normalization: config.NormalizationConfig{
 			SortKeys: true,
+		},
 		},
 	}
 
@@ -220,6 +224,7 @@ func TestSortKeys(t *testing.T) {
 
 func TestIgnoreRules(t *testing.T) {
 	cfg := &config.Config{
+		Diff: config.DiffConfig{
 		IgnoreDifferences: []config.ResourceIgnoreDifferences{
 			{
 				Group: "apps",
@@ -228,6 +233,7 @@ func TestIgnoreRules(t *testing.T) {
 					"/spec/replicas",
 				},
 			},
+		},
 		},
 	}
 
@@ -271,6 +277,7 @@ func TestIgnoreRules(t *testing.T) {
 
 func TestJQExpression(t *testing.T) {
 	cfg := &config.Config{
+		Diff: config.DiffConfig{
 		IgnoreDifferences: []config.ResourceIgnoreDifferences{
 			{
 				Group: "apps",
@@ -279,6 +286,7 @@ func TestJQExpression(t *testing.T) {
 					`.spec.template.spec.containers[] | select(.name == "istio-proxy")`,
 				},
 			},
+		},
 		},
 	}
 
@@ -336,6 +344,7 @@ func TestJQExpression(t *testing.T) {
 
 func TestRemoveManagedFieldsByManagers(t *testing.T) {
 	cfg := &config.Config{
+		Diff: config.DiffConfig{
 		IgnoreDifferences: []config.ResourceIgnoreDifferences{
 			{
 				Group: "",
@@ -344,6 +353,7 @@ func TestRemoveManagedFieldsByManagers(t *testing.T) {
 					"kube-controller-manager",
 				},
 			},
+		},
 		},
 	}
 
@@ -392,11 +402,13 @@ func TestRemoveManagedFieldsByManagers(t *testing.T) {
 
 func TestNormalizeAll(t *testing.T) {
 	cfg := &config.Config{
+		Diff: config.DiffConfig{
 		Normalization: config.NormalizationConfig{
 			SortKeys: true,
 			RemoveDefaultFields: []string{
 				"/status",
 			},
+		},
 		},
 	}
 

@@ -166,45 +166,44 @@ The `diff` command uses `.kyt.yaml` to configure ignore rules, normalization, an
 
 ```yaml
 # .kyt.yaml
-
-# Ignore specific differences
-ignoreDifferences:
-  # Ignore replica count in production (HPA-managed)
-  - group: "apps"
-    kind: "Deployment"
-    namespace: "production"
-    jsonPointers:
-      - /spec/replicas
-
-  # Ignore Istio sidecars
-  - group: "apps"
-    kind: "Deployment"
-    jqPathExpressions:
-      - .spec.template.spec.containers[] | select(.name == "istio-proxy")
-
-  # Ignore kubectl last-applied-configuration
-  - group: ""
-    kind: "*"
-    jsonPointers:
-      - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
-
-# Normalization options
-normalization:
-  sortKeys: true
-  sortArrays:
-    - path: ".spec.template.spec.containers[].env"
-      sortBy: "name"
-  removeDefaultFields:
-    - "/status"
-    - "/metadata/managedFields"
-    - "/metadata/creationTimestamp"
-
-# Output options
-output:
-  format: cli            # cli, json, yaml, diff
-  colorize: true
-  showUnchanged: false
-  contextLines: 3
+diff:
+   # Ignore specific differences
+   ignoreDifferences:
+     # Ignore replica count in production (HPA-managed)
+     - group: "apps"
+       kind: "Deployment"
+       namespace: "production"
+       jsonPointers:
+         - /spec/replicas
+   
+     # Ignore Istio sidecars
+     - group: "apps"
+       kind: "Deployment"
+       jqPathExpressions:
+         - .spec.template.spec.containers[] | select(.name == "istio-proxy")
+   
+     # Ignore kubectl last-applied-configuration
+     - group: ""
+       kind: "*"
+       jsonPointers:
+         - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
+   
+   # Normalization options
+   normalization:
+     sortKeys: true
+     sortArrays:
+       - path: ".spec.template.spec.containers[].env"
+         sortBy: "name"
+     removeDefaultFields:
+       - "/status"
+       - "/metadata/managedFields"
+       - "/metadata/creationTimestamp"
+   
+   # CLI options
+   cli:
+     colorize: true
+     showUnchanged: false
+     contextLines: 3
 ```
 
 ## Ignore Rules
@@ -214,16 +213,17 @@ Ignore rules are the heart of `kyt diff`. They let you filter out expected or ir
 ### Rule Structure
 
 ```yaml
-ignoreDifferences:
-  - group: "apps"              # API group (empty for core resources)
-    kind: "Deployment"         # Resource kind (use "*" for all)
-    name: "nginx-*"            # Optional: resource name (supports globs)
-    namespace: "prod-*"        # Optional: namespace (supports globs)
-    
-    # Choose one or more ignore methods:
-    jsonPointers: [...]        # JSON Pointer paths
-    jqPathExpressions: [...]   # JQ expressions
-    managedFieldsManagers: [...] # Field manager names
+diff:
+   ignoreDifferences:
+     - group: "apps"              # API group (empty for core resources)
+       kind: "Deployment"         # Resource kind (use "*" for all)
+       name: "nginx-*"            # Optional: resource name (supports globs)
+       namespace: "prod-*"        # Optional: namespace (supports globs)
+       
+       # Choose one or more ignore methods:
+       jsonPointers: [...]        # JSON Pointer paths
+       jqPathExpressions: [...]   # JQ expressions
+       managedFieldsManagers: [...] # Field manager names
 ```
 
 ### JSON Pointers
@@ -233,24 +233,25 @@ ignoreDifferences:
 JSON Pointers (RFC 6901) provide a simple syntax for targeting specific fields:
 
 ```yaml
-ignoreDifferences:
-  # Single field
-  - group: ""
-    kind: "Service"
-    jsonPointers:
-      - /spec/clusterIP
-
-  # Nested field
-  - group: "apps"
-    kind: "Deployment"
-    jsonPointers:
-      - /spec/template/metadata/annotations/prometheus.io~1scrape
-
-  # Array element by index
-  - group: "apps"
-    kind: "Deployment"
-    jsonPointers:
-      - /spec/template/spec/containers/0/image
+diff:
+   ignoreDifferences:
+     # Single field
+     - group: ""
+       kind: "Service"
+       jsonPointers:
+         - /spec/clusterIP
+   
+     # Nested field
+     - group: "apps"
+       kind: "Deployment"
+       jsonPointers:
+         - /spec/template/metadata/annotations/prometheus.io~1scrape
+   
+     # Array element by index
+     - group: "apps"
+       kind: "Deployment"
+       jsonPointers:
+         - /spec/template/spec/containers/0/image
 ```
 
 **JSON Pointer Escaping:**
@@ -269,24 +270,25 @@ Example: `kubectl.kubernetes.io/last-applied-configuration` becomes:
 JQ expressions provide powerful filtering capabilities:
 
 ```yaml
-ignoreDifferences:
-  # Select by field value
-  - group: "apps"
-    kind: "Deployment"
-    jqPathExpressions:
-      - .spec.template.spec.containers[] | select(.name == "istio-proxy")
-
-  # Select by field existence
-  - group: ""
-    kind: "ConfigMap"
-    jqPathExpressions:
-      - .data | keys[] | select(startswith("temp-"))
-
-  # Complex condition
-  - group: "apps"
-    kind: "Deployment"
-    jqPathExpressions:
-      - .spec.template.spec.containers[] | select(.image | contains(":latest"))
+diff:
+   ignoreDifferences:
+     # Select by field value
+     - group: "apps"
+       kind: "Deployment"
+       jqPathExpressions:
+         - .spec.template.spec.containers[] | select(.name == "istio-proxy")
+   
+     # Select by field existence
+     - group: ""
+       kind: "ConfigMap"
+       jqPathExpressions:
+         - .data | keys[] | select(startswith("temp-"))
+   
+     # Complex condition
+     - group: "apps"
+       kind: "Deployment"
+       jqPathExpressions:
+         - .spec.template.spec.containers[] | select(.image | contains(":latest"))
 ```
 
 ### Managed Fields Managers
@@ -294,12 +296,13 @@ ignoreDifferences:
 **Best for:** Ignoring fields updated by controllers
 
 ```yaml
-ignoreDifferences:
-  - group: "apps"
-    kind: "Deployment"
-    managedFieldsManagers:
-      - "kube-controller-manager"  # Ignore HPA updates
-      - "kubectl-client-side-apply"
+diff:
+   ignoreDifferences:
+     - group: "apps"
+       kind: "Deployment"
+       managedFieldsManagers:
+         - "kube-controller-manager"  # Ignore HPA updates
+         - "kubectl-client-side-apply"
 ```
 
 ## Advanced Examples
@@ -310,28 +313,29 @@ Compare Helm and Kustomize outputs while ignoring tool-specific differences:
 
 ```yaml
 # .kyt.yaml
-ignoreDifferences:
-  # Ignore Helm metadata
-  - group: ""
-    kind: "*"
-    jsonPointers:
-      - /metadata/annotations/meta.helm.sh~1release-name
-      - /metadata/annotations/meta.helm.sh~1release-namespace
-      - /metadata/labels/app.kubernetes.io~1managed-by
-      - /metadata/labels/helm.sh~1chart
-
-  # Ignore Kustomize metadata
-  - group: ""
-    kind: "*"
-    jsonPointers:
-      - /metadata/annotations/config.kubernetes.io~1index
-      - /metadata/annotations/config.kubernetes.io~1path
-
-normalization:
-  sortKeys: true
-  sortArrays:
-    - path: ".spec.template.spec.containers[].env"
-      sortBy: "name"
+diff:
+   ignoreDifferences:
+     # Ignore Helm metadata
+     - group: ""
+       kind: "*"
+       jsonPointers:
+         - /metadata/annotations/meta.helm.sh~1release-name
+         - /metadata/annotations/meta.helm.sh~1release-namespace
+         - /metadata/labels/app.kubernetes.io~1managed-by
+         - /metadata/labels/helm.sh~1chart
+   
+     # Ignore Kustomize metadata
+     - group: ""
+       kind: "*"
+       jsonPointers:
+         - /metadata/annotations/config.kubernetes.io~1index
+         - /metadata/annotations/config.kubernetes.io~1path
+   
+   normalization:
+     sortKeys: true
+     sortArrays:
+       - path: ".spec.template.spec.containers[].env"
+         sortBy: "name"
 ```
 
 ```bash
@@ -349,32 +353,33 @@ Compare desired state (Git) with actual state (cluster):
 
 ```yaml
 # .kyt.yaml
-ignoreDifferences:
-  # Ignore runtime/ephemeral fields
-  - group: ""
-    kind: "*"
-    jsonPointers:
-      - /metadata/resourceVersion
-      - /metadata/uid
-      - /metadata/generation
-      - /metadata/creationTimestamp
-      - /metadata/managedFields
-      - /status
-
-  # Ignore HPA-managed replicas
-  - group: "apps"
-    kind: "Deployment"
-    managedFieldsManagers:
-      - "kube-controller-manager"
-    jsonPointers:
-      - /spec/replicas
-
-  # Ignore service IPs (assigned by cluster)
-  - group: ""
-    kind: "Service"
-    jsonPointers:
-      - /spec/clusterIP
-      - /spec/clusterIPs
+diff:
+   ignoreDifferences:
+     # Ignore runtime/ephemeral fields
+     - group: ""
+       kind: "*"
+       jsonPointers:
+         - /metadata/resourceVersion
+         - /metadata/uid
+         - /metadata/generation
+         - /metadata/creationTimestamp
+         - /metadata/managedFields
+         - /status
+   
+     # Ignore HPA-managed replicas
+     - group: "apps"
+       kind: "Deployment"
+       managedFieldsManagers:
+         - "kube-controller-manager"
+       jsonPointers:
+         - /spec/replicas
+   
+     # Ignore service IPs (assigned by cluster)
+     - group: ""
+       kind: "Service"
+       jsonPointers:
+         - /spec/clusterIP
+         - /spec/clusterIPs
 ```
 
 ```bash
@@ -391,22 +396,23 @@ Compare manifests with and without Istio sidecar injection:
 
 ```yaml
 # .kyt.yaml
-ignoreDifferences:
-  - group: "apps"
-    kind: "Deployment"
-    jqPathExpressions:
-      # Remove istio-proxy container
-      - .spec.template.spec.containers[] | select(.name == "istio-proxy")
-      
-      # Remove istio-init container
-      - .spec.template.spec.initContainers[] | select(.name == "istio-init")
-      
-      # Remove Istio annotations
-      - .spec.template.metadata.annotations | to_entries[] | select(.key | startswith("sidecar.istio.io/"))
-      - .spec.template.metadata.annotations | to_entries[] | select(.key | startswith("prometheus.io/"))
-      
-      # Remove Istio volumes
-      - .spec.template.spec.volumes[] | select(.name | startswith("istio-"))
+diff:
+   ignoreDifferences:
+     - group: "apps"
+       kind: "Deployment"
+       jqPathExpressions:
+         # Remove istio-proxy container
+         - .spec.template.spec.containers[] | select(.name == "istio-proxy")
+         
+         # Remove istio-init container
+         - .spec.template.spec.initContainers[] | select(.name == "istio-init")
+         
+         # Remove Istio annotations
+         - .spec.template.metadata.annotations | to_entries[] | select(.key | startswith("sidecar.istio.io/"))
+         - .spec.template.metadata.annotations | to_entries[] | select(.key | startswith("prometheus.io/"))
+         
+         # Remove Istio volumes
+         - .spec.template.spec.volumes[] | select(.name | startswith("istio-"))
 ```
 
 ```bash
@@ -420,33 +426,34 @@ Compare staging and production while ignoring expected differences:
 
 ```yaml
 # .kyt.yaml
-ignoreDifferences:
-  # Different replica counts per environment
-  - group: "apps"
-    kind: "Deployment"
-    jsonPointers:
-      - /spec/replicas
-
-  # Different resource limits per environment
-  - group: "apps"
-    kind: "Deployment"
-    jsonPointers:
-      - /spec/template/spec/containers/0/resources/limits
-      - /spec/template/spec/containers/0/resources/requests
-
-  # Environment-specific config
-  - group: ""
-    kind: "ConfigMap"
-    name: "app-config"
-    jsonPointers:
-      - /data/ENVIRONMENT
-      - /data/LOG_LEVEL
-
-  # Environment-specific secrets
-  - group: ""
-    kind: "Secret"
-    jsonPointers:
-      - /data
+diff:
+   ignoreDifferences:
+     # Different replica counts per environment
+     - group: "apps"
+       kind: "Deployment"
+       jsonPointers:
+         - /spec/replicas
+   
+     # Different resource limits per environment
+     - group: "apps"
+       kind: "Deployment"
+       jsonPointers:
+         - /spec/template/spec/containers/0/resources/limits
+         - /spec/template/spec/containers/0/resources/requests
+   
+     # Environment-specific config
+     - group: ""
+       kind: "ConfigMap"
+       name: "app-config"
+       jsonPointers:
+         - /data/ENVIRONMENT
+         - /data/LOG_LEVEL
+   
+     # Environment-specific secrets
+     - group: ""
+       kind: "Secret"
+       jsonPointers:
+         - /data
 ```
 
 ```bash
@@ -459,20 +466,21 @@ Compare current deployment with what will be deployed:
 
 ```yaml
 # .kyt.yaml for pre-deploy checks
-ignoreDifferences:
-  # Allow image tag updates (expected)
-  - group: "apps"
-    kind: "Deployment"
-    jqPathExpressions:
-      - .spec.template.spec.containers[].image
-
-  # Allow replica count changes (HPA managed)
-  - group: "apps"
-    kind: "Deployment"
-    jsonPointers:
-      - /spec/replicas
-
-  # But catch everything else!
+diff:
+   ignoreDifferences:
+     # Allow image tag updates (expected)
+     - group: "apps"
+       kind: "Deployment"
+       jqPathExpressions:
+         - .spec.template.spec.containers[].image
+   
+     # Allow replica count changes (HPA managed)
+     - group: "apps"
+       kind: "Deployment"
+       jsonPointers:
+         - /spec/replicas
+   
+     # But catch everything else!
 ```
 
 ```bash
@@ -524,16 +532,18 @@ kyt diff --exclude job,cronjob,po ./dev ./prod
 #### 1. Select Container by Name
 
 ```yaml
-jqPathExpressions:
-  - .spec.template.spec.containers[] | select(.name == "nginx")
+diff:
+   jqPathExpressions:
+     - .spec.template.spec.containers[] | select(.name == "nginx")
 ```
 
 #### 2. Filter Environment Variables
 
 ```yaml
-jqPathExpressions:
-  # Remove specific env var
-  - .spec.template.spec.containers[].env[] | select(.name == "DEBUG")
+diff:
+   jqPathExpressions:
+     # Remove specific env var
+     - .spec.template.spec.containers[].env[] | select(.name == "DEBUG")
   
   # Remove env vars starting with "TMP_"
   - .spec.template.spec.containers[].env[] | select(.name | startswith("TMP_"))
@@ -542,65 +552,71 @@ jqPathExpressions:
 #### 3. Ignore Image Tags
 
 ```yaml
-jqPathExpressions:
-  # Ignore all :latest tags
-  - .spec.template.spec.containers[] | select(.image | endswith(":latest"))
+diff:
+   jqPathExpressions:
+     # Ignore all :latest tags
+     - .spec.template.spec.containers[] | select(.image | endswith(":latest"))
   
-  # Ignore images from specific registry
-  - .spec.template.spec.containers[] | select(.image | startswith("docker.io/"))
+     # Ignore images from specific registry
+     - .spec.template.spec.containers[] | select(.image | startswith("docker.io/"))
 ```
 
 #### 4. Filter Annotations by Pattern
 
 ```yaml
-jqPathExpressions:
-  # Remove all kubectl annotations
-  - .metadata.annotations | to_entries[] | select(.key | startswith("kubectl."))
+diff:
+   jqPathExpressions:
+     # Remove all kubectl annotations
+     - .metadata.annotations | to_entries[] | select(.key | startswith("kubectl."))
   
-  # Remove timestamp annotations
-  - .metadata.annotations | to_entries[] | select(.key | endswith(".timestamp"))
+     # Remove timestamp annotations
+     - .metadata.annotations | to_entries[] | select(.key | endswith(".timestamp"))
 ```
 
 #### 5. Filter by Label
 
 ```yaml
-jqPathExpressions:
-  # Ignore resources with specific label
-  - select(.metadata.labels["ignore-diff"] == "true")
-  
-  # Ignore version labels
-  - .metadata.labels | to_entries[] | select(.key == "version")
+diff:
+   jqPathExpressions:
+     # Ignore resources with specific label
+     - select(.metadata.labels["ignore-diff"] == "true")
+     
+     # Ignore version labels
+     - .metadata.labels | to_entries[] | select(.key == "version")
 ```
 
 #### 6. Conditional on Resource Properties
 
 ```yaml
-jqPathExpressions:
-  # Only in specific namespace
-  - select(.metadata.namespace == "default") | .spec.replicas
-  
-  # Only for resources with HPA
-  - select(.metadata.annotations["autoscaling.enabled"] == "true") | .spec.replicas
+diff:
+   jqPathExpressions:
+     # Only in specific namespace
+     - select(.metadata.namespace == "default") | .spec.replicas
+     
+     # Only for resources with HPA
+     - select(.metadata.annotations["autoscaling.enabled"] == "true") | .spec.replicas
 ```
 
 #### 7. Array Filtering
 
 ```yaml
-jqPathExpressions:
-  # Remove empty volumes
-  - .spec.template.spec.volumes[] | select(.emptyDir != null)
-  
-  # Remove volumes by name pattern
-  - .spec.template.spec.volumes[] | select(.name | startswith("cache-"))
+diff:
+   jqPathExpressions:
+     # Remove empty volumes
+     - .spec.template.spec.volumes[] | select(.emptyDir != null)
+     
+     # Remove volumes by name pattern
+     - .spec.template.spec.volumes[] | select(.name | startswith("cache-"))
 ```
 
 #### 8. Nested Selections
 
 ```yaml
-jqPathExpressions:
-  # Remove probes from specific containers
-  - .spec.template.spec.containers[] | select(.name == "app") | .livenessProbe
-  - .spec.template.spec.containers[] | select(.name == "app") | .readinessProbe
+diff:
+   jqPathExpressions:
+     # Remove probes from specific containers
+     - .spec.template.spec.containers[] | select(.name == "app") | .livenessProbe
+     - .spec.template.spec.containers[] | select(.name == "app") | .readinessProbe
 ```
 
 ### JQ Tips & Tricks
@@ -721,11 +737,7 @@ for ns in production staging; do
 done
 ```
 
-## Diff Tool Options
-
-### Difftastic (Default)
-
-Beautiful structural diffs with syntax highlighting:
+## Display Options
 
 ```bash
 # Change display mode

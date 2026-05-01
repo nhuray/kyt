@@ -10,64 +10,68 @@ func TestNewDefaultConfig(t *testing.T) {
 	cfg := NewDefaultConfig()
 
 	// Check defaults
-	if !cfg.Normalization.SortKeys {
+	if !cfg.Diff.Normalization.SortKeys {
 		t.Error("Expected sortKeys to be true by default")
 	}
 
-	if cfg.Output.Format != "cli" {
-		t.Errorf("Expected default format to be 'cli', got %s", cfg.Output.Format)
+	if cfg.Diff.CLI.Display != "side-by-side" {
+		t.Errorf("Expected default display to be 'side-by-side', got %s", cfg.Diff.CLI.Display)
 	}
 
-	if !cfg.Output.Colorize {
+	if !cfg.Diff.CLI.Colorize {
 		t.Error("Expected colorize to be true by default")
 	}
 }
 
 func TestConfigMerge(t *testing.T) {
 	cfg1 := &Config{
-		IgnoreDifferences: []ResourceIgnoreDifferences{
-			{
-				Group: "",
-				Kind:  "Service",
-				JSONPointers: []string{
-					"/metadata/labels",
+		Diff: DiffConfig{
+			IgnoreDifferences: []ResourceIgnoreDifferences{
+				{
+					Group: "",
+					Kind:  "Service",
+					JSONPointers: []string{
+						"/metadata/labels",
+					},
 				},
 			},
-		},
-		Output: OutputConfig{
-			Format: "cli",
+			CLI: CLIConfig{
+				Display: "side-by-side",
+			},
 		},
 	}
 
 	cfg2 := &Config{
-		IgnoreDifferences: []ResourceIgnoreDifferences{
-			{
-				Group: "apps",
-				Kind:  "Deployment",
-				JSONPointers: []string{
-					"/spec/replicas",
+		Diff: DiffConfig{
+			IgnoreDifferences: []ResourceIgnoreDifferences{
+				{
+					Group: "apps",
+					Kind:  "Deployment",
+					JSONPointers: []string{
+						"/spec/replicas",
+					},
 				},
 			},
-		},
-		Output: OutputConfig{
-			Format:   "json",
-			Colorize: true,
+			CLI: CLIConfig{
+				Display:  "inline",
+				Colorize: true,
+			},
 		},
 	}
 
 	cfg1.Merge(cfg2)
 
 	// Check that ignore rules were appended
-	if len(cfg1.IgnoreDifferences) != 2 {
-		t.Errorf("Expected 2 ignore rules after merge, got %d", len(cfg1.IgnoreDifferences))
+	if len(cfg1.Diff.IgnoreDifferences) != 2 {
+		t.Errorf("Expected 2 ignore rules after merge, got %d", len(cfg1.Diff.IgnoreDifferences))
 	}
 
-	// Check that output config was overridden
-	if cfg1.Output.Format != "json" {
-		t.Errorf("Expected format to be 'json' after merge, got %s", cfg1.Output.Format)
+	// Check that CLI config was overridden
+	if cfg1.Diff.CLI.Display != "inline" {
+		t.Errorf("Expected display to be 'inline' after merge, got %s", cfg1.Diff.CLI.Display)
 	}
 
-	if !cfg1.Output.Colorize {
+	if !cfg1.Diff.CLI.Colorize {
 		t.Error("Expected colorize to be true after merge")
 	}
 }
@@ -184,15 +188,16 @@ func TestResourceIgnoreDifferencesMatchesResource(t *testing.T) {
 
 func TestLoaderLoadBytes(t *testing.T) {
 	yaml := `
-ignoreDifferences:
-  - group: "apps"
-    kind: "Deployment"
-    jsonPointers:
-      - /spec/replicas
+diff:
+  diff:
+  ignoreDifferences:
+    - group: "apps"
+      kind: "Deployment"
+      jsonPointers:
+        - /spec/replicas
 
-output:
-  format: json
-  diffTool: diff
+  cli:
+    display: inline
 `
 
 	loader := NewLoader()
@@ -201,16 +206,16 @@ output:
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	if len(cfg.IgnoreDifferences) != 1 {
-		t.Errorf("Expected 1 ignore rule, got %d", len(cfg.IgnoreDifferences))
+	if len(cfg.Diff.IgnoreDifferences) != 1 {
+		t.Errorf("Expected 1 ignore rule, got %d", len(cfg.Diff.IgnoreDifferences))
 	}
 
-	if cfg.IgnoreDifferences[0].Group != "apps" {
-		t.Errorf("Expected group 'apps', got %s", cfg.IgnoreDifferences[0].Group)
+	if cfg.Diff.IgnoreDifferences[0].Group != "apps" {
+		t.Errorf("Expected group 'apps', got %s", cfg.Diff.IgnoreDifferences[0].Group)
 	}
 
-	if cfg.Output.Format != "json" {
-		t.Errorf("Expected format 'json', got %s", cfg.Output.Format)
+	if cfg.Diff.CLI.Display != "inline" {
+		t.Errorf("Expected display 'inline', got %s", cfg.Diff.CLI.Display)
 	}
 }
 
@@ -219,7 +224,8 @@ func TestLoaderLoadFile(t *testing.T) {
 	configPath := filepath.Join(tmpDir, ".kyt.yaml")
 
 	content := `
-ignoreDifferences:
+diff:
+  ignoreDifferences:
   - group: ""
     kind: "Service"
     jsonPointers:
@@ -237,8 +243,8 @@ ignoreDifferences:
 		t.Fatalf("Failed to load config file: %v", err)
 	}
 
-	if len(cfg.IgnoreDifferences) != 1 {
-		t.Errorf("Expected 1 ignore rule, got %d", len(cfg.IgnoreDifferences))
+	if len(cfg.Diff.IgnoreDifferences) != 1 {
+		t.Errorf("Expected 1 ignore rule, got %d", len(cfg.Diff.IgnoreDifferences))
 	}
 }
 
@@ -252,15 +258,16 @@ func TestLoaderLoadDefault(t *testing.T) {
 		t.Fatalf("Failed to load default config: %v", err)
 	}
 
-	if cfg.Output.Format != "cli" {
-		t.Errorf("Expected default format 'cli', got %s", cfg.Output.Format)
+	if cfg.Diff.CLI.Display != "side-by-side" {
+		t.Errorf("Expected default display 'side-by-side', got %s", cfg.Diff.CLI.Display)
 	}
 
 	// Test with existing config file
 	configPath := filepath.Join(tmpDir, DefaultConfigFileName)
 	content := `
-output:
-  format: json
+diff:
+  cli:
+    display: inline
 `
 	err = os.WriteFile(configPath, []byte(content), 0644)
 	if err != nil {
@@ -272,8 +279,8 @@ output:
 		t.Fatalf("Failed to load default config: %v", err)
 	}
 
-	if cfg.Output.Format != "json" {
-		t.Errorf("Expected format 'json', got %s", cfg.Output.Format)
+	if cfg.Diff.CLI.Display != "inline" {
+		t.Errorf("Expected display 'inline', got %s", cfg.Diff.CLI.Display)
 	}
 }
 
@@ -282,7 +289,8 @@ func TestLoaderLoadMultiple(t *testing.T) {
 
 	config1Path := filepath.Join(tmpDir, "config1.yaml")
 	config1 := `
-ignoreDifferences:
+diff:
+  ignoreDifferences:
   - group: ""
     kind: "Service"
     jsonPointers:
@@ -291,7 +299,8 @@ ignoreDifferences:
 
 	config2Path := filepath.Join(tmpDir, "config2.yaml")
 	config2 := `
-ignoreDifferences:
+diff:
+  ignoreDifferences:
   - group: "apps"
     kind: "Deployment"
     jsonPointers:
@@ -315,8 +324,8 @@ ignoreDifferences:
 	}
 
 	// Should have both ignore rules
-	if len(cfg.IgnoreDifferences) != 2 {
-		t.Errorf("Expected 2 ignore rules, got %d", len(cfg.IgnoreDifferences))
+	if len(cfg.Diff.IgnoreDifferences) != 2 {
+		t.Errorf("Expected 2 ignore rules, got %d", len(cfg.Diff.IgnoreDifferences))
 	}
 }
 
@@ -331,8 +340,9 @@ func TestLoaderSearchConfig(t *testing.T) {
 	// Create config in parent directory
 	configPath := filepath.Join(tmpDir, DefaultConfigFileName)
 	content := `
-output:
-  format: json
+diff:
+  cli:
+    display: inline
 `
 	err = os.WriteFile(configPath, []byte(content), 0644)
 	if err != nil {
@@ -349,8 +359,8 @@ output:
 		t.Errorf("Expected to find config at %s, found at %s", configPath, foundPath)
 	}
 
-	if cfg.Output.Format != "json" {
-		t.Errorf("Expected format 'json', got %s", cfg.Output.Format)
+	if cfg.Diff.CLI.Display != "inline" {
+		t.Errorf("Expected display 'inline', got %s", cfg.Diff.CLI.Display)
 	}
 }
 
@@ -359,17 +369,19 @@ func TestLoaderSave(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "test-config.yaml")
 
 	cfg := &Config{
-		IgnoreDifferences: []ResourceIgnoreDifferences{
-			{
-				Group: "apps",
-				Kind:  "Deployment",
-				JSONPointers: []string{
-					"/spec/replicas",
+		Diff: DiffConfig{
+			IgnoreDifferences: []ResourceIgnoreDifferences{
+				{
+					Group: "apps",
+					Kind:  "Deployment",
+					JSONPointers: []string{
+						"/spec/replicas",
+					},
 				},
 			},
-		},
-		Output: OutputConfig{
-			Format: "json",
+			CLI: CLIConfig{
+				Display: "inline",
+			},
 		},
 	}
 
@@ -390,7 +402,7 @@ func TestLoaderSave(t *testing.T) {
 		t.Fatalf("Failed to load saved config: %v", err)
 	}
 
-	if loadedCfg.Output.Format != "json" {
-		t.Errorf("Expected format 'json', got %s", loadedCfg.Output.Format)
+	if loadedCfg.Diff.CLI.Display != "inline" {
+		t.Errorf("Expected display 'inline', got %s", loadedCfg.Diff.CLI.Display)
 	}
 }
