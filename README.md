@@ -21,7 +21,7 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 - 🎨 **JQ Path Expressions**: Powerful filtering with wildcards and conditionals
 - 📊 **Multiple Output Formats**: CLI (with colors), JSON
 - 🎯 **Smart Normalization**: Removes managed fields, applies ignore rules, sorts keys (used by `diff`)
-- 🔧 **Lint & Format**: Sort keys consistently with `kyt fmt`
+- 🔧 **Format**: Sort keys consistently with `kyt fmt`
 - 🔀 **Pipe-friendly**: Works seamlessly with kubectl, kustomize, helm
 - 🤖 **Smart Similarity Matching**: Automatically detects renamed resources
 - ⚡ **Fast & Reliable**: Written in Go with 60+ passing tests
@@ -128,7 +128,8 @@ kyt version
 
 ## Configuration
 
-The `diff` command uses `.kyt.yaml` for normalization rules (removing fields, ignore rules). The tool searches for this file in the current directory and parent directories. The `fmt` command does not use configuration - it only sorts keys.
+The `diff` command uses `.kyt.yaml` for normalization rules (removing fields, ignore rules). The tool searches for this file in the current directory and parent directories. 
+The `fmt` command does not use configuration - it only sorts keys.
 
 ```yaml
 # .kyt.yaml
