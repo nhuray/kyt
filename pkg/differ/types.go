@@ -111,19 +111,25 @@ type DiffOptions struct {
 	// SimilarityThreshold is the minimum similarity score (0.0-1.0) required for matching
 	// Default: 0.7 (70% similarity)
 	SimilarityThreshold float64
+
+	// StringSimilarityThreshold is the minimum string length for fuzzy matching
+	// Strings longer than this will use Levenshtein distance for similarity
+	// Default: 100 characters
+	StringSimilarityThreshold int
 }
 
 // NewDefaultDiffOptions returns DiffOptions with sensible defaults
 func NewDefaultDiffOptions() *DiffOptions {
 	return &DiffOptions{
-		UseDifftastic:            true,
-		UseTreeSitter:            true, // Enable tree-sitter fallback by default
-		ColorOutput:              true,
-		ContextLines:             3,
-		DifftasticDisplay:        "side-by-side",
-		DifftasticWidth:          0, // Auto-detect terminal width
-		TreeSitterWidth:          120,
-		EnableSimilarityMatching: true,
-		SimilarityThreshold:      0.7,
+		UseDifftastic:             true,
+		UseTreeSitter:             true, // Enable tree-sitter fallback by default
+		ColorOutput:               true,
+		ContextLines:              3,
+		DifftasticDisplay:         "side-by-side",
+		DifftasticWidth:           0, // Auto-detect terminal width
+		TreeSitterWidth:           120,
+		EnableSimilarityMatching:  true,
+		SimilarityThreshold:       0.7,
+		StringSimilarityThreshold: 100, // Enable fuzzy matching for strings > 100 chars
 	}
 }

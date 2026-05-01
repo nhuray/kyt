@@ -21,7 +21,7 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 - 🎨 **JQ Path Expressions**: Powerful filtering with wildcards and conditionals
 - 📊 **Multiple Output Formats**: CLI (with colors), JSON
 - 🎯 **Smart Normalization**: Sorts keys, removes managed fields, applies ignore rules
-- 🔧 **Lint & Format**: Format manifests with `ky fmt`
+- 🔧 **Lint & Format**: Format manifests with `kyt fmt`
 - 🔀 **Pipe-friendly**: Works seamlessly with kubectl, kustomize, helm
 - 🤖 **Smart Similarity Matching**: Automatically detects renamed resources
 - ⚡ **Fast & Reliable**: Written in Go with 60+ passing tests
@@ -63,7 +63,7 @@ kustomize build . | kyt fmt | kubectl apply -f -
 
 ## Commands
 
-### `ky diff` - Compare manifests
+### `kyt diff` - Compare manifests
 
 Compare two Kubernetes manifest files or directories with smart ignore rules.
 
@@ -98,7 +98,7 @@ kyt diff --display inline source.yaml target.yaml
 - `1` - Differences detected
 - `2` - Error (invalid YAML, missing files, etc.)
 
-### `ky fmt` - Format manifests
+### `kyt fmt` - Format manifests
 
 Format Kubernetes manifests by applying transformations like sorting keys and arrays.
 
@@ -120,7 +120,7 @@ kustomize build . | kyt fmt | kubectl apply -f -
 helm template . | kyt fmt > formatted.yaml
 ```
 
-### `ky version` - Version information
+### `kyt version` - Version information
 
 ```bash
 kyt version

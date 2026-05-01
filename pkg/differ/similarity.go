@@ -15,17 +15,29 @@ type SimilarityScorer struct {
 	KeyOnlyMatch      float64
 	ArrayMatch        float64
 	MissingFieldScore float64
+
+	// StringSimilarityThreshold is the minimum string length for fuzzy matching
+	// Strings longer than this will use Levenshtein distance
+	StringSimilarityThreshold int
 }
 
 // NewDefaultSimilarityScorer returns a scorer with default weights
 func NewDefaultSimilarityScorer() *SimilarityScorer {
 	return &SimilarityScorer{
-		ExactMatchScore:   1.0,
-		StructuralMatch:   0.8,
-		KeyOnlyMatch:      0.3,
-		ArrayMatch:        0.7,
-		MissingFieldScore: 0.0,
+		ExactMatchScore:           1.0,
+		StructuralMatch:           0.8,
+		KeyOnlyMatch:              0.3,
+		ArrayMatch:                0.7,
+		MissingFieldScore:         0.0,
+		StringSimilarityThreshold: 100, // Enable fuzzy matching for strings > 100 chars
 	}
+}
+
+// NewSimilarityScorerWithThreshold returns a scorer with custom string similarity threshold
+func NewSimilarityScorerWithThreshold(threshold int) *SimilarityScorer {
+	scorer := NewDefaultSimilarityScorer()
+	scorer.StringSimilarityThreshold = threshold
+	return scorer
 }
 
 // CompareResources computes similarity between two Kubernetes resources
@@ -45,6 +57,13 @@ func (s *SimilarityScorer) CompareResources(a, b *unstructured.Unstructured) flo
 		if aOk && bOk {
 			return s.CompareSpecs(aSpecMap, bSpecMap)
 		}
+	}
+
+	// For ConfigMaps and Secrets, use weighted comparison including metadata
+	// This gives more weight to data fields than to metadata differences
+	kind := a.GetKind()
+	if kind == "ConfigMap" || kind == "Secret" {
+		return s.compareConfigMapOrSecret(aObj, bObj, kind)
 	}
 
 	// Fallback: compare full object excluding metadata
@@ -143,6 +162,191 @@ func (s *SimilarityScorer) compareObjects(a, b map[string]interface{}) float64 {
 	return totalScore / float64(len(allKeys))
 }
 
+// compareConfigMapOrSecret compares ConfigMaps/Secrets with weighted comparison
+// Includes metadata fields but gives higher weight to data fields based on size
+func (s *SimilarityScorer) compareConfigMapOrSecret(a, b map[string]interface{}, kind string) float64 {
+	// Calculate weights for all fields including metadata
+	weights := s.calculateConfigMapWeights(a, b, kind)
+
+	totalScore := 0.0
+	totalWeight := 0.0
+
+	// Collect all unique keys (including metadata subfields)
+	allKeys := make(map[string]bool)
+	for k := range weights {
+		allKeys[k] = true
+	}
+
+	for key := range allKeys {
+		weight := weights[key]
+		totalWeight += weight
+
+		var score float64
+		var exists bool
+
+		// Special handling for metadata subfields
+		switch key {
+		case "metadata.name":
+			aName, aExists, _ := unstructured.NestedString(a, "metadata", "name")
+			bName, bExists, _ := unstructured.NestedString(b, "metadata", "name")
+
+			if !aExists || !bExists {
+				score = s.MissingFieldScore
+			} else if aName == bName {
+				score = s.ExactMatchScore
+			} else {
+				score = s.KeyOnlyMatch // Names different but key exists
+			}
+			exists = true
+
+		case "metadata.labels":
+			aLabels, aExists, _ := unstructured.NestedMap(a, "metadata", "labels")
+			bLabels, bExists, _ := unstructured.NestedMap(b, "metadata", "labels")
+
+			if !aExists || !bExists {
+				score = s.MissingFieldScore
+			} else {
+				// Compare labels as maps
+				score = s.compareObjects(aLabels, bLabels) * s.StructuralMatch
+			}
+			exists = true
+
+		default:
+			// Top-level fields (data, immutable, etc.)
+			aVal, aExists := a[key]
+			bVal, bExists := b[key]
+
+			if !aExists || !bExists {
+				score = s.MissingFieldScore
+				exists = aExists || bExists
+			} else {
+				// Both exist - compare values
+				// For data fields, compare directly without structural weight discount
+				if key == "data" || key == "binaryData" || key == "stringData" {
+					// Data fields - compare as maps but don't apply structural discount
+					if aMap, aOk := aVal.(map[string]interface{}); aOk {
+						if bMap, bOk := bVal.(map[string]interface{}); bOk {
+							score = s.compareObjects(aMap, bMap)
+						} else {
+							score = s.KeyOnlyMatch
+						}
+					} else {
+						score = s.compareValues(aVal, bVal)
+					}
+				} else {
+					score = s.compareValues(aVal, bVal)
+				}
+				exists = true
+			}
+		}
+
+		if exists {
+			totalScore += score * weight
+		}
+	}
+
+	if totalWeight == 0 {
+		return s.ExactMatchScore
+	}
+
+	return totalScore / totalWeight
+}
+
+// calculateConfigMapWeights computes weights for ConfigMap/Secret fields
+// Gives higher weight to data fields based on size, lower weight to metadata
+func (s *SimilarityScorer) calculateConfigMapWeights(a, b map[string]interface{}, kind string) map[string]float64 {
+	weights := make(map[string]float64)
+
+	// Data field names based on kind
+	dataFieldCandidates := make(map[string]bool)
+	switch kind {
+	case "ConfigMap":
+		dataFieldCandidates["data"] = true
+		dataFieldCandidates["binaryData"] = true
+	case "Secret":
+		dataFieldCandidates["data"] = true
+		dataFieldCandidates["stringData"] = true
+	}
+
+	// Determine which data fields actually exist
+	dataFields := make(map[string]bool)
+	for field := range dataFieldCandidates {
+		if _, existsA := a[field]; existsA {
+			dataFields[field] = true
+		}
+		if _, existsB := b[field]; existsB {
+			dataFields[field] = true
+		}
+	}
+
+	// Calculate total size of data fields
+	dataSize := 0
+	for field := range dataFields {
+		if val, exists := a[field]; exists {
+			dataSize += calculateMapSize(val)
+		}
+		if val, exists := b[field]; exists {
+			dataSize += calculateMapSize(val)
+		}
+	}
+
+	// Average the sizes from both objects
+	if dataSize > 0 {
+		dataSize = dataSize / 2
+	}
+
+	// Calculate dynamic weight for data fields
+	// Formula: min(0.9, 0.5 + (dataSize / 10000))
+	dataWeight := 0.5
+	if dataSize > 0 {
+		dataWeight = 0.5 + (float64(dataSize) / 10000.0)
+		if dataWeight > 0.9 {
+			dataWeight = 0.9
+		}
+	}
+
+	// Assign weights ONLY to data fields that exist
+	for field := range dataFields {
+		weights[field] = dataWeight
+	}
+
+	// Check if metadata fields exist
+	hasMetadata := false
+	if _, exists := a["metadata"]; exists {
+		hasMetadata = true
+	}
+	if _, exists := b["metadata"]; exists {
+		hasMetadata = true
+	}
+
+	// Only include metadata fields if metadata exists
+	if hasMetadata {
+		remainingWeight := 1.0 - dataWeight
+		weights["metadata.name"] = remainingWeight * 0.4   // 40% of remaining
+		weights["metadata.labels"] = remainingWeight * 0.6 // 60% of remaining
+	}
+
+	return weights
+}
+
+// calculateMapSize calculates the total size of strings in a map
+func calculateMapSize(val interface{}) int {
+	size := 0
+
+	switch v := val.(type) {
+	case map[string]interface{}:
+		for _, value := range v {
+			if str, ok := value.(string); ok {
+				size += len(str)
+			} else if bytes, ok := value.([]byte); ok {
+				size += len(bytes)
+			}
+		}
+	}
+
+	return size
+}
+
 // compareValues compares two values of any type
 func (s *SimilarityScorer) compareValues(a, b interface{}) float64 {
 	if a == nil && b == nil {
@@ -182,8 +386,25 @@ func (s *SimilarityScorer) compareValues(a, b interface{}) float64 {
 	case reflect.Slice, reflect.Array:
 		return s.compareArrays(a, b)
 
+	case reflect.String:
+		// Use fuzzy string matching for long strings
+		aStr, aOk := a.(string)
+		bStr, bOk := b.(string)
+		if aOk && bOk {
+			// Check if strings are long enough for fuzzy matching
+			// Note: threshold of 0 disables fuzzy matching
+			if s.StringSimilarityThreshold > 0 && (len(aStr) >= s.StringSimilarityThreshold || len(bStr) >= s.StringSimilarityThreshold) {
+				// Use Levenshtein-based similarity
+				similarity := stringSimilarity(aStr, bStr)
+				// Scale by structural match weight
+				return similarity * s.StructuralMatch
+			}
+		}
+		// Short strings or type mismatch - treat as key-only match
+		return s.KeyOnlyMatch
+
 	default:
-		// Primitives (string, int, bool, etc.) - already checked equality
+		// Primitives (int, bool, etc.) - already checked equality
 		return s.KeyOnlyMatch
 	}
 }

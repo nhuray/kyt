@@ -82,6 +82,11 @@ type OutputConfig struct {
 
 	// ContextLines is the number of context lines for unified diff (default: 3)
 	ContextLines int `yaml:"contextLines,omitempty"`
+
+	// StringSimilarityThreshold is the minimum string length to trigger fuzzy matching
+	// Strings longer than this will use Levenshtein distance for similarity
+	// Default: 100 characters
+	StringSimilarityThreshold int `yaml:"stringSimilarityThreshold,omitempty"`
 }
 
 // NewDefaultConfig returns a Config with sensible defaults
@@ -100,11 +105,12 @@ func NewDefaultConfig() *Config {
 			},
 		},
 		Output: OutputConfig{
-			Format:        "cli",
-			DiffTool:      "auto", // Changed from "difft" to "auto" for better UX
-			Colorize:      true,
-			ShowUnchanged: false,
-			ContextLines:  3,
+			Format:                    "cli",
+			DiffTool:                  "auto", // Changed from "difft" to "auto" for better UX
+			Colorize:                  true,
+			ShowUnchanged:             false,
+			ContextLines:              3,
+			StringSimilarityThreshold: 100, // Enable fuzzy matching for strings > 100 chars
 		},
 	}
 }
@@ -137,6 +143,9 @@ func (c *Config) Merge(other *Config) {
 	}
 	if other.Output.ContextLines > 0 {
 		c.Output.ContextLines = other.Output.ContextLines
+	}
+	if other.Output.StringSimilarityThreshold > 0 {
+		c.Output.StringSimilarityThreshold = other.Output.StringSimilarityThreshold
 	}
 }
 
