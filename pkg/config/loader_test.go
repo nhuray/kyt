@@ -18,10 +18,6 @@ func TestNewDefaultConfig(t *testing.T) {
 		t.Errorf("Expected default format to be 'cli', got %s", cfg.Output.Format)
 	}
 
-	if cfg.Output.DiffTool != "auto" {
-		t.Errorf("Expected default diffTool to be 'auto', got %s", cfg.Output.DiffTool)
-	}
-
 	if !cfg.Output.Colorize {
 		t.Error("Expected colorize to be true by default")
 	}
@@ -39,8 +35,7 @@ func TestConfigMerge(t *testing.T) {
 			},
 		},
 		Output: OutputConfig{
-			Format:   "cli",
-			DiffTool: "difft",
+			Format: "cli",
 		},
 	}
 
@@ -374,8 +369,7 @@ func TestLoaderSave(t *testing.T) {
 			},
 		},
 		Output: OutputConfig{
-			Format:   "json",
-			DiffTool: "diff",
+			Format: "json",
 		},
 	}
 

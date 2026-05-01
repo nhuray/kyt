@@ -21,7 +21,7 @@ The `diff` command solves a common problem: comparing Kubernetes manifests produ
 1. **Normalizing both inputs** - Sorts keys, removes default fields
 2. **Applying ignore rules** - Uses JSON Pointers and JQ expressions to ignore specific differences
 3. **Smart resource matching** - Automatically pairs resources even if they've been renamed
-4. **Beautiful output** - Uses difftastic for structural, syntax-aware diffs
+4. **Beautiful output** - Uses tree-sitter for structural, syntax-aware diffs
 
 ## Usage
 
@@ -48,11 +48,10 @@ kyt diff <left> <right> [flags]
 
 Flags:
   -c, --config string      config file (default: .kyt.yaml)
-  -o, --output string      output format: cli, json (default "cli")
+  -o, --output string      output format: cli, json, yaml, diff (default "cli")
       --show-identical     show resources with no differences
       --exact-match        disable similarity matching (exact name match only)
-      --diff-tool string   diff tool: auto, difft, treesitter, diff (default "auto")
-      --display string     difftastic display mode: side-by-side, inline (default "side-by-side")
+      --display string     display mode: side-by-side, inline (default "side-by-side")
       --include string     comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')
       --exclude string     comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')
   -v, --verbose            verbose output to stderr
@@ -127,7 +126,7 @@ Modified Resources (2):
   • Deployment.apps/nginx
   • Service/nginx
 
-[... detailed diffs using difftastic ...]
+[... detailed diffs using tree-sitter ...]
 ```
 
 #### JSON
@@ -202,8 +201,7 @@ normalization:
 
 # Output options
 output:
-  format: cli            # cli or json
-  diffTool: auto         # auto, difft, treesitter, diff
+  format: cli            # cli, json, yaml, diff
   colorize: true
   showUnchanged: false
   contextLines: 3
@@ -730,35 +728,12 @@ done
 Beautiful structural diffs with syntax highlighting:
 
 ```bash
-kyt diff --diff-tool difft left.yaml right.yaml
-
 # Change display mode
 kyt diff --display inline left.yaml right.yaml
 kyt diff --display side-by-side left.yaml right.yaml
-```
 
-### Tree-sitter (Built-in Fallback)
-
-Go-native structural diff (no external dependencies):
-
-```bash
-kyt diff --diff-tool treesitter left.yaml right.yaml
-```
-
-### Unified Diff
-
-Traditional diff format:
-
-```bash
-kyt diff --diff-tool diff left.yaml right.yaml
-```
-
-### Auto (Recommended)
-
-Tries difftastic → tree-sitter → unified diff:
-
-```bash
-kyt diff --diff-tool auto left.yaml right.yaml
+# Output as unified diff format
+kyt diff --output diff left.yaml right.yaml
 ```
 
 ## Best Practices

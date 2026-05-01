@@ -157,7 +157,7 @@ func (r *CLIReporter) printModified(w io.Writer, modified []differ.ResourceDiff,
 			_, _ = fmt.Fprintf(w, "───────────────────────────────────────────────────────────────\n\n")
 		}
 
-		// Print diff (already contains color codes from difftastic if enabled)
+		// Print diff
 		_, _ = fmt.Fprint(w, diff.DiffText)
 		_, _ = fmt.Fprintln(w)
 	}

@@ -40,7 +40,7 @@ type ResourceDiff struct {
 	// Target is the normalized target resource
 	Target *unstructured.Unstructured
 
-	// DiffText is the formatted diff output (from difftastic or unified diff)
+	// DiffText is the formatted diff output from tree-sitter or unified diff
 	DiffText string
 
 	// DiffLines contains the number of lines that differ
@@ -78,27 +78,23 @@ func (r *DiffResult) HasDifferences() bool {
 
 // DiffOptions configures how the diff is performed
 type DiffOptions struct {
-	// UseDifftastic enables difftastic for diff generation
-	// If false or difftastic is not available, falls back to tree-sitter
-	UseDifftastic bool
-
-	// UseTreeSitter enables Go-native tree-sitter diff generation
-	// Used as fallback when difftastic is unavailable, or can be forced
+	// UseTreeSitter enables Go-native tree-sitter diff generation (default: true)
 	UseTreeSitter bool
 
-	// ColorOutput enables color output (applicable for difftastic and tree-sitter)
+	// ColorOutput enables color output for tree-sitter
 	ColorOutput bool
 
 	// ContextLines is the number of context lines for unified diff
 	ContextLines int
 
-	// DifftasticDisplay is the display mode for difftastic
-	// Options: "side-by-side", "side-by-side-show-both", "inline"
-	DifftasticDisplay string
+	// DisplayMode is the display mode: side-by-side, inline (default: side-by-side)
+	// Only applies when using tree-sitter format
+	DisplayMode string
 
-	// DifftasticWidth is the terminal width for difftastic output
-	// If 0, auto-detects terminal width. Default: 0 (auto-detect)
-	DifftasticWidth int
+	// OutputFormat controls the diff format: tree-sitter (default), unified
+	// tree-sitter: Uses tree-sitter for syntax-aware diffs
+	// unified: Uses standard unified diff format
+	OutputFormat string
 
 	// TreeSitterWidth is the terminal width for tree-sitter output
 	// Default: 120
@@ -121,12 +117,11 @@ type DiffOptions struct {
 // NewDefaultDiffOptions returns DiffOptions with sensible defaults
 func NewDefaultDiffOptions() *DiffOptions {
 	return &DiffOptions{
-		UseDifftastic:             true,
-		UseTreeSitter:             true, // Enable tree-sitter fallback by default
+		UseTreeSitter:             true,
 		ColorOutput:               true,
 		ContextLines:              3,
-		DifftasticDisplay:         "side-by-side",
-		DifftasticWidth:           0, // Auto-detect terminal width
+		DisplayMode:               "side-by-side",
+		OutputFormat:              "tree-sitter",
 		TreeSitterWidth:           120,
 		EnableSimilarityMatching:  true,
 		SimilarityThreshold:       0.7,

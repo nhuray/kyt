@@ -56,8 +56,7 @@ normalization:
 
 # Output options
 output:
-  format: cli # cli, json, diff, html
-  diffTool: difft # difft (difftastic), diff (unified), none
+  format: cli # cli, json, yaml, diff
   colorize: true # Enable colored output
   showUnchanged: false # Show resources with no differences
   contextLines: 3 # Context lines for unified diff

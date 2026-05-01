@@ -232,16 +232,14 @@ func TestValidatorValidateOutputConfig(t *testing.T) {
 		{
 			name: "valid cli format",
 			output: OutputConfig{
-				Format:   "cli",
-				DiffTool: "difft",
+				Format: "cli",
 			},
 			expectError: false,
 		},
 		{
 			name: "valid json format",
 			output: OutputConfig{
-				Format:   "json",
-				DiffTool: "none",
+				Format: "json",
 			},
 			expectError: false,
 		},
@@ -249,7 +247,6 @@ func TestValidatorValidateOutputConfig(t *testing.T) {
 			name: "valid with context lines",
 			output: OutputConfig{
 				Format:       "diff",
-				DiffTool:     "diff",
 				ContextLines: 5,
 			},
 			expectError: false,
@@ -258,14 +255,6 @@ func TestValidatorValidateOutputConfig(t *testing.T) {
 			name: "invalid format",
 			output: OutputConfig{
 				Format: "invalid",
-			},
-			expectError: true,
-		},
-		{
-			name: "invalid diff tool",
-			output: OutputConfig{
-				Format:   "cli",
-				DiffTool: "invalid",
 			},
 			expectError: true,
 		},
@@ -313,8 +302,7 @@ func TestValidatorValidateConfig(t *testing.T) {
 					},
 				},
 				Output: OutputConfig{
-					Format:   "cli",
-					DiffTool: "difft",
+					Format: "cli",
 				},
 			},
 			expectError: false,

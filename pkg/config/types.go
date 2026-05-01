@@ -67,12 +67,8 @@ type ArraySortConfig struct {
 
 // OutputConfig controls the output format and styling
 type OutputConfig struct {
-	// Format is the output format: "cli", "json", "diff", "html"
+	// Format is the output format: "cli", "json", "yaml", "diff"
 	Format string `yaml:"format"`
-
-	// DiffTool is the diff tool to use: "auto" (try all), "difft" (difftastic only),
-	// "treesitter" (Go-native tree-sitter), "diff" (unified diff)
-	DiffTool string `yaml:"diffTool"`
 
 	// Colorize enables colored output (only for cli/diff formats)
 	Colorize bool `yaml:"colorize"`
@@ -106,7 +102,6 @@ func NewDefaultConfig() *Config {
 		},
 		Output: OutputConfig{
 			Format:                    "cli",
-			DiffTool:                  "auto", // Changed from "difft" to "auto" for better UX
 			Colorize:                  true,
 			ShowUnchanged:             false,
 			ContextLines:              3,
@@ -131,9 +126,6 @@ func (c *Config) Merge(other *Config) {
 	// Output config: other takes precedence
 	if other.Output.Format != "" {
 		c.Output.Format = other.Output.Format
-	}
-	if other.Output.DiffTool != "" {
-		c.Output.DiffTool = other.Output.DiffTool
 	}
 	if other.Output.Colorize {
 		c.Output.Colorize = true
