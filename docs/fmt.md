@@ -1,6 +1,6 @@
 # fmt Command Guide
 
-The `kyt fmt` command formats Kubernetes manifests by applying transformations like sorting keys, sorting arrays, removing default fields, and applying custom ignore rules.
+The `kyt fmt` command formats Kubernetes manifests by sorting keys alphabetically to ensure consistent YAML structure.
 
 ## Table of Contents
 
@@ -12,21 +12,29 @@ The `kyt fmt` command formats Kubernetes manifests by applying transformations l
 
 ## Overview
 
-The `fmt` command normalizes Kubernetes YAML manifests to ensure consistent formatting. This is useful for:
-
-- **Cleaning up generated manifests** - Remove noise from Helm/Kustomize output
-- **Standardizing YAML files** - Ensure consistent formatting across your repository
-- **Pre-commit formatting** - Automatically format manifests before committing
-- **Preparing for comparison** - Normalize manifests before diffing to reduce noise
+The `fmt` command formats Kubernetes YAML manifests by sorting keys alphabetically. This ensures consistent field ordering and makes manifests easier to read and compare.
 
 ### What Does Formatting Do?
 
-By default, `kyt fmt` applies the following transformations:
+`kyt fmt` applies one transformation:
 
-1. **Sorts keys alphabetically** - Ensures consistent field ordering
-2. **Removes default fields** - Strips out fields like `status`, `managedFields`, timestamps
-3. **Applies ignore rules** - Uses your `.kyt.yaml` configuration to remove or transform specific fields
-4. **Normalizes YAML structure** - Consistent indentation and spacing
+1. **Sorts keys alphabetically** - Ensures consistent field ordering throughout the YAML structure
+
+### Formatting vs. Normalization
+
+It's important to understand the difference between `fmt` and `diff`:
+
+- **`kyt fmt`** - Only sorts keys alphabetically. Does not remove fields or apply ignore rules. Use this when you want to standardize YAML formatting without changing content.
+- **`kyt diff`** - Performs full normalization (removes default fields, applies ignore rules, sorts keys) before comparison. Use this when you want to compare manifests and ignore irrelevant differences.
+
+### Use Cases
+
+The `fmt` command is useful for:
+
+- **Standardizing YAML files** - Ensure consistent key ordering across your repository
+- **Pre-commit formatting** - Automatically sort keys before committing
+- **Improving readability** - Make YAML files easier to read with consistent ordering
+- **Git diffs** - Reduce noise in version control by maintaining consistent ordering
 
 ## Usage
 
@@ -56,9 +64,7 @@ Flags:
   -h, --help    help for fmt
   -w, --write   write formatted output back to source files
 
-Global Flags:
-  -c, --config string   config file (default: .kyt.yaml)
-  -v, --verbose         verbose output to stderr
+Note: The fmt command does not use configuration files. It only sorts keys alphabetically.
 ```
 
 ### Integration with Other Tools
@@ -86,276 +92,52 @@ done
 
 ## Configuration
 
-The `fmt` command uses the `.kyt.yaml` configuration file to determine how to format manifests. The configuration is automatically detected in the current directory or parent directories.
+**The `fmt` command does not use configuration files.** It only sorts keys alphabetically and does not remove fields or apply ignore rules.
 
-### Configuration File Location
+If you need to remove fields, apply ignore rules, or perform other transformations, use the `kyt diff` command which applies full normalization before comparison.
 
+### Want to Remove Fields or Apply Rules?
+
+If you need advanced normalization (removing fields, applying ignore rules), you have two options:
+
+1. **Use `kyt diff`** - The diff command normalizes both sides before comparison
+2. **Process with other tools** - Pipe through tools like `yq` or `jq` for custom transformations
+
+For example, to remove status fields:
 ```bash
-# Explicit config file
-kyt fmt -c /path/to/.kyt.yaml deployment.yaml
-
-# Auto-detected (searches current and parent directories)
-kyt fmt deployment.yaml  # looks for .kyt.yaml
-```
-
-### Normalization Configuration
-
-The `normalization` section controls how manifests are formatted:
-
-```yaml
-# .kyt.yaml
-normalization:
-  # Sort object keys alphabetically (default: true)
-  sortKeys: true
-
-  # Sort arrays where order doesn't matter
-  sortArrays:
-    - path: ".spec.template.spec.containers[].ports"
-      sortBy: "containerPort"
-    - path: ".spec.template.spec.containers[].env"
-      sortBy: "name"
-    - path: ".spec.template.spec.volumes"
-      sortBy: "name"
-    - path: ".spec.template.spec.containers[].volumeMounts"
-      sortBy: "name"
-
-  # Remove fields that shouldn't be included
-  removeDefaultFields:
-    - "/status"
-    - "/metadata/managedFields"
-    - "/metadata/creationTimestamp"
-    - "/metadata/generation"
-    - "/metadata/resourceVersion"
-    - "/metadata/uid"
-```
-
-### Ignore Differences Configuration
-
-The `ignoreDifferences` section allows you to remove or transform specific fields during formatting:
-
-```yaml
-# .kyt.yaml
-ignoreDifferences:
-  # Remove specific labels from all resources
-  - group: ""
-    kind: "*"
-    jsonPointers:
-      - /metadata/labels/app.kubernetes.io~1version
-      - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
-
-  # Remove Istio sidecar containers from Deployments
-  - group: "apps"
-    kind: "Deployment"
-    jqPathExpressions:
-      - .spec.template.spec.containers[] | select(.name == "istio-proxy")
-      - .spec.template.spec.initContainers[] | select(.name == "istio-init")
-
-  # Remove replica count from Deployments
-  - group: "apps"
-    kind: "Deployment"
-    jsonPointers:
-      - /spec/replicas
-
-  # Remove fields managed by specific controllers
-  - group: "apps"
-    kind: "Deployment"
-    managedFieldsManagers:
-      - "kube-controller-manager"
-```
-
-### Configuration Options Reference
-
-#### `normalization.sortKeys`
-
-**Type:** `boolean`  
-**Default:** `true`
-
-Sorts object keys alphabetically for consistent ordering.
-
-```yaml
-normalization:
-  sortKeys: true
-```
-
-#### `normalization.sortArrays`
-
-**Type:** `array of objects`  
-**Default:** `[]`
-
-Defines which arrays should be sorted before output. Useful for arrays where order doesn't matter semantically.
-
-```yaml
-normalization:
-  sortArrays:
-    - path: ".spec.template.spec.containers[].env"
-      sortBy: "name"
-```
-
-- `path`: JQ-style path to the array (e.g., `.spec.template.spec.containers[].env`)
-- `sortBy`: Field name to sort by (e.g., `"name"`, `"containerPort"`)
-
-#### `normalization.removeDefaultFields`
-
-**Type:** `array of strings`  
-**Default:** See below
-
-JSON Pointer paths to remove from all resources.
-
-**Default fields removed:**
-- `/status` - Runtime status (ephemeral)
-- `/metadata/managedFields` - Server-side apply metadata
-- `/metadata/creationTimestamp` - Creation time
-- `/metadata/generation` - Resource version counter
-- `/metadata/resourceVersion` - Cluster-specific version
-- `/metadata/uid` - Cluster-specific unique ID
-
-```yaml
-normalization:
-  removeDefaultFields:
-    - "/status"
-    - "/metadata/managedFields"
-    - "/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration"
-```
-
-#### `ignoreDifferences`
-
-**Type:** `array of objects`
-
-Defines rules for ignoring specific fields in specific resource types. See the [Ignore Rules](#ignore-rules) section below.
-
-### Ignore Rules
-
-Ignore rules allow you to selectively remove or transform fields during formatting. This is useful when you want to clean up manifests by removing generated or environment-specific values.
-
-#### Rule Matching
-
-Rules match resources based on:
-
-- `group` - API group (empty string for core resources)
-- `kind` - Resource kind (use `"*"` to match all kinds)
-- `name` - Resource name (optional, supports glob patterns)
-- `namespace` - Resource namespace (optional, supports glob patterns)
-
-#### Ignore Methods
-
-Each rule can use one or more of these methods:
-
-##### 1. JSON Pointers
-
-**Best for:** Removing specific fields by path
-
-```yaml
-ignoreDifferences:
-  - group: ""
-    kind: "Service"
-    jsonPointers:
-      - /spec/clusterIP
-      - /spec/clusterIPs
-      - /metadata/labels/app.kubernetes.io~1version  # ~ escape for /
-```
-
-##### 2. JQ Path Expressions
-
-**Best for:** Complex filtering and conditional removal
-
-```yaml
-ignoreDifferences:
-  - group: "apps"
-    kind: "Deployment"
-    jqPathExpressions:
-      # Remove containers by name
-      - .spec.template.spec.containers[] | select(.name == "istio-proxy")
-      
-      # Remove env vars by name
-      - .spec.template.spec.containers[].env[] | select(.name == "DEBUG")
-      
-      # Remove annotations matching a pattern
-      - .metadata.annotations | to_entries[] | select(.key | startswith("kubectl.kubernetes.io/"))
-```
-
-##### 3. Managed Fields Managers
-
-**Best for:** Removing fields managed by specific controllers
-
-```yaml
-ignoreDifferences:
-  - group: "apps"
-    kind: "Deployment"
-    managedFieldsManagers:
-      - "kube-controller-manager"
-      - "kubectl-client-side-apply"
+# Using yq to remove status before formatting
+yq 'del(.status)' manifest.yaml | kyt fmt
 ```
 
 ## Examples
 
-### Example 1: Clean Up Helm Output
+### Example 1: Standardize Key Ordering
 
-Remove Helm-specific annotations and standardize formatting:
-
-```yaml
-# .kyt.yaml
-normalization:
-  sortKeys: true
-  removeDefaultFields:
-    - "/status"
-    - "/metadata/managedFields"
-
-ignoreDifferences:
-  - group: ""
-    kind: "*"
-    jsonPointers:
-      - /metadata/annotations/meta.helm.sh~1release-name
-      - /metadata/annotations/meta.helm.sh~1release-namespace
-      - /metadata/labels/app.kubernetes.io~1managed-by
-```
+Sort keys alphabetically for consistent formatting:
 
 ```bash
-helm template my-release ./chart | kyt fmt > clean-output.yaml
-```
+# Format a single file
+kyt fmt deployment.yaml > deployment-formatted.yaml
 
-### Example 2: Remove Istio Sidecars
-
-Format manifests without Istio sidecar noise:
-
-```yaml
-# .kyt.yaml
-ignoreDifferences:
-  - group: "apps"
-    kind: "Deployment"
-    jqPathExpressions:
-      - .spec.template.spec.containers[] | select(.name == "istio-proxy")
-      - .spec.template.spec.initContainers[] | select(.name == "istio-init")
-      - .spec.template.metadata.annotations["sidecar.istio.io/status"]
-```
-
-```bash
-kubectl get deployment -o yaml | kyt fmt > without-istio.yaml
-```
-
-### Example 3: Standardize Environment Variables
-
-Sort environment variables and volumes for consistency:
-
-```yaml
-# .kyt.yaml
-normalization:
-  sortKeys: true
-  sortArrays:
-    - path: ".spec.template.spec.containers[].env"
-      sortBy: "name"
-    - path: ".spec.template.spec.volumes"
-      sortBy: "name"
-    - path: ".spec.template.spec.containers[].volumeMounts"
-      sortBy: "name"
-```
-
-```bash
+# Format and write back
 kyt fmt -w deployment.yaml
 ```
 
-### Example 4: Pre-Commit Hook
+### Example 2: Format Generated Manifests
 
-Format all YAML files before committing:
+Sort keys in Helm or Kustomize output:
+
+```bash
+# Format Helm output
+helm template my-release ./chart | kyt fmt > formatted-output.yaml
+
+# Format Kustomize output
+kustomize build . | kyt fmt > formatted-output.yaml
+```
+
+### Example 3: Pre-Commit Hook
+
+Sort keys in all YAML files before committing:
 
 ```bash
 #!/bin/bash
@@ -375,7 +157,9 @@ if [ -n "$YAML_FILES" ]; then
 fi
 ```
 
-### Example 5: Batch Format Directory
+
+
+### Example 4: Batch Format Directory
 
 Format all manifests in a directory:
 
@@ -394,45 +178,17 @@ done
 
 ### 1. Standardizing Generated Manifests
 
-When using tools like Helm or Kustomize, the generated YAML often has inconsistent formatting, field ordering, or extra metadata.
+When using tools like Helm or Kustomize, the generated YAML often has inconsistent key ordering.
 
 ```bash
-# Before: Inconsistent field order, extra annotations
+# Standardize key ordering
 helm template . | kyt fmt > standardized.yaml
+kustomize build . | kyt fmt > standardized.yaml
 ```
 
-### 2. Cleaning Cluster Resources
+### 2. Repository Standardization
 
-When exporting resources from a cluster, they contain runtime fields that aren't needed.
-
-```bash
-# Export clean deployment
-kubectl get deployment nginx -o yaml | kyt fmt > nginx-clean.yaml
-
-# Export all deployments without noise
-kubectl get deployments -o yaml | kyt fmt > deployments-clean.yaml
-```
-
-### 3. Pre-Diff Formatting
-
-Format manifests before comparing to reduce noise from irrelevant differences.
-
-```bash
-# Format both sides before comparing
-kyt fmt old-manifest.yaml > old-formatted.yaml
-kyt fmt new-manifest.yaml > new-formatted.yaml
-diff old-formatted.yaml new-formatted.yaml
-```
-
-Or better yet, use `kyt diff` which does this automatically:
-
-```bash
-kyt diff old-manifest.yaml new-manifest.yaml
-```
-
-### 4. Repository Standardization
-
-Ensure all YAML files in your repository follow the same formatting conventions.
+Ensure all YAML files in your repository have consistent key ordering.
 
 ```bash
 # Format all manifests in repository
@@ -442,31 +198,44 @@ find . -name "*.yaml" -path "*/k8s/*" -exec kyt fmt -w {} \;
 # .github/workflows/lint.yml
 - name: Check YAML formatting
   run: |
-    make fmt-check
+    # Check if any files would change
+    if ! git diff --exit-code $(find . -name "*.yaml" -exec kyt fmt {} \;); then
+      echo "YAML files need formatting. Run: kyt fmt -w"
+      exit 1
+    fi
 ```
 
-### 5. Migration Prep
+### 3. Improving Git Diffs
 
-When migrating from one deployment tool to another, format outputs to make comparison easier.
+Consistent key ordering reduces noise in git diffs and makes code reviews easier.
 
 ```bash
-# Compare Helm vs Kustomize
-helm template release1 chart1 | kyt fmt > helm-output.yaml
-kustomize build overlay | kyt fmt > kustomize-output.yaml
-kyt diff helm-output.yaml kustomize-output.yaml
+# Format files before committing
+kyt fmt -w deployment.yaml
+git add deployment.yaml
+git commit -m "Update deployment"
+```
+
+### 4. Cleaning Up Cluster Exports
+
+When exporting resources from a cluster, sort keys for readability.
+
+```bash
+# Export with sorted keys
+kubectl get deployment nginx -o yaml | kyt fmt > nginx-export.yaml
 ```
 
 ## Best Practices
 
-1. **Commit the config**: Always commit `.kyt.yaml` to version control so formatting is consistent across the team
+1. **Use fmt for formatting only**: The `fmt` command only sorts keys. For removing fields or applying rules, use `kyt diff` or external tools like `yq`
 
-2. **Start minimal**: Begin with just `sortKeys: true` and add more rules as needed
+2. **Commit formatted files**: Always format files before committing to maintain consistency across the team
 
-3. **Use in CI**: Add formatting checks to your CI pipeline to enforce consistency
+3. **Use in CI**: Add formatting checks to your CI pipeline to enforce consistent key ordering
 
-4. **Document rules**: Add comments to your `.kyt.yaml` explaining why each ignore rule exists
+4. **Pre-commit hooks**: Automate formatting with git pre-commit hooks
 
-5. **Test formatting**: Always review formatted output before using `-w` to ensure rules work as expected
+5. **Combine with other tools**: Pipe through `yq` or `jq` for additional transformations before formatting
 
 ## See Also
 
