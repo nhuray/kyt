@@ -50,6 +50,9 @@ kyt fmt ./manifests
 # Format and write back to source files
 kyt fmt -w deployment.yaml
 
+# Format a directory and write back to each original file
+kyt fmt -w ./manifests
+
 # Format from stdin
 cat deployment.yaml | kyt fmt
 kubectl get deployment nginx -o yaml | kyt fmt
@@ -161,10 +164,13 @@ fi
 
 ### Example 4: Batch Format Directory
 
-Format all manifests in a directory:
+Format all manifests in a directory and write back to original files:
 
 ```bash
-# Format all YAML files
+# Format entire directory (writes each file back)
+kyt fmt -w ./manifests
+
+# Or format individual files with find
 find ./manifests -name "*.yaml" -type f -exec kyt fmt -w {} \;
 
 # Or using a loop for better error handling
