@@ -7,25 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/nhuray/kyt/pkg/differ/treesitter"
 	"github.com/nhuray/kyt/pkg/manifest"
 	"github.com/nhuray/kyt/pkg/normalizer"
-	"golang.org/x/term"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
 )
-
-// getTerminalWidth returns the terminal width, or a default if detection fails
-func getTerminalWidth() int {
-	// Try to get terminal width from stdout
-	if width, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
-		return width
-	}
-	// Default to 120 if we can't detect
-	return 120
-}
 
 // Differ performs diffs between two sets of Kubernetes manifests
 type Differ struct {
@@ -160,25 +148,6 @@ func areResourcesEqual(a, b *unstructured.Unstructured) (bool, error) {
 	return bytes.Equal(aJSON, bJSON), nil
 }
 
-// filterDifftasticHeaders removes difftastic's temporary file path headers
-// These lines look like: "/path/to/temp/file.yaml --- YAML" or "--- N/M --- YAML"
-func filterDifftasticHeaders(output string) string {
-	lines := strings.Split(output, "\n")
-	var filtered []string
-
-	for _, line := range lines {
-		// Check if line ends with "--- YAML" (with possible ANSI codes before YAML)
-		// Pattern: anything ending with "--- YAML" or "--- N/M --- YAML"
-		if strings.Contains(line, "--- YAML") && !strings.HasPrefix(strings.TrimSpace(line), "---") {
-			// This is a header line with file path, skip it
-			continue
-		}
-		filtered = append(filtered, line)
-	}
-
-	return strings.Join(filtered, "\n")
-}
-
 // generateDiff generates a diff between two resources
 func (d *Differ) generateDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured) (string, int, error) {
 	// Convert resources to YAML to preserve original format
@@ -192,18 +161,13 @@ func (d *Differ) generateDiff(key manifest.ResourceKey, source, target *unstruct
 		return "", 0, fmt.Errorf("failed to marshal target: %w", err)
 	}
 
-	// Try difftastic first if enabled
-	if d.options.UseDifftastic {
-		diffText, diffLines, err := d.generateDifftasticDiff(key, source, target, sourceYAML, targetYAML)
-		if err == nil {
-			return diffText, diffLines, nil
-		}
-		// Fall through to try tree-sitter
+	// If output format is unified, always use unified diff
+	if d.options.OutputFormat == "unified" {
+		return d.generateUnifiedDiff(key, sourceYAML, targetYAML)
 	}
 
-	// Try tree-sitter diff as fallback if enabled
+	// Try tree-sitter diff first if enabled
 	if d.options.UseTreeSitter {
-		// Pass the same YAML bytes to tree-sitter for consistency with difftastic
 		diffText, diffLines, err := d.generateTreeSitterDiff(key, source, target, sourceYAML, targetYAML)
 		if err == nil {
 			return diffText, diffLines, nil
@@ -211,77 +175,8 @@ func (d *Differ) generateDiff(key manifest.ResourceKey, source, target *unstruct
 		// Fall through to unified diff
 	}
 
-	// Generate unified diff as final fallback
+	// Generate unified diff as fallback
 	return d.generateUnifiedDiff(key, sourceYAML, targetYAML)
-}
-
-// generateDifftasticDiff generates a diff using difftastic
-func (d *Differ) generateDifftasticDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured, sourceYAML, targetYAML []byte) (string, int, error) {
-	// Check if difftastic is available
-	if !isDifftasticAvailable() {
-		return "", 0, fmt.Errorf("difftastic not available")
-	}
-
-	// Create temp files
-	tmpDir, err := os.MkdirTemp("", "kyt-diff-*")
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to create temp dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	sourceFile := filepath.Join(tmpDir, "source.yaml")
-	targetFile := filepath.Join(tmpDir, "target.yaml")
-
-	if err := os.WriteFile(sourceFile, sourceYAML, 0644); err != nil {
-		return "", 0, fmt.Errorf("failed to write source file: %w", err)
-	}
-
-	if err := os.WriteFile(targetFile, targetYAML, 0644); err != nil {
-		return "", 0, fmt.Errorf("failed to write target file: %w", err)
-	}
-
-	// Build difftastic command
-	args := []string{sourceFile, targetFile}
-
-	// Add display mode
-	if d.options.DifftasticDisplay != "" {
-		args = append(args, "--display", d.options.DifftasticDisplay)
-	}
-
-	// Add width option
-	width := d.options.DifftasticWidth
-	if width == 0 {
-		// Auto-detect terminal width
-		width = getTerminalWidth()
-	}
-	args = append(args, "--width", fmt.Sprintf("%d", width))
-
-	// Add color option
-	// We need to explicitly set color mode because difftastic auto-detects TTY
-	// and won't use colors when output is captured
-	if d.options.ColorOutput {
-		args = append(args, "--color", "always")
-	} else {
-		args = append(args, "--color", "never")
-	}
-
-	// Execute difftastic
-	cmd := exec.Command("difft", args...)
-	output, err := cmd.CombinedOutput()
-
-	// difftastic returns exit code 1 when there are differences, which is expected
-	// Only treat it as an error if the output is empty and there's an error
-	if err != nil && len(output) == 0 {
-		return "", 0, fmt.Errorf("difftastic failed: %w", err)
-	}
-
-	// Filter out difftastic's temporary file path headers
-	filteredOutput := filterDifftasticHeaders(string(output))
-
-	// Count diff lines (approximate)
-	diffLines := bytes.Count([]byte(filteredOutput), []byte("\n"))
-
-	return filteredOutput, diffLines, nil
 }
 
 // generateUnifiedDiff generates a unified diff
@@ -343,12 +238,6 @@ func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceYAML, targe
 	return string(output), diffLines, nil
 }
 
-// isDifftasticAvailable checks if difftastic is available in PATH
-func isDifftasticAvailable() bool {
-	_, err := exec.LookPath("difft")
-	return err == nil
-}
-
 // generateTreeSitterDiff generates a diff using Go-native tree-sitter parser
 func (d *Differ) generateTreeSitterDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured, sourceYAML, targetYAML []byte) (string, int, error) {
 	// Validate that both resources are valid Kubernetes resources
@@ -360,7 +249,6 @@ func (d *Differ) generateTreeSitterDiff(key manifest.ResourceKey, source, target
 	}
 
 	// Use the provided YAML bytes directly (no re-marshaling)
-	// This ensures consistency with difftastic and preserves original formatting
 
 	// Parse YAML with tree-sitter
 	parser := treesitter.NewParser()
@@ -394,8 +282,8 @@ func (d *Differ) generateTreeSitterDiff(key manifest.ResourceKey, source, target
 	targetLabel := fmt.Sprintf("b/%s", targetKey.String())
 
 	var diffText string
-	// Use display mode from options (matching difftastic behavior)
-	if d.options.DifftasticDisplay == "inline" {
+	// Use display mode from options
+	if d.options.DisplayMode == "inline" {
 		// Use inline display (unified diff style)
 		diffText = formatter.FormatInline(diffResult, sourceLabel, targetLabel)
 	} else {

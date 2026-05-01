@@ -64,7 +64,7 @@ type ModifiedJSON struct {
 
 // Report formats and writes the diff result as JSON
 func (r *JSONReporter) Report(result *differ.DiffResult, w io.Writer) error {
-	output := r.convertToJSON(result)
+	output := r.ConvertToJSON(result)
 
 	encoder := json.NewEncoder(w)
 	if !r.options.Compact {
@@ -78,8 +78,8 @@ func (r *JSONReporter) Report(result *differ.DiffResult, w io.Writer) error {
 	return nil
 }
 
-// convertToJSON converts DiffResult to JSONOutput
-func (r *JSONReporter) convertToJSON(result *differ.DiffResult) *JSONOutput {
+// ConvertToJSON converts DiffResult to JSONOutput (public for reuse by other reporters)
+func (r *JSONReporter) ConvertToJSON(result *differ.DiffResult) *JSONOutput {
 	output := &JSONOutput{
 		Summary: SummaryJSON{
 			TotalResources: result.Summary.TotalResources,

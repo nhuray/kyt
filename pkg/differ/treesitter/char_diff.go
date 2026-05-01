@@ -15,7 +15,6 @@ func computeCharDiff(source, target string) ([]DiffSegment, []DiffSegment) {
 	}
 
 	// Use simple word-level diff for better results
-	// This is similar to what difftastic does
 	sourceSegs, targetSegs := simpleDiff(source, target)
 
 	return sourceSegs, targetSegs

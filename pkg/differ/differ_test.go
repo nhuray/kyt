@@ -99,9 +99,8 @@ func TestDiff_ModifiedResources(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	norm := normalizer.New(cfg)
 
-	// Disable difftastic for predictable test output
+	// Use default options for tree-sitter test output
 	opts := NewDefaultDiffOptions()
-	opts.UseDifftastic = false
 
 	differ := New(norm, opts)
 
@@ -236,7 +235,7 @@ func TestDiff_MixedChanges(t *testing.T) {
 	norm := normalizer.New(cfg)
 
 	opts := NewDefaultDiffOptions()
-	opts.UseDifftastic = false
+
 	opts.EnableSimilarityMatching = false // Disable similarity matching for this test
 
 	differ := New(norm, opts)
@@ -469,7 +468,7 @@ func TestDiff_SimilarityMatching(t *testing.T) {
 	norm := normalizer.New(cfg)
 
 	opts := NewDefaultDiffOptions()
-	opts.UseDifftastic = false
+
 	opts.EnableSimilarityMatching = true
 	opts.SimilarityThreshold = 0.6 // Threshold appropriate for normalized resources
 
@@ -578,9 +577,9 @@ func TestDiff_TreeSitterFallback(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	norm := normalizer.New(cfg)
 
-	// Configure differ to skip difftastic and use tree-sitter
+	// Configure differ to use tree-sitter
 	opts := NewDefaultDiffOptions()
-	opts.UseDifftastic = false
+
 	opts.UseTreeSitter = true
 	opts.ColorOutput = false // Disable colors for easier testing
 
@@ -658,7 +657,7 @@ func TestDiff_TreeSitterWithDeployment(t *testing.T) {
 	norm := normalizer.New(cfg)
 
 	opts := NewDefaultDiffOptions()
-	opts.UseDifftastic = false
+
 	opts.UseTreeSitter = true
 	opts.ColorOutput = false
 
@@ -806,7 +805,7 @@ func TestDiff_SimilarityMatching_Disabled(t *testing.T) {
 	norm := normalizer.New(cfg)
 
 	opts := NewDefaultDiffOptions()
-	opts.UseDifftastic = false
+
 	opts.EnableSimilarityMatching = false // Disabled
 
 	differ := New(norm, opts)
@@ -872,7 +871,7 @@ func TestDiff_SimilarityMatching_BelowThreshold(t *testing.T) {
 	norm := normalizer.New(cfg)
 
 	opts := NewDefaultDiffOptions()
-	opts.UseDifftastic = false
+
 	opts.EnableSimilarityMatching = true
 	opts.SimilarityThreshold = 0.9 // High threshold
 

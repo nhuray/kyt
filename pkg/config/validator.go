@@ -101,23 +101,11 @@ func (v *Validator) validateOutputConfig(output *OutputConfig) error {
 	validFormats := map[string]bool{
 		"cli":  true,
 		"json": true,
+		"yaml": true,
 		"diff": true,
-		"html": true,
 	}
 	if output.Format != "" && !validFormats[output.Format] {
-		return fmt.Errorf("invalid output format: %s (must be one of: cli, json, diff, html)", output.Format)
-	}
-
-	// Validate diff tool
-	validDiffTools := map[string]bool{
-		"auto":       true, // Try all in order: difftastic → tree-sitter → unified
-		"difft":      true, // Difftastic only
-		"treesitter": true, // Go-native tree-sitter only
-		"diff":       true, // Unified diff only
-		"none":       true, // No diff generation
-	}
-	if output.DiffTool != "" && !validDiffTools[output.DiffTool] {
-		return fmt.Errorf("invalid diff tool: %s (must be one of: auto, difft, treesitter, diff, none)", output.DiffTool)
+		return fmt.Errorf("invalid output format: %s (must be one of: cli, json, yaml, diff)", output.Format)
 	}
 
 	// Context lines must be non-negative

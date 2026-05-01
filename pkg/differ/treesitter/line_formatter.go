@@ -66,7 +66,6 @@ func (lf *LineFormatter) FormatSideBySide(root *DiffNode, sourceLabel, targetLab
 }
 
 // FormatInline formats diff output inline (unified diff style) using line numbers from diff tree
-// This matches difftastic's inline display mode
 func (lf *LineFormatter) FormatInline(root *DiffNode, sourceLabel, targetLabel string) string {
 	var buf strings.Builder
 
@@ -103,7 +102,6 @@ func (lf *LineFormatter) FormatInline(root *DiffNode, sourceLabel, targetLabel s
 }
 
 // formatLineInline formats a single line for inline display
-// Format matches difftastic inline mode:
 // - Context lines: "12  content" (gray, with left line number)
 // - Removed lines: "12  content" (red, with left line number)
 // - Added lines: " 15 content" (green, with right line number, left-padded)

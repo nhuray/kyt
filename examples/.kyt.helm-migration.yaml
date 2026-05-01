@@ -53,6 +53,5 @@ normalization:
 
 output:
   format: cli
-  diffTool: difft
   colorize: true
   showUnchanged: false

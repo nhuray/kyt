@@ -12,7 +12,7 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 
 1. **Formatting manifests** - Sorts keys alphabetically for consistent YAML structure
 2. **Smart comparison** - Normalizes and compares manifests using ArgoCD-compatible ignore rules (removes fields, applies custom rules, sorts keys)
-3. **Beautiful diffs** - Leverages [difftastic](https://difftastic.wilfred.me.uk/) for structural, syntax-aware diffs that are easy to read
+3. **Beautiful diffs** - Uses tree-sitter for structural, syntax-aware diffs that are easy to read
 
 **Key Features:**
 
@@ -87,10 +87,7 @@ kyt diff -v source.yaml target.yaml
 # Disable similarity matching (exact name match only)
 kyt diff --exact-match source.yaml target.yaml
 
-# Use unified diff instead of difftastic
-kyt diff --diff-tool diff source.yaml target.yaml
-
-# Change difftastic display mode
+# Use inline display mode (unified diff style)
 kyt diff --display inline source.yaml target.yaml
 
 # Compare only specific resource types
@@ -226,20 +223,7 @@ kyt version
 
 ### Difftastic (Optional but Recommended)
 
-The `kyt diff` command automatically detects and uses [difftastic](https://difftastic.wilfred.me.uk/) if available, providing beautiful syntax-aware structural diffs. If difftastic is not found, it gracefully falls back to a built-in tree-sitter diff or standard unified diff.
-
-**Install difftastic:**
-
-```bash
-# macOS
-brew install difftastic
-
-# Linux (from GitHub releases)
-curl -L https://github.com/Wilfred/difftastic/releases/latest/download/difft-x86_64-unknown-linux-gnu.tar.gz | tar xz
-sudo mv difft /usr/local/bin/
-
-# Other platforms: see https://difftastic.wilfred.me.uk/installation.html
-```
+The `kyt diff` command uses a built-in tree-sitter parser for syntax-aware structural diffs. It automatically falls back to standard unified diff if needed.
 
 ## Documentation
 
@@ -295,13 +279,9 @@ make run-json
 
 ## Dependencies
 
-**Runtime:**
-
-- [difftastic](https://difftastic.wilfred.me.uk/) - Structural diff tool (optional but recommended)
-- [diff2html-cli](https://diff2html.xyz/) - For HTML report generation (optional)
-
 **Go Libraries:**
 
+- [tree-sitter](https://github.com/tree-sitter/tree-sitter) - Syntax tree parser
 - [ArgoCD](https://github.com/argoproj/argo-cd) - Ignore rules engine
 - [gojq](https://github.com/itchyny/gojq) - JQ implementation in Go
 - [cobra](https://github.com/spf13/cobra) - CLI framework

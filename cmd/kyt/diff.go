@@ -17,8 +17,7 @@ var (
 	diffOutputFormat              string
 	diffNoColor                   bool
 	diffShowIdentical             bool
-	diffDifftasticMode            string
-	diffDiffTool                  string
+	diffDisplayMode               string
 	diffSkipNormalize             bool
 	diffExactMatch                bool
 	diffSimilarityThreshold       float64
@@ -36,16 +35,21 @@ var diffCmd = &cobra.Command{
 Supports:
 - JSON Pointer ignore rules (RFC 6901)
 - JQ path expression ignore rules
-- Multiple diff tools: difftastic, tree-sitter, unified diff
-- Multiple output formats (CLI, JSON)
+- Tree-sitter based structural diff (built-in, syntax-aware)
+- Unified diff fallback
+- Multiple output formats (CLI, JSON, YAML)
 - Smart similarity matching for renamed resources
 - Resource filtering by kind (include/exclude)
 
-Diff Tools:
-- auto: Try difftastic first, fall back to tree-sitter, then unified (default)
-- difft: Use difftastic only (external tool, best quality)
-- treesitter: Use Go-native tree-sitter (built-in, good quality)
-- diff: Use standard unified diff (built-in, basic quality)
+Display Modes:
+- side-by-side: Show changes side-by-side (default, best for wide terminals)
+- inline: Show changes inline (unified diff style, better for narrow terminals)
+
+Output Formats:
+- cli: Human-readable CLI output with diffs (default)
+- json: JSON format for programmatic use
+- yaml: YAML format for programmatic use
+- diff: Unified diff format only
 
 Resource Filtering:
 - Use --include to only compare specific resource kinds
@@ -54,17 +58,17 @@ Resource Filtering:
 - Both flags accept comma-separated lists
 
 Examples:
-  # Compare two directories (auto mode - tries all diff tools)
+  # Compare two directories
   kyt diff ./source-manifests ./target-manifests
 
-  # Force tree-sitter diff (no external dependencies)
-  kyt diff --diff-tool treesitter ./source ./target
+  # Use inline display mode
+  kyt diff --display inline ./source ./target
 
   # Compare with custom config
   kyt diff -c .kyt.yaml ./source ./target
 
   # Output as JSON
-  kyt diff -o json ./source ./target
+  kyt diff --output json ./source ./target
 
   # Compare only ConfigMaps and Secrets
   kyt diff --include cm,secrets ./source ./target
@@ -92,12 +96,11 @@ Examples:
 }
 
 func init() {
-	diffCmd.Flags().StringVarP(&diffOutputFormat, "output", "o", "cli", "output format: cli, json")
+	diffCmd.Flags().StringVarP(&diffOutputFormat, "output", "o", "", "output format: json, yaml, diff (default: CLI display with headers)")
 	diffCmd.Flags().BoolVar(&diffNoColor, "no-color", false, "disable colored output")
 	diffCmd.Flags().BoolVar(&diffShowIdentical, "show-identical", false, "show identical resources in output")
-	diffCmd.Flags().StringVar(&diffDifftasticMode, "display", "side-by-side", "difftastic display mode: side-by-side, inline")
-	diffCmd.Flags().StringVar(&diffDiffTool, "diff-tool", "auto", "diff tool: auto (try all), difft (difftastic only), treesitter (Go native), diff (unified)")
-	diffCmd.Flags().IntVar(&diffWidth, "width", 0, "terminal width for diff output (0 = auto-detect)")
+	diffCmd.Flags().StringVar(&diffDisplayMode, "display", "side-by-side", "display mode: side-by-side, inline")
+	diffCmd.Flags().IntVar(&diffWidth, "width", 0, "terminal width for diff output (0 = auto-detect, default: 120)")
 	diffCmd.Flags().BoolVar(&diffSkipNormalize, "skip-normalize", false, "skip normalization (use raw manifests)")
 	diffCmd.Flags().BoolVar(&diffExactMatch, "exact-match", false, "disable similarity matching (only exact name matches)")
 	diffCmd.Flags().Float64Var(&diffSimilarityThreshold, "similarity-threshold", 0.7, "minimum similarity score (0.0-1.0) for matching resources")
@@ -194,22 +197,26 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create differ
+	outputFormat := "tree-sitter" // Default to tree-sitter for CLI display
+	if diffOutputFormat == "diff" {
+		// When --output diff is specified, use unified diff format
+		outputFormat = "unified"
+	}
+
 	diffOpts := &differ.DiffOptions{
-		UseDifftastic:             diffDiffTool == "auto" || diffDiffTool == "difft",
-		UseTreeSitter:             diffDiffTool == "auto" || diffDiffTool == "treesitter",
-		ColorOutput:               !diffNoColor,
+		UseTreeSitter:             outputFormat != "unified",              // Disable tree-sitter if unified output
+		ColorOutput:               !diffNoColor && diffOutputFormat == "", // Only colorize for CLI display
 		ContextLines:              3,
-		DifftasticDisplay:         diffDifftasticMode,
-		DifftasticWidth:           diffWidth,
+		DisplayMode:               diffDisplayMode,
+		OutputFormat:              outputFormat,
 		TreeSitterWidth:           120,
 		EnableSimilarityMatching:  !diffExactMatch,
 		SimilarityThreshold:       diffSimilarityThreshold,
 		StringSimilarityThreshold: stringSimilarityThreshold,
 	}
-	// If "diff" is explicitly specified, disable both difftastic and tree-sitter
-	if diffDiffTool == "diff" {
-		diffOpts.UseDifftastic = false
-		diffOpts.UseTreeSitter = false
+	// Set width if specified
+	if diffWidth > 0 {
+		diffOpts.TreeSitterWidth = diffWidth
 	}
 	diff := differ.New(norm, diffOpts)
 
@@ -222,7 +229,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to diff manifests: %w", err)
 	}
 
-	// Create reporter
+	// Create reporter based on output format
 	reporterOpts := &reporter.Options{
 		Format:        diffOutputFormat,
 		Colorize:      !diffNoColor,
@@ -234,10 +241,15 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	switch diffOutputFormat {
 	case "json":
 		rep = reporter.NewJSONReporter(reporterOpts)
-	case "cli":
+	case "yaml":
+		rep = reporter.NewYAMLReporter(reporterOpts)
+	case "diff":
+		rep = reporter.NewDiffReporter(reporterOpts)
+	case "cli", "":
+		// Default to CLI display with headers
 		rep = reporter.NewCLIReporter(reporterOpts)
 	default:
-		return fmt.Errorf("unsupported output format: %s", diffOutputFormat)
+		return fmt.Errorf("unsupported output format: %s (must be: cli, json, yaml, diff)", diffOutputFormat)
 	}
 
 	// Generate output

@@ -167,9 +167,6 @@ release:
 #     homepage: https://github.com/nhuray/kyt
 #     description: "Kubernetes YAML Toolkit - Format and compare manifests with intelligent ignore rules"
 #     license: MIT
-#     dependencies:
-#       - name: difftastic
-#         type: optional
 #     test: |
 #       system "#{bin}/kyt version"
 #     install: |
