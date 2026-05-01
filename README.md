@@ -318,7 +318,3 @@ MIT License - See [LICENSE](LICENSE) for details.
 ## Author
 
 Created by Nicolas Huray ([@nhuray](https://github.com/nhuray))
-
----
-
-**Status:** ✅ Phase 8.6 complete! Tool refactored to `kyt` with subcommands. Documentation and release automation in progress.
