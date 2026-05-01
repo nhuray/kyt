@@ -1,10 +1,11 @@
 # Minimal kyt Configuration
 # This is a minimal configuration that only ignores common metadata fields
-
-ignoreDifferences:
-  # Ignore kubectl annotations and common labels
-  - group: ""
-    kind: "*"
-    jsonPointers:
-      - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
-      - /metadata/labels/helm.sh~1chart
+# Diff command configuration
+diff:
+  ignoreDifferences:
+    # Ignore kubectl annotations and common labels
+    - group: ""
+      kind: "*"
+      jsonPointers:
+        - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
+        - /metadata/labels/helm.sh~1chart
