@@ -141,66 +141,6 @@ func (f *Formatter) formatHeader(left, right string, width int) string {
 	return leftHeader + " │ " + rightHeader
 }
 
-// FormatInline generates inline diff output (compact, single-column)
-// This is a simpler format for narrow terminals or compact output
-func (f *Formatter) FormatInline(root *DiffNode, prefix string) string {
-	var buf strings.Builder
-
-	// Header
-	buf.WriteString(f.colorize(prefix, color.Bold))
-	buf.WriteString("\n")
-	buf.WriteString(f.colorize(strings.Repeat("─", min(f.width, 80)), color.FgHiBlack))
-	buf.WriteString("\n")
-
-	// Body
-	f.formatNodeInline(&buf, root, 0)
-
-	return buf.String()
-}
-
-// formatNodeInline recursively formats a diff node inline
-func (f *Formatter) formatNodeInline(buf *strings.Builder, node *DiffNode, indent int) {
-	if node == nil {
-		return
-	}
-
-	padding := strings.Repeat(" ", indent*f.indentSize)
-	content := f.formatNodeContent(node.SourceText, node.Key)
-	if node.Type == Added {
-		content = f.formatNodeContent(node.TargetText, node.Key)
-	}
-
-	// Format based on change type
-	switch node.Type {
-	case Unchanged:
-		// Gray text
-		buf.WriteString(f.colorize(padding+"  "+content, color.FgHiBlack))
-		buf.WriteString("\n")
-
-	case Added:
-		// Green with + prefix
-		buf.WriteString(f.colorize(padding+"+ "+content, color.FgGreen))
-		buf.WriteString("\n")
-
-	case Removed:
-		// Red with - prefix
-		buf.WriteString(f.colorize(padding+"- "+content, color.FgRed))
-		buf.WriteString("\n")
-
-	case Modified:
-		// Show both old and new
-		buf.WriteString(f.colorize(padding+"- "+f.formatNodeContent(node.SourceText, node.Key), color.FgRed))
-		buf.WriteString("\n")
-		buf.WriteString(f.colorize(padding+"+ "+f.formatNodeContent(node.TargetText, node.Key), color.FgGreen))
-		buf.WriteString("\n")
-	}
-
-	// Recurse into children
-	for _, child := range node.Children {
-		f.formatNodeInline(buf, child, indent+1)
-	}
-}
-
 // min returns the minimum of two integers
 func min(a, b int) int {
 	if a < b {

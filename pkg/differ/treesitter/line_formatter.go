@@ -65,6 +65,140 @@ func (lf *LineFormatter) FormatSideBySide(root *DiffNode, sourceLabel, targetLab
 	return buf.String()
 }
 
+// FormatInline formats diff output inline (unified diff style) using line numbers from diff tree
+// This matches difftastic's inline display mode
+func (lf *LineFormatter) FormatInline(root *DiffNode, sourceLabel, targetLabel string) string {
+	var buf strings.Builder
+
+	// Simplified header showing resource name
+	buf.WriteString(lf.formatInlineHeader(sourceLabel, targetLabel))
+	buf.WriteString("\n")
+	buf.WriteString(lf.colorize(strings.Repeat("─", min(lf.width, 80)), color.FgHiBlack))
+	buf.WriteString("\n\n")
+
+	// Extract lines from source and target
+	sourceLines := strings.Split(string(lf.sourceText), "\n")
+	targetLines := strings.Split(string(lf.targetText), "\n")
+
+	// Build line-based diff from tree (reuse existing logic)
+	lineDiffs := lf.buildLineDiffs(root, sourceLines, targetLines)
+
+	// Group into hunks with context (reuse existing logic)
+	hunks := lf.buildHunks(lineDiffs, 3) // 3 lines of context
+
+	// Format each hunk inline
+	for i, hunk := range hunks {
+		if i > 0 {
+			// Add blank line separator between hunks
+			buf.WriteString("\n")
+		}
+
+		// Format lines in this hunk
+		for _, ld := range hunk {
+			lf.formatLineInline(&buf, ld)
+		}
+	}
+
+	return buf.String()
+}
+
+// formatLineInline formats a single line for inline display
+// Format matches difftastic inline mode:
+// - Context lines: "12  content" (gray, with left line number)
+// - Removed lines: "12  content" (red, with left line number)
+// - Added lines: " 15 content" (green, with right line number, left-padded)
+func (lf *LineFormatter) formatLineInline(buf *strings.Builder, ld LineDiff) {
+	lineNoWidth := 4
+
+	switch ld.Type {
+	case Unchanged:
+		// Context line: show left line number and content in gray
+		lineNo := lf.formatLineNumber(ld.SourceLineNo, lineNoWidth, color.Faint)
+		content := lf.highlightYAMLKeys(ld.SourceLine, color.Faint)
+
+		buf.WriteString(lineNo)
+		buf.WriteString("   ")
+		buf.WriteString(lf.colorizeIfPlain(content, ld.SourceLine, color.Faint))
+		buf.WriteString("\n")
+
+	case Removed:
+		// Removed line: show left line number and content in red
+		lineNo := lf.formatLineNumber(ld.SourceLineNo, lineNoWidth, color.FgHiRed)
+		content := lf.highlightYAMLKeys(ld.SourceLine, color.FgHiRed)
+
+		buf.WriteString(lineNo)
+		buf.WriteString("   ")
+		buf.WriteString(lf.colorizeIfPlain(content, ld.SourceLine, color.FgHiRed))
+		buf.WriteString("\n")
+
+	case Added:
+		// Added line: show right line number (right-padded) and content in green
+		// Use spaces on left to align with removed lines
+		lineNo := lf.formatLineNumber(ld.TargetLineNo, lineNoWidth, color.FgHiGreen)
+		content := lf.highlightYAMLKeys(ld.TargetLine, color.FgHiGreen)
+
+		buf.WriteString("   ")
+		buf.WriteString(lineNo)
+		buf.WriteString(lf.colorizeIfPlain(content, ld.TargetLine, color.FgHiGreen))
+		buf.WriteString("\n")
+
+	case Modified:
+		// Modified line: show removed line first, then added line with character-level diff
+		if lf.useColor && ld.SourceLine != "" && ld.TargetLine != "" {
+			// Use character-level diff for better visualization
+			sourceSegs, targetSegs := computeCharDiff(ld.SourceLine, ld.TargetLine)
+
+			// Format removed line with character highlighting
+			srcLineNo := lf.formatLineNumber(ld.SourceLineNo, lineNoWidth, color.FgHiRed)
+			buf.WriteString(srcLineNo)
+			buf.WriteString("   ")
+			buf.WriteString(lf.formatSegmentsWithKeys(sourceSegs, color.FgHiRed))
+			buf.WriteString("\n")
+
+			// Format added line with character highlighting
+			tgtLineNo := lf.formatLineNumber(ld.TargetLineNo, lineNoWidth, color.FgHiGreen)
+			buf.WriteString("   ")
+			buf.WriteString(tgtLineNo)
+			buf.WriteString(lf.formatSegmentsWithKeys(targetSegs, color.FgHiGreen))
+			buf.WriteString("\n")
+		} else {
+			// Fallback to line-level coloring
+			srcLineNo := lf.formatLineNumber(ld.SourceLineNo, lineNoWidth, color.FgHiRed)
+			srcContent := lf.highlightYAMLKeys(ld.SourceLine, color.FgHiRed)
+
+			buf.WriteString(srcLineNo)
+			buf.WriteString("   ")
+			buf.WriteString(lf.colorizeIfPlain(srcContent, ld.SourceLine, color.FgHiRed))
+			buf.WriteString("\n")
+
+			tgtLineNo := lf.formatLineNumber(ld.TargetLineNo, lineNoWidth, color.FgHiGreen)
+			tgtContent := lf.highlightYAMLKeys(ld.TargetLine, color.FgHiGreen)
+
+			buf.WriteString("   ")
+			buf.WriteString(tgtLineNo)
+			buf.WriteString(lf.colorizeIfPlain(tgtContent, ld.TargetLine, color.FgHiGreen))
+			buf.WriteString("\n")
+		}
+	}
+}
+
+// formatInlineHeader formats header for inline display
+func (lf *LineFormatter) formatInlineHeader(sourceLabel, targetLabel string) string {
+	// Parse label to extract resource info
+	sourceParts := lf.parseResourceLabel(sourceLabel)
+	targetParts := lf.parseResourceLabel(targetLabel)
+
+	// Format: "ConfigMap: `redis-ha/redis-health`"
+	header := fmt.Sprintf("%s: `%s` → `%s`", sourceParts.kind, sourceParts.fullName, targetParts.fullName)
+
+	if lf.useColor {
+		col := color.New(color.Bold)
+		col.EnableColor()
+		return col.Sprint(header)
+	}
+	return header
+}
+
 // LineDiff represents a single line diff
 type LineDiff struct {
 	SourceLine   string
