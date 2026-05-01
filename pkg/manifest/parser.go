@@ -38,11 +38,16 @@ func (p *Parser) ParseFile(path string) (*ManifestSet, error) {
 		return nil, fmt.Errorf("failed to read file %s: %w", path, err)
 	}
 
-	return p.ParseBytes(data)
+	return p.ParseBytesWithSource(data, path)
 }
 
 // ParseBytes parses YAML data from a byte slice into a ManifestSet
 func (p *Parser) ParseBytes(data []byte) (*ManifestSet, error) {
+	return p.ParseBytesWithSource(data, "")
+}
+
+// ParseBytesWithSource parses YAML data from a byte slice into a ManifestSet with source file tracking
+func (p *Parser) ParseBytesWithSource(data []byte, sourcePath string) (*ManifestSet, error) {
 	manifestSet := NewManifestSet()
 
 	// Split by YAML document separator
@@ -67,8 +72,14 @@ func (p *Parser) ParseBytes(data []byte) (*ManifestSet, error) {
 			continue
 		}
 
-		if err := manifestSet.Add(obj); err != nil {
-			return nil, fmt.Errorf("failed to add resource from document %d: %w", i+1, err)
+		if sourcePath != "" {
+			if err := manifestSet.AddWithSource(obj, sourcePath); err != nil {
+				return nil, fmt.Errorf("failed to add resource from document %d: %w", i+1, err)
+			}
+		} else {
+			if err := manifestSet.Add(obj); err != nil {
+				return nil, fmt.Errorf("failed to add resource from document %d: %w", i+1, err)
+			}
 		}
 	}
 

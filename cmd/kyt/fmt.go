@@ -109,19 +109,27 @@ func runFmt(cmd *cobra.Command, args []string) error {
 
 	// Format all resources (only key sorting, no normalization)
 	fmtr := formatter.New()
-	formatted := make([]*unstructured.Unstructured, 0, manifestSet.Len())
+	formattedSet := manifest.NewManifestSet()
 
-	for _, obj := range manifestSet.Resources {
+	for key, obj := range manifestSet.Resources {
 		f, err := fmtr.Format(obj)
 		if err != nil {
-			key := manifest.NewResourceKey(obj)
 			return fmt.Errorf("failed to format %s: %w", key.String(), err)
 		}
-		formatted = append(formatted, f)
+		// Preserve source file information
+		if sourcePath, ok := manifestSet.GetSourceFile(key); ok {
+			if err := formattedSet.AddWithSource(f, sourcePath); err != nil {
+				return fmt.Errorf("failed to add formatted resource %s: %w", key.String(), err)
+			}
+		} else {
+			if err := formattedSet.Add(f); err != nil {
+				return fmt.Errorf("failed to add formatted resource %s: %w", key.String(), err)
+			}
+		}
 	}
 
 	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "Formatted %d resources\n", len(formatted))
+		fmt.Fprintf(os.Stderr, "Formatted %d resources\n", formattedSet.Len())
 	}
 
 	// Write output
@@ -131,65 +139,84 @@ func runFmt(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(os.Stderr, "Writing formatted manifests back to source...\n")
 		}
 
-		// For now, we'll write all formatted resources back to the original path
-		// TODO: In a more advanced implementation, we could preserve the original
-		// file structure when dealing with directories
-		return writeBackToSource(sourcePath, formatted)
+		return writeBackToSource(sourcePath, formattedSet)
 	} else {
 		// Write to stdout
 		if rootVerbose {
 			fmt.Fprintf(os.Stderr, "Writing to stdout...\n")
 		}
-		return manifest.WriteYAML(os.Stdout, formatted)
+		// Convert to slice for WriteYAML
+		resources := make([]*unstructured.Unstructured, 0, formattedSet.Len())
+		for _, obj := range formattedSet.Resources {
+			resources = append(resources, obj)
+		}
+		return manifest.WriteYAML(os.Stdout, resources)
 	}
 }
 
 // writeBackToSource writes formatted manifests back to the source file(s)
-func writeBackToSource(sourcePath string, resources []*unstructured.Unstructured) error {
+func writeBackToSource(sourcePath string, manifestSet *manifest.ManifestSet) error {
 	info, err := os.Stat(sourcePath)
 	if err != nil {
 		return fmt.Errorf("failed to stat path: %w", err)
 	}
 
 	if info.IsDir() {
-		// For directories, we write all resources to a single file in the directory
-		// In a production implementation, you might want to preserve the original file structure
-		outputPath := sourcePath + "/formatted.yaml"
-		file, err := os.Create(outputPath)
-		if err != nil {
-			return fmt.Errorf("failed to create output file: %w", err)
+		// For directories, group resources by source file and write each group back
+		groupedResources := manifestSet.GroupBySourceFile()
+
+		if len(groupedResources) == 0 {
+			return fmt.Errorf("no resources to write")
 		}
-		defer func() {
-			if cerr := file.Close(); cerr != nil && err == nil {
-				err = fmt.Errorf("failed to close output file: %w", cerr)
+
+		// Write each group back to its source file
+		for filePath, resources := range groupedResources {
+			if filePath == "" {
+				// Skip resources without source file info
+				continue
 			}
-		}()
 
-		if err := manifest.WriteYAML(file, resources); err != nil {
-			return fmt.Errorf("failed to write YAML: %w", err)
-		}
+			file, err := os.Create(filePath)
+			if err != nil {
+				return fmt.Errorf("failed to create file %s: %w", filePath, err)
+			}
 
-		if rootVerbose {
-			fmt.Fprintf(os.Stderr, "Wrote formatted manifests to: %s\n", outputPath)
+			if err := manifest.WriteYAML(file, resources); err != nil {
+				_ = file.Close() // Best effort to close on error
+				return fmt.Errorf("failed to write YAML to %s: %w", filePath, err)
+			}
+
+			if err := file.Close(); err != nil {
+				return fmt.Errorf("failed to close file %s: %w", filePath, err)
+			}
+
+			if rootVerbose {
+				fmt.Fprintf(os.Stderr, "Wrote %d resources to: %s\n", len(resources), filePath)
+			}
 		}
 	} else {
-		// For single files, write back to the same file
+		// For single files, write all resources back to the same file
+		resources := make([]*unstructured.Unstructured, 0, manifestSet.Len())
+		for _, obj := range manifestSet.Resources {
+			resources = append(resources, obj)
+		}
+
 		file, err := os.Create(sourcePath)
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
-		defer func() {
-			if cerr := file.Close(); cerr != nil && err == nil {
-				err = fmt.Errorf("failed to close output file: %w", cerr)
-			}
-		}()
 
 		if err := manifest.WriteYAML(file, resources); err != nil {
+			_ = file.Close() // Best effort to close on error
 			return fmt.Errorf("failed to write YAML: %w", err)
 		}
 
+		if err := file.Close(); err != nil {
+			return fmt.Errorf("failed to close output file: %w", err)
+		}
+
 		if rootVerbose {
-			fmt.Fprintf(os.Stderr, "Wrote formatted manifests to: %s\n", sourcePath)
+			fmt.Fprintf(os.Stderr, "Wrote %d resources to: %s\n", len(resources), sourcePath)
 		}
 	}
 

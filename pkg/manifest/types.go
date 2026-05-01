@@ -52,13 +52,15 @@ func (k ResourceKey) APIVersion() string {
 
 // ManifestSet represents a collection of Kubernetes resources indexed by ResourceKey
 type ManifestSet struct {
-	Resources map[ResourceKey]*unstructured.Unstructured
+	Resources  map[ResourceKey]*unstructured.Unstructured
+	SourceFile map[ResourceKey]string // Tracks the source file path for each resource
 }
 
 // NewManifestSet creates an empty ManifestSet
 func NewManifestSet() *ManifestSet {
 	return &ManifestSet{
-		Resources: make(map[ResourceKey]*unstructured.Unstructured),
+		Resources:  make(map[ResourceKey]*unstructured.Unstructured),
+		SourceFile: make(map[ResourceKey]string),
 	}
 }
 
@@ -72,6 +74,20 @@ func (m *ManifestSet) Add(obj *unstructured.Unstructured) error {
 	}
 
 	m.Resources[key] = obj
+	return nil
+}
+
+// AddWithSource adds a resource to the ManifestSet with its source file path
+// Returns an error if a resource with the same key already exists
+func (m *ManifestSet) AddWithSource(obj *unstructured.Unstructured, sourcePath string) error {
+	key := NewResourceKey(obj)
+
+	if _, exists := m.Resources[key]; exists {
+		return fmt.Errorf("duplicate resource: %s", key.String())
+	}
+
+	m.Resources[key] = obj
+	m.SourceFile[key] = sourcePath
 	return nil
 }
 
@@ -103,6 +119,28 @@ func (m *ManifestSet) Merge(other *ManifestSet) error {
 			return fmt.Errorf("duplicate resource during merge: %s", key.String())
 		}
 		m.Resources[key] = obj
+		// Preserve source file information if available
+		if sourcePath, ok := other.SourceFile[key]; ok {
+			m.SourceFile[key] = sourcePath
+		}
 	}
 	return nil
+}
+
+// GetSourceFile returns the source file path for a resource, if tracked
+func (m *ManifestSet) GetSourceFile(key ResourceKey) (string, bool) {
+	path, ok := m.SourceFile[key]
+	return path, ok
+}
+
+// GroupBySourceFile returns resources grouped by their source file
+func (m *ManifestSet) GroupBySourceFile() map[string][]*unstructured.Unstructured {
+	groups := make(map[string][]*unstructured.Unstructured)
+
+	for key, obj := range m.Resources {
+		sourcePath := m.SourceFile[key]
+		groups[sourcePath] = append(groups[sourcePath], obj)
+	}
+
+	return groups
 }
