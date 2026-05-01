@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/nhuray/kyt/pkg/formatter"
 	"github.com/nhuray/kyt/pkg/manifest"
-	"github.com/nhuray/kyt/pkg/normalizer"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -74,15 +74,10 @@ func runFmt(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Load configuration
-	cfg, err := loadConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
 	// Parse manifests
 	parser := manifest.NewParser()
 	var manifestSet *manifest.ManifestSet
+	var err error
 
 	if input != nil {
 		// Parse from reader (stdin)
@@ -112,21 +107,21 @@ func runFmt(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "Found %d resources\n", manifestSet.Len())
 	}
 
-	// Normalize all resources
-	norm := normalizer.New(cfg)
-	normalized := make([]*unstructured.Unstructured, 0, manifestSet.Len())
+	// Format all resources (only key sorting, no normalization)
+	fmtr := formatter.New()
+	formatted := make([]*unstructured.Unstructured, 0, manifestSet.Len())
 
 	for _, obj := range manifestSet.Resources {
-		n, err := norm.Normalize(obj)
+		f, err := fmtr.Format(obj)
 		if err != nil {
 			key := manifest.NewResourceKey(obj)
-			return fmt.Errorf("failed to normalize %s: %w", key.String(), err)
+			return fmt.Errorf("failed to format %s: %w", key.String(), err)
 		}
-		normalized = append(normalized, n)
+		formatted = append(formatted, f)
 	}
 
 	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "Normalized %d resources\n", len(normalized))
+		fmt.Fprintf(os.Stderr, "Formatted %d resources\n", len(formatted))
 	}
 
 	// Write output
@@ -139,13 +134,13 @@ func runFmt(cmd *cobra.Command, args []string) error {
 		// For now, we'll write all formatted resources back to the original path
 		// TODO: In a more advanced implementation, we could preserve the original
 		// file structure when dealing with directories
-		return writeBackToSource(sourcePath, normalized)
+		return writeBackToSource(sourcePath, formatted)
 	} else {
 		// Write to stdout
 		if rootVerbose {
 			fmt.Fprintf(os.Stderr, "Writing to stdout...\n")
 		}
-		return manifest.WriteYAML(os.Stdout, normalized)
+		return manifest.WriteYAML(os.Stdout, formatted)
 	}
 }
 

@@ -10,8 +10,8 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 
 **kyt solves this by:**
 
-1. **Formatting manifests** - Normalizes YAML by sorting keys, removing default/managed fields, and applying custom ignore rules
-2. **Smart comparison** - Compares only what matters by using ArgoCD-compatible ignore rules (JSON Pointers and JQ expressions)
+1. **Formatting manifests** - Sorts keys alphabetically for consistent YAML structure
+2. **Smart comparison** - Normalizes and compares manifests using ArgoCD-compatible ignore rules (removes fields, applies custom rules, sorts keys)
 3. **Beautiful diffs** - Leverages [difftastic](https://difftastic.wilfred.me.uk/) for structural, syntax-aware diffs that are easy to read
 
 **Key Features:**
@@ -20,8 +20,8 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 - 🔍 **JSON Pointer Support**: RFC 6901 compliant JSON Pointers for precise field targeting
 - 🎨 **JQ Path Expressions**: Powerful filtering with wildcards and conditionals
 - 📊 **Multiple Output Formats**: CLI (with colors), JSON
-- 🎯 **Smart Normalization**: Sorts keys, removes managed fields, applies ignore rules
-- 🔧 **Lint & Format**: Format manifests with `kyt fmt`
+- 🎯 **Smart Normalization**: Removes managed fields, applies ignore rules, sorts keys (used by `diff`)
+- 🔧 **Lint & Format**: Sort keys consistently with `kyt fmt`
 - 🔀 **Pipe-friendly**: Works seamlessly with kubectl, kustomize, helm
 - 🤖 **Smart Similarity Matching**: Automatically detects renamed resources
 - ⚡ **Fast & Reliable**: Written in Go with 60+ passing tests
@@ -32,7 +32,7 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 - **Detect configuration drift**: Compare desired state (Git) with actual cluster state (`kubectl get`), ignoring dynamic fields like timestamps and resource versions
 - **CI/CD validation**: Ensure manifest changes are intentional by comparing PR changes against production, with rules to ignore acceptable differences
 - **Pre-deployment validation**: Compare what's currently deployed vs what will be deployed, filtering out noise
-- **Format and standardize**: Clean up YAML files by sorting keys, removing managed fields, and applying consistent formatting
+- **Format and standardize**: Clean up YAML files by sorting keys alphabetically for consistent formatting
 
 ## Quick Start
 
@@ -100,7 +100,7 @@ kyt diff --display inline source.yaml target.yaml
 
 ### `kyt fmt` - Format manifests
 
-Format Kubernetes manifests by applying transformations like sorting keys and arrays.
+Format Kubernetes manifests by sorting keys alphabetically for consistent YAML structure.
 
 ```bash
 # Format a file to stdout
@@ -128,7 +128,7 @@ kyt version
 
 ## Configuration
 
-The tool searches for `.kyt.yaml` in the current directory and parent directories.
+The `diff` command uses `.kyt.yaml` for normalization rules (removing fields, ignore rules). The tool searches for this file in the current directory and parent directories. The `fmt` command does not use configuration - it only sorts keys.
 
 ```yaml
 # .kyt.yaml

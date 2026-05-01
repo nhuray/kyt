@@ -3,8 +3,8 @@ package normalizer
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 
+	"github.com/nhuray/kyt/pkg/formatter"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -107,57 +107,9 @@ func (n *Normalizer) applyIgnoreRules(obj *unstructured.Unstructured) error {
 
 // sortKeys recursively sorts all object keys alphabetically
 func (n *Normalizer) sortKeys(obj *unstructured.Unstructured) error {
-	data := obj.Object
-	sorted := sortMapKeys(data)
+	sorted := formatter.SortMapKeys(obj.Object)
 	obj.Object = sorted
 	return nil
-}
-
-// sortMapKeys recursively sorts map keys
-func sortMapKeys(m map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
-
-	// Get sorted keys
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	// Build new map with sorted keys
-	for _, k := range keys {
-		v := m[k]
-
-		// Recursively sort nested maps
-		switch val := v.(type) {
-		case map[string]interface{}:
-			result[k] = sortMapKeys(val)
-		case []interface{}:
-			result[k] = sortSlice(val)
-		default:
-			result[k] = v
-		}
-	}
-
-	return result
-}
-
-// sortSlice recursively sorts nested structures in slices
-func sortSlice(s []interface{}) []interface{} {
-	result := make([]interface{}, len(s))
-
-	for i, v := range s {
-		switch val := v.(type) {
-		case map[string]interface{}:
-			result[i] = sortMapKeys(val)
-		case []interface{}:
-			result[i] = sortSlice(val)
-		default:
-			result[i] = v
-		}
-	}
-
-	return result
 }
 
 // removeJSONPointerField removes a field specified by a JSON Pointer (RFC 6901)
