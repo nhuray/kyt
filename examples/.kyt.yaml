@@ -1,63 +1,63 @@
-# kyt Configuration
-# This file demonstrates the configuration options for kyt
+# Kyt Configuration
+# Diff command configuration
+diff:
+  # Ignore differences for specific resources
+  ignoreDifferences:
+    # Ignore common metadata labels for all resources
+    - group: ""
+      kind: "*"
+      jsonPointers:
+        - /metadata/labels/app.kubernetes.io~1version
+        - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
 
-# Ignore differences for specific resources
-ignoreDifferences:
-  # Ignore common metadata labels for all resources
-  - group: ""
-    kind: "*"
-    jsonPointers:
-      - /metadata/labels/app.kubernetes.io~1version
-      - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
+    # Ignore Istio sidecars in Deployments
+    - group: "apps"
+      kind: "Deployment"
+      jqPathExpressions:
+        - .spec.template.spec.containers[] | select(.name == "istio-proxy")
+        - .spec.template.spec.initContainers[] | select(.name == "istio-init")
+        - .spec.template.metadata.annotations["sidecar.istio.io/status"]
 
-  # Ignore Istio sidecars in Deployments
-  - group: "apps"
-    kind: "Deployment"
-    jqPathExpressions:
-      - .spec.template.spec.containers[] | select(.name == "istio-proxy")
-      - .spec.template.spec.initContainers[] | select(.name == "istio-init")
-      - .spec.template.metadata.annotations["sidecar.istio.io/status"]
+    # Ignore replica count differences in production
+    - group: "apps"
+      kind: "Deployment"
+      namespace: "production"
+      jsonPointers:
+        - /spec/replicas
 
-  # Ignore replica count differences in production
-  - group: "apps"
-    kind: "Deployment"
-    namespace: "production"
-    jsonPointers:
-      - /spec/replicas
+    # Ignore HPA-managed fields
+    - group: "apps"
+      kind: "Deployment"
+      managedFieldsManagers:
+        - "kube-controller-manager"
 
-  # Ignore HPA-managed fields
-  - group: "apps"
-    kind: "Deployment"
-    managedFieldsManagers:
-      - "kube-controller-manager"
+  # Normalization options
+  normalization:
+    # Sort object keys alphabetically
+    sortKeys: true
 
-# Normalization options
-normalization:
-  # Sort object keys alphabetically
-  sortKeys: true
+    # Sort arrays where order doesn't matter
+    sortArrays:
+      - path: ".spec.template.spec.containers[].ports"
+        sortBy: "containerPort"
+      - path: ".spec.template.spec.containers[].env"
+        sortBy: "name"
+      - path: ".spec.template.spec.volumes"
+        sortBy: "name"
 
-  # Sort arrays where order doesn't matter
-  sortArrays:
-    - path: ".spec.template.spec.containers[].ports"
-      sortBy: "containerPort"
-    - path: ".spec.template.spec.containers[].env"
-      sortBy: "name"
-    - path: ".spec.template.spec.volumes"
-      sortBy: "name"
+    # Remove fields that shouldn't be compared
+    removeDefaultFields:
+      - "/status"
+      - "/metadata/managedFields"
+      - "/metadata/creationTimestamp"
+      - "/metadata/generation"
+      - "/metadata/resourceVersion"
+      - "/metadata/uid"
 
-  # Remove fields that shouldn't be compared
-  removeDefaultFields:
-    - "/status"
-    - "/metadata/managedFields"
-    - "/metadata/creationTimestamp"
-    - "/metadata/generation"
-    - "/metadata/resourceVersion"
-    - "/metadata/uid"
-
-# Output options
-output:
-  format: cli # cli, json, yaml, diff
-  colorize: true # Enable colored output
-  showUnchanged: false # Show resources with no differences
-  contextLines: 3 # Context lines for unified diff
-  stringSimilarityThreshold: 100 # Minimum string length for fuzzy matching (0 = disable)
+  # CLI options
+  cli:
+    display: side-by-side
+    colorize: true # Enable colored output
+    showUnchanged: false # Show resources with no differences
+    contextLines: 3 # Context lines for unified diff
+    stringSimilarityThreshold: 100 # Minimum string length for fuzzy matching (0 = disable)

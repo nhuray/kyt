@@ -2,9 +2,14 @@ package config
 
 // Config represents the complete configuration for kyt
 type Config struct {
+	Diff DiffConfig `yaml:"diff"`
+}
+
+// DiffConfig contains all configuration for the diff command
+type DiffConfig struct {
 	IgnoreDifferences []ResourceIgnoreDifferences `yaml:"ignoreDifferences"`
 	Normalization     NormalizationConfig         `yaml:"normalization"`
-	Output            OutputConfig                `yaml:"output"`
+	CLI               CLIConfig                   `yaml:"cli"`
 }
 
 // ResourceIgnoreDifferences defines ignore rules for specific resource types
@@ -65,12 +70,12 @@ type ArraySortConfig struct {
 	SortBy string `yaml:"sortBy"`
 }
 
-// OutputConfig controls the output format and styling
-type OutputConfig struct {
-	// Format is the output format: "cli", "json", "yaml", "diff"
-	Format string `yaml:"format"`
+// CLIConfig controls CLI display options for the diff command
+type CLIConfig struct {
+	// Display is the display mode: "side-by-side", "inline"
+	Display string `yaml:"display"`
 
-	// Colorize enables colored output (only for cli/diff formats)
+	// Colorize enables colored output
 	Colorize bool `yaml:"colorize"`
 
 	// ShowUnchanged shows resources that have no differences
@@ -88,24 +93,26 @@ type OutputConfig struct {
 // NewDefaultConfig returns a Config with sensible defaults
 func NewDefaultConfig() *Config {
 	return &Config{
-		IgnoreDifferences: []ResourceIgnoreDifferences{},
-		Normalization: NormalizationConfig{
-			SortKeys: true,
-			RemoveDefaultFields: []string{
-				"/status",
-				"/metadata/managedFields",
-				"/metadata/creationTimestamp",
-				"/metadata/generation",
-				"/metadata/resourceVersion",
-				"/metadata/uid",
+		Diff: DiffConfig{
+			IgnoreDifferences: []ResourceIgnoreDifferences{},
+			Normalization: NormalizationConfig{
+				SortKeys: true,
+				RemoveDefaultFields: []string{
+					"/status",
+					"/metadata/managedFields",
+					"/metadata/creationTimestamp",
+					"/metadata/generation",
+					"/metadata/resourceVersion",
+					"/metadata/uid",
+				},
 			},
-		},
-		Output: OutputConfig{
-			Format:                    "cli",
-			Colorize:                  true,
-			ShowUnchanged:             false,
-			ContextLines:              3,
-			StringSimilarityThreshold: 100, // Enable fuzzy matching for strings > 100 chars
+			CLI: CLIConfig{
+				Display:                   "side-by-side",
+				Colorize:                  true,
+				ShowUnchanged:             false,
+				ContextLines:              3,
+				StringSimilarityThreshold: 100, // Enable fuzzy matching for strings > 100 chars
+			},
 		},
 	}
 }
@@ -114,30 +121,30 @@ func NewDefaultConfig() *Config {
 // Rules from the other config are appended (not replaced)
 func (c *Config) Merge(other *Config) {
 	// Append ignore rules
-	c.IgnoreDifferences = append(c.IgnoreDifferences, other.IgnoreDifferences...)
+	c.Diff.IgnoreDifferences = append(c.Diff.IgnoreDifferences, other.Diff.IgnoreDifferences...)
 
 	// Merge normalization (other takes precedence for boolean fields)
-	if other.Normalization.SortKeys {
-		c.Normalization.SortKeys = true
+	if other.Diff.Normalization.SortKeys {
+		c.Diff.Normalization.SortKeys = true
 	}
-	c.Normalization.SortArrays = append(c.Normalization.SortArrays, other.Normalization.SortArrays...)
-	c.Normalization.RemoveDefaultFields = append(c.Normalization.RemoveDefaultFields, other.Normalization.RemoveDefaultFields...)
+	c.Diff.Normalization.SortArrays = append(c.Diff.Normalization.SortArrays, other.Diff.Normalization.SortArrays...)
+	c.Diff.Normalization.RemoveDefaultFields = append(c.Diff.Normalization.RemoveDefaultFields, other.Diff.Normalization.RemoveDefaultFields...)
 
-	// Output config: other takes precedence
-	if other.Output.Format != "" {
-		c.Output.Format = other.Output.Format
+	// CLI config: other takes precedence
+	if other.Diff.CLI.Display != "" {
+		c.Diff.CLI.Display = other.Diff.CLI.Display
 	}
-	if other.Output.Colorize {
-		c.Output.Colorize = true
+	if other.Diff.CLI.Colorize {
+		c.Diff.CLI.Colorize = true
 	}
-	if other.Output.ShowUnchanged {
-		c.Output.ShowUnchanged = true
+	if other.Diff.CLI.ShowUnchanged {
+		c.Diff.CLI.ShowUnchanged = true
 	}
-	if other.Output.ContextLines > 0 {
-		c.Output.ContextLines = other.Output.ContextLines
+	if other.Diff.CLI.ContextLines > 0 {
+		c.Diff.CLI.ContextLines = other.Diff.CLI.ContextLines
 	}
-	if other.Output.StringSimilarityThreshold > 0 {
-		c.Output.StringSimilarityThreshold = other.Output.StringSimilarityThreshold
+	if other.Diff.CLI.StringSimilarityThreshold > 0 {
+		c.Diff.CLI.StringSimilarityThreshold = other.Diff.CLI.StringSimilarityThreshold
 	}
 }
 

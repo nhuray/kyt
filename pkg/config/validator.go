@@ -18,14 +18,14 @@ func NewValidator() *Validator {
 // Validate validates a configuration
 func (v *Validator) Validate(cfg *Config) error {
 	// Validate ignore differences
-	for i, rule := range cfg.IgnoreDifferences {
+	for i, rule := range cfg.Diff.IgnoreDifferences {
 		if err := v.validateIgnoreRule(&rule, i); err != nil {
 			return err
 		}
 	}
 
-	// Validate output config
-	if err := v.validateOutputConfig(&cfg.Output); err != nil {
+	// Validate CLI config
+	if err := v.validateCLIConfig(&cfg.Diff.CLI); err != nil {
 		return err
 	}
 
@@ -95,22 +95,21 @@ func (v *Validator) validateJQExpression(expr string) error {
 	return nil
 }
 
-// validateOutputConfig validates output configuration
-func (v *Validator) validateOutputConfig(output *OutputConfig) error {
-	// Validate format
-	validFormats := map[string]bool{
-		"cli":  true,
-		"json": true,
-		"yaml": true,
-		"diff": true,
+// validateCLIConfig validates CLI configuration
+func (v *Validator) validateCLIConfig(cli *CLIConfig) error {
+	// Validate display mode
+	validDisplayModes := map[string]bool{
+		"":             true, // Empty is allowed (will use default)
+		"side-by-side": true,
+		"inline":       true,
 	}
-	if output.Format != "" && !validFormats[output.Format] {
-		return fmt.Errorf("invalid output format: %s (must be one of: cli, json, yaml, diff)", output.Format)
+	if cli.Display != "" && !validDisplayModes[cli.Display] {
+		return fmt.Errorf("invalid display mode: %s (must be one of: side-by-side, inline)", cli.Display)
 	}
 
 	// Context lines must be non-negative
-	if output.ContextLines < 0 {
-		return fmt.Errorf("contextLines must be non-negative, got: %d", output.ContextLines)
+	if cli.ContextLines < 0 {
+		return fmt.Errorf("contextLines must be non-negative, got: %d", cli.ContextLines)
 	}
 
 	return nil
