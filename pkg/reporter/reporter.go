@@ -3,6 +3,7 @@ package reporter
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/nhuray/kyt/pkg/differ"
@@ -97,8 +98,59 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 		return fmt.Errorf("failed to write separator: %w", err)
 	}
 
+	// Sort changes by: CHANGE (A/R/M), then KIND, then LEFT, then RIGHT
+	sortedChanges := make([]differ.ResourceDiff, len(result.Changes))
+	copy(sortedChanges, result.Changes)
+	sort.Slice(sortedChanges, func(i, j int) bool {
+		// Compare change types (A < M < R for alphabetical ordering)
+		if sortedChanges[i].ChangeType != sortedChanges[j].ChangeType {
+			return sortedChanges[i].ChangeType < sortedChanges[j].ChangeType
+		}
+
+		// Compare kinds
+		kindI := ""
+		kindJ := ""
+		if sortedChanges[i].SourceKey != nil {
+			kindI = sortedChanges[i].SourceKey.Kind
+		} else if sortedChanges[i].TargetKey != nil {
+			kindI = sortedChanges[i].TargetKey.Kind
+		}
+		if sortedChanges[j].SourceKey != nil {
+			kindJ = sortedChanges[j].SourceKey.Kind
+		} else if sortedChanges[j].TargetKey != nil {
+			kindJ = sortedChanges[j].TargetKey.Kind
+		}
+		if kindI != kindJ {
+			return kindI < kindJ
+		}
+
+		// Compare LEFT (source) names
+		leftI := ""
+		leftJ := ""
+		if sortedChanges[i].SourceKey != nil {
+			leftI = formatResourceName(*sortedChanges[i].SourceKey)
+		}
+		if sortedChanges[j].SourceKey != nil {
+			leftJ = formatResourceName(*sortedChanges[j].SourceKey)
+		}
+		if leftI != leftJ {
+			return leftI < leftJ
+		}
+
+		// Compare RIGHT (target) names
+		rightI := ""
+		rightJ := ""
+		if sortedChanges[i].TargetKey != nil {
+			rightI = formatResourceName(*sortedChanges[i].TargetKey)
+		}
+		if sortedChanges[j].TargetKey != nil {
+			rightJ = formatResourceName(*sortedChanges[j].TargetKey)
+		}
+		return rightI < rightJ
+	})
+
 	// Rows
-	for _, change := range result.Changes {
+	for _, change := range sortedChanges {
 		r.printSummaryRow(w, change, changeWidth, kindWidth, leftWidth, rightWidth, matchTypeWidth, similarityWidth)
 	}
 
