@@ -168,7 +168,7 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 		}
 	}
 
-	// Summary line
+	// Summary line - order: added, modified, removed, identical
 	if _, err := fmt.Fprintln(w); err != nil {
 		return fmt.Errorf("failed to write newline: %w", err)
 	}
@@ -180,17 +180,17 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 		}
 		parts = append(parts, text)
 	}
-	if result.Summary.Removed > 0 {
-		text := fmt.Sprintf("%d removed", result.Summary.Removed)
-		if r.colorize {
-			text = red + text + reset
-		}
-		parts = append(parts, text)
-	}
 	if result.Summary.Modified > 0 {
 		text := fmt.Sprintf("%d modified", result.Summary.Modified)
 		if r.colorize {
 			text = yellow + text + reset
+		}
+		parts = append(parts, text)
+	}
+	if result.Summary.Removed > 0 {
+		text := fmt.Sprintf("%d removed", result.Summary.Removed)
+		if r.colorize {
+			text = red + text + reset
 		}
 		parts = append(parts, text)
 	}
