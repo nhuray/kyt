@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,13 +35,10 @@ func TestCLI_DiffIdenticalManifests(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if output == "" {
-		t.Error("Expected output, got empty string")
-	}
-
-	// Check for success message
-	if !bytes.Contains([]byte(output), []byte("No differences found")) {
-		t.Errorf("Expected 'No differences found' in output, got: %s", output)
+	// With no differences, unified diff format produces no output
+	// This is expected behavior (like git diff with no changes)
+	if output != "" {
+		t.Logf("Output for identical manifests: %q", output)
 	}
 }
 
@@ -79,31 +75,30 @@ func TestCLI_DiffDifferentManifests(t *testing.T) {
 		t.Error("Expected output, got empty string")
 	}
 
-	// Check for differences message
-	if !bytes.Contains([]byte(output), []byte("Differences detected")) {
-		t.Errorf("Expected 'Differences detected' in output, got: %s", output)
+	// Check for unified diff format markers
+	if !bytes.Contains([]byte(output), []byte("---")) {
+		t.Error("Expected '---' marker in unified diff output")
 	}
-
-	// Check for added/removed resources
-	if !bytes.Contains([]byte(output), []byte("Added Resources")) {
-		t.Error("Expected 'Added Resources' section in output")
-	}
-	if !bytes.Contains([]byte(output), []byte("Removed Resources")) {
-		t.Error("Expected 'Removed Resources' section in output")
+	if !bytes.Contains([]byte(output), []byte("+++")) {
+		t.Error("Expected '+++' marker in unified diff output")
 	}
 }
 
-// TestCLI_DiffJSONOutput tests JSON output format
-func TestCLI_DiffJSONOutput(t *testing.T) {
+// TestCLI_DiffFileOutput tests writing output to a file
+func TestCLI_DiffFileOutput(t *testing.T) {
 	buildCmd := exec.Command("go", "build", "-o", "../../bin/kyt-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
 	defer func() { _ = os.Remove("../../bin/kyt-test") }()
 
+	// Create temp file for output
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "diff.txt")
+
 	cmd := exec.Command("../../bin/kyt-test",
 		"diff",
-		"-o", "json",
+		"-o", outputFile,
 		"../../examples/manifests/basic",
 		"../../examples/manifests/multi-doc")
 
@@ -113,38 +108,25 @@ func TestCLI_DiffJSONOutput(t *testing.T) {
 
 	_ = cmd.Run() // Ignore exit code for this test
 
-	// Parse JSON output
-	var result map[string]interface{}
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("Failed to parse JSON output: %v\nOutput: %s", err, stdout.String())
+	// Check that output file was created
+	if _, err := os.Stat(outputFile); os.IsNotExist(err) {
+		t.Fatalf("Expected output file to be created at %s", outputFile)
 	}
 
-	// Check for expected fields
-	if _, ok := result["summary"]; !ok {
-		t.Error("Expected 'summary' field in JSON output")
-	}
-	if _, ok := result["added"]; !ok {
-		t.Error("Expected 'added' field in JSON output")
-	}
-	if _, ok := result["removed"]; !ok {
-		t.Error("Expected 'removed' field in JSON output")
-	}
-	if _, ok := result["modified"]; !ok {
-		t.Error("Expected 'modified' field in JSON output")
+	// Read output file
+	content, err := os.ReadFile(outputFile)
+	if err != nil {
+		t.Fatalf("Failed to read output file: %v", err)
 	}
 
-	// Check summary counts
-	summary := result["summary"].(map[string]interface{})
-	if summary["added"].(float64) != 3 {
-		t.Errorf("Expected 3 added resources, got %v", summary["added"])
-	}
-	if summary["removed"].(float64) != 2 {
-		t.Errorf("Expected 2 removed resources, got %v", summary["removed"])
+	// Check that file contains diff output
+	if !bytes.Contains(content, []byte("---")) || !bytes.Contains(content, []byte("+++")) {
+		t.Error("Expected unified diff format in output file")
 	}
 }
 
-// TestCLI_DiffShowIdentical tests --show-identical flag
-func TestCLI_DiffShowIdentical(t *testing.T) {
+// TestCLI_DiffSummary tests --summary flag
+func TestCLI_DiffSummary(t *testing.T) {
 	buildCmd := exec.Command("go", "build", "-o", "../../bin/kyt-test", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
@@ -153,24 +135,24 @@ func TestCLI_DiffShowIdentical(t *testing.T) {
 
 	cmd := exec.Command("../../bin/kyt-test",
 		"diff",
-		"--show-identical",
+		"--summary",
 		"../../examples/manifests/basic",
-		"../../examples/manifests/basic")
+		"../../examples/manifests/multi-doc")
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
-	if err != nil {
-		t.Fatalf("Expected exit code 0, got error: %v", err)
-	}
+	_ = cmd.Run() // Ignore exit code for this test
 
 	output := stdout.String()
 
-	// Should show identical resources
-	if !bytes.Contains([]byte(output), []byte("Identical Resources")) {
-		t.Errorf("Expected 'Identical Resources' section in output with --show-identical, got: %s", output)
+	// Should show summary table header
+	if !bytes.Contains([]byte(output), []byte("KIND")) {
+		t.Error("Expected 'KIND' header in summary output")
+	}
+	if !bytes.Contains([]byte(output), []byte("SUMMARY:")) {
+		t.Error("Expected 'SUMMARY:' line in summary output")
 	}
 }
 

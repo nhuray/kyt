@@ -221,48 +221,48 @@ func TestValidatorValidateIgnoreRule(t *testing.T) {
 	}
 }
 
-func TestValidatorValidateCLIConfig(t *testing.T) {
+func TestValidatorValidateOptionsConfig(t *testing.T) {
 	validator := NewValidator()
 
 	tests := []struct {
 		name        string
-		output      CLIConfig
+		options     OptionsConfig
 		expectError bool
 	}{
 		{
-			name: "valid side-by-side display",
-			output: CLIConfig{
-				Display: "side-by-side",
+			name: "valid options",
+			options: OptionsConfig{
+				ContextLines:        3,
+				SimilarityThreshold: 0.7,
+				DataSimilarityBoost: 2,
 			},
 			expectError: false,
 		},
 		{
-			name: "valid inline display",
-			output: CLIConfig{
-				Display: "inline",
-			},
-			expectError: false,
-		},
-		{
-			name: "valid with context lines",
-			output: CLIConfig{
-				Display:      "inline",
-				ContextLines: 5,
-			},
-			expectError: false,
-		},
-		{
-			name: "invalid display mode",
-			output: CLIConfig{
-				Display: "invalid",
+			name: "negative context lines",
+			options: OptionsConfig{
+				ContextLines: -1,
 			},
 			expectError: true,
 		},
 		{
-			name: "invalid negative context lines",
-			output: CLIConfig{
-				Display:      "side-by-side",
-				ContextLines: -1,
+			name: "similarity threshold too low",
+			options: OptionsConfig{
+				SimilarityThreshold: -0.1,
+			},
+			expectError: true,
+		},
+		{
+			name: "similarity threshold too high",
+			options: OptionsConfig{
+				SimilarityThreshold: 1.5,
+			},
+			expectError: true,
+		},
+		{
+			name: "data similarity boost too high",
+			options: OptionsConfig{
+				DataSimilarityBoost: 11,
 			},
 			expectError: true,
 		},
@@ -270,7 +270,52 @@ func TestValidatorValidateCLIConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validator.validateCLIConfig(&tt.output)
+			err := validator.validateOptionsConfig(&tt.options)
+			if tt.expectError && err == nil {
+				t.Error("Expected error, got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidatorValidateFuzzyMatchingConfig(t *testing.T) {
+	validator := NewValidator()
+
+	tests := []struct {
+		name        string
+		fuzzy       FuzzyMatchingConfig
+		expectError bool
+	}{
+		{
+			name: "valid fuzzy matching",
+			fuzzy: FuzzyMatchingConfig{
+				Enabled:         true,
+				MinStringLength: 100,
+			},
+			expectError: false,
+		},
+		{
+			name: "negative min string length",
+			fuzzy: FuzzyMatchingConfig{
+				MinStringLength: -1,
+			},
+			expectError: true,
+		},
+		{
+			name: "min string length too high",
+			fuzzy: FuzzyMatchingConfig{
+				MinStringLength: 20000,
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validator.validateFuzzyMatchingConfig(&tt.fuzzy)
 			if tt.expectError && err == nil {
 				t.Error("Expected error, got nil")
 			}
@@ -302,9 +347,6 @@ func TestValidatorValidateConfig(t *testing.T) {
 							},
 						},
 					},
-					CLI: CLIConfig{
-						Display: "side-by-side",
-					},
 				},
 			},
 			expectError: false,
@@ -329,9 +371,6 @@ func TestValidatorValidateConfig(t *testing.T) {
 							},
 						},
 					},
-					CLI: CLIConfig{
-						Display: "inline",
-					},
 				},
 			},
 			expectError: false,
@@ -349,15 +388,12 @@ func TestValidatorValidateConfig(t *testing.T) {
 							},
 						},
 					},
-					CLI: CLIConfig{
-						Display: "side-by-side",
-					},
 				},
 			},
 			expectError: true,
 		},
 		{
-			name: "invalid - bad CLI config",
+			name: "invalid - bad options config",
 			config: Config{
 				Diff: DiffConfig{
 					IgnoreDifferences: []ResourceIgnoreDifferences{
@@ -369,8 +405,8 @@ func TestValidatorValidateConfig(t *testing.T) {
 							},
 						},
 					},
-					CLI: CLIConfig{
-						Display: "invalid-mode",
+					Options: OptionsConfig{
+						SimilarityThreshold: 1.5, // Invalid: > 1.0
 					},
 				},
 			},

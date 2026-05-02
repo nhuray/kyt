@@ -35,20 +35,20 @@ func TestDiff_AddedResources(t *testing.T) {
 		t.Fatalf("Diff failed: %v", err)
 	}
 
-	if len(result.Added) != 1 {
-		t.Errorf("Expected 1 added resource, got %d", len(result.Added))
+	if len(result.GetAdded()) != 1 {
+		t.Errorf("Expected 1 added resource, got %d", len(result.GetAdded()))
 	}
 
-	if len(result.Removed) != 0 {
-		t.Errorf("Expected 0 removed resources, got %d", len(result.Removed))
+	if len(result.GetRemoved()) != 0 {
+		t.Errorf("Expected 0 removed resources, got %d", len(result.GetRemoved()))
 	}
 
-	if len(result.Modified) != 0 {
-		t.Errorf("Expected 0 modified resources, got %d", len(result.Modified))
+	if len(result.GetModified()) != 0 {
+		t.Errorf("Expected 0 modified resources, got %d", len(result.GetModified()))
 	}
 
-	if result.Summary.AddedCount != 1 {
-		t.Errorf("Expected AddedCount=1, got %d", result.Summary.AddedCount)
+	if result.Summary.Added != 1 {
+		t.Errorf("Expected AddedCount=1, got %d", result.Summary.Added)
 	}
 }
 
@@ -78,20 +78,20 @@ func TestDiff_RemovedResources(t *testing.T) {
 		t.Fatalf("Diff failed: %v", err)
 	}
 
-	if len(result.Added) != 0 {
-		t.Errorf("Expected 0 added resources, got %d", len(result.Added))
+	if len(result.GetAdded()) != 0 {
+		t.Errorf("Expected 0 added resources, got %d", len(result.GetAdded()))
 	}
 
-	if len(result.Removed) != 1 {
-		t.Errorf("Expected 1 removed resource, got %d", len(result.Removed))
+	if len(result.GetRemoved()) != 1 {
+		t.Errorf("Expected 1 removed resource, got %d", len(result.GetRemoved()))
 	}
 
-	if len(result.Modified) != 0 {
-		t.Errorf("Expected 0 modified resources, got %d", len(result.Modified))
+	if len(result.GetModified()) != 0 {
+		t.Errorf("Expected 0 modified resources, got %d", len(result.GetModified()))
 	}
 
-	if result.Summary.RemovedCount != 1 {
-		t.Errorf("Expected RemovedCount=1, got %d", result.Summary.RemovedCount)
+	if result.Summary.Removed != 1 {
+		t.Errorf("Expected RemovedCount=1, got %d", result.Summary.Removed)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestDiff_ModifiedResources(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	norm := normalizer.New(cfg)
 
-	// Use default options for tree-sitter test output
+	// Use default diff options
 	opts := NewDefaultDiffOptions()
 
 	differ := New(norm, opts)
@@ -152,24 +152,24 @@ func TestDiff_ModifiedResources(t *testing.T) {
 		t.Fatalf("Diff failed: %v", err)
 	}
 
-	if len(result.Added) != 0 {
-		t.Errorf("Expected 0 added resources, got %d", len(result.Added))
+	if len(result.GetAdded()) != 0 {
+		t.Errorf("Expected 0 added resources, got %d", len(result.GetAdded()))
 	}
 
-	if len(result.Removed) != 0 {
-		t.Errorf("Expected 0 removed resources, got %d", len(result.Removed))
+	if len(result.GetRemoved()) != 0 {
+		t.Errorf("Expected 0 removed resources, got %d", len(result.GetRemoved()))
 	}
 
-	if len(result.Modified) != 1 {
-		t.Errorf("Expected 1 modified resource, got %d", len(result.Modified))
+	if len(result.GetModified()) != 1 {
+		t.Errorf("Expected 1 modified resource, got %d", len(result.GetModified()))
 	}
 
-	if result.Summary.ModifiedCount != 1 {
-		t.Errorf("Expected ModifiedCount=1, got %d", result.Summary.ModifiedCount)
+	if result.Summary.Modified != 1 {
+		t.Errorf("Expected ModifiedCount=1, got %d", result.Summary.Modified)
 	}
 
 	// Check that diff text is not empty
-	if len(result.Modified) > 0 && result.Modified[0].DiffText == "" {
+	if len(result.GetModified()) > 0 && result.GetModified()[0].DiffText == "" {
 		t.Error("Expected non-empty diff text")
 	}
 }
@@ -209,24 +209,24 @@ func TestDiff_IdenticalResources(t *testing.T) {
 		t.Fatalf("Diff failed: %v", err)
 	}
 
-	if len(result.Added) != 0 {
-		t.Errorf("Expected 0 added resources, got %d", len(result.Added))
+	if len(result.GetAdded()) != 0 {
+		t.Errorf("Expected 0 added resources, got %d", len(result.GetAdded()))
 	}
 
-	if len(result.Removed) != 0 {
-		t.Errorf("Expected 0 removed resources, got %d", len(result.Removed))
+	if len(result.GetRemoved()) != 0 {
+		t.Errorf("Expected 0 removed resources, got %d", len(result.GetRemoved()))
 	}
 
-	if len(result.Modified) != 0 {
-		t.Errorf("Expected 0 modified resources, got %d", len(result.Modified))
+	if len(result.GetModified()) != 0 {
+		t.Errorf("Expected 0 modified resources, got %d", len(result.GetModified()))
 	}
 
-	if len(result.Identical) != 1 {
-		t.Errorf("Expected 1 identical resource, got %d", len(result.Identical))
+	if result.Summary.Identical != 1 {
+		t.Errorf("Expected 1 identical resource, got %d", result.Summary.Identical)
 	}
 
-	if result.Summary.IdenticalCount != 1 {
-		t.Errorf("Expected IdenticalCount=1, got %d", result.Summary.IdenticalCount)
+	if result.Summary.Identical != 1 {
+		t.Errorf("Expected IdenticalCount=1, got %d", result.Summary.Identical)
 	}
 }
 
@@ -320,41 +320,42 @@ func TestDiff_MixedChanges(t *testing.T) {
 		t.Fatalf("Diff failed: %v", err)
 	}
 
-	if len(result.Added) != 1 {
-		t.Errorf("Expected 1 added resource, got %d", len(result.Added))
+	if len(result.GetAdded()) != 1 {
+		t.Errorf("Expected 1 added resource, got %d", len(result.GetAdded()))
 	}
 
-	if len(result.Removed) != 1 {
-		t.Errorf("Expected 1 removed resource, got %d", len(result.Removed))
+	if len(result.GetRemoved()) != 1 {
+		t.Errorf("Expected 1 removed resource, got %d", len(result.GetRemoved()))
 	}
 
-	if len(result.Modified) != 1 {
-		t.Errorf("Expected 1 modified resource, got %d", len(result.Modified))
+	if len(result.GetModified()) != 1 {
+		t.Errorf("Expected 1 modified resource, got %d", len(result.GetModified()))
 	}
 
-	if len(result.Identical) != 1 {
-		t.Errorf("Expected 1 identical resource, got %d", len(result.Identical))
+	if result.Summary.Identical != 1 {
+		t.Errorf("Expected 1 identical resource, got %d", result.Summary.Identical)
 	}
 
 	// Check summary
-	if result.Summary.TotalResources != 4 {
-		t.Errorf("Expected TotalResources=4, got %d", result.Summary.TotalResources)
+	totalResources := result.Summary.Added + result.Summary.Removed + result.Summary.Modified + result.Summary.Identical
+	if totalResources != 4 {
+		t.Errorf("Expected total resources=4, got %d", totalResources)
 	}
 
-	if result.Summary.AddedCount != 1 {
-		t.Errorf("Expected AddedCount=1, got %d", result.Summary.AddedCount)
+	if result.Summary.Added != 1 {
+		t.Errorf("Expected AddedCount=1, got %d", result.Summary.Added)
 	}
 
-	if result.Summary.RemovedCount != 1 {
-		t.Errorf("Expected RemovedCount=1, got %d", result.Summary.RemovedCount)
+	if result.Summary.Removed != 1 {
+		t.Errorf("Expected RemovedCount=1, got %d", result.Summary.Removed)
 	}
 
-	if result.Summary.ModifiedCount != 1 {
-		t.Errorf("Expected ModifiedCount=1, got %d", result.Summary.ModifiedCount)
+	if result.Summary.Modified != 1 {
+		t.Errorf("Expected ModifiedCount=1, got %d", result.Summary.Modified)
 	}
 
-	if result.Summary.IdenticalCount != 1 {
-		t.Errorf("Expected IdenticalCount=1, got %d", result.Summary.IdenticalCount)
+	if result.Summary.Identical != 1 {
+		t.Errorf("Expected IdenticalCount=1, got %d", result.Summary.Identical)
 	}
 }
 
@@ -367,38 +368,34 @@ func TestDiffResult_HasDifferences(t *testing.T) {
 		{
 			name: "no differences",
 			result: &DiffResult{
-				Added:     []manifest.ResourceKey{},
-				Removed:   []manifest.ResourceKey{},
-				Modified:  []ResourceDiff{},
-				Identical: []manifest.ResourceKey{{Kind: "Service", Name: "test"}},
+				Changes: []ResourceDiff{}, // Empty changes
+				Summary: DiffSummary{Identical: 1},
 			},
 			expected: false,
 		},
 		{
 			name: "has added",
 			result: &DiffResult{
-				Added:    []manifest.ResourceKey{{Kind: "Service", Name: "new"}},
-				Removed:  []manifest.ResourceKey{},
-				Modified: []ResourceDiff{},
+				Changes: []ResourceDiff{
+					{ChangeType: ChangeTypeAdded},
+				},
 			},
 			expected: true,
 		},
 		{
 			name: "has removed",
 			result: &DiffResult{
-				Added:    []manifest.ResourceKey{},
-				Removed:  []manifest.ResourceKey{{Kind: "Service", Name: "old"}},
-				Modified: []ResourceDiff{},
+				Changes: []ResourceDiff{
+					{ChangeType: ChangeTypeRemoved},
+				},
 			},
 			expected: true,
 		},
 		{
 			name: "has modified",
 			result: &DiffResult{
-				Added:   []manifest.ResourceKey{},
-				Removed: []manifest.ResourceKey{},
-				Modified: []ResourceDiff{
-					{Key: manifest.ResourceKey{Kind: "Service", Name: "changed"}},
+				Changes: []ResourceDiff{
+					{ChangeType: ChangeTypeModified},
 				},
 			},
 			expected: true,
@@ -535,29 +532,29 @@ func TestDiff_SimilarityMatching(t *testing.T) {
 	}
 
 	// Debug: Print what we got
-	t.Logf("Added: %d, Removed: %d, Modified: %d", len(result.Added), len(result.Removed), len(result.Modified))
-	if len(result.Modified) > 0 {
+	t.Logf("Added: %d, Removed: %d, Modified: %d", len(result.GetAdded()), len(result.GetRemoved()), len(result.GetModified()))
+	if len(result.GetModified()) > 0 {
 		t.Logf("Modified[0]: MatchType=%s, Score=%.2f, SourceKey=%s, TargetKey=%s",
-			result.Modified[0].MatchType, result.Modified[0].SimilarityScore,
-			result.Modified[0].SourceKey.Name, result.Modified[0].TargetKey.Name)
+			result.GetModified()[0].MatchType, result.GetModified()[0].SimilarityScore,
+			result.GetModified()[0].SourceKey.Name, result.GetModified()[0].TargetKey.Name)
 	}
 
 	// With similarity matching enabled, these should be matched as modified
-	if len(result.Added) != 0 {
-		t.Errorf("Expected 0 added resources with similarity matching, got %d", len(result.Added))
+	if len(result.GetAdded()) != 0 {
+		t.Errorf("Expected 0 added resources with similarity matching, got %d", len(result.GetAdded()))
 	}
 
-	if len(result.Removed) != 0 {
-		t.Errorf("Expected 0 removed resources with similarity matching, got %d", len(result.Removed))
+	if len(result.GetRemoved()) != 0 {
+		t.Errorf("Expected 0 removed resources with similarity matching, got %d", len(result.GetRemoved()))
 	}
 
-	if len(result.Modified) != 1 {
-		t.Errorf("Expected 1 modified resource with similarity matching, got %d", len(result.Modified))
+	if len(result.GetModified()) != 1 {
+		t.Errorf("Expected 1 modified resource with similarity matching, got %d", len(result.GetModified()))
 	}
 
 	// Check match metadata
-	if len(result.Modified) > 0 {
-		mod := result.Modified[0]
+	if len(result.GetModified()) > 0 {
+		mod := result.GetModified()[0]
 		if mod.MatchType != "similarity" {
 			t.Errorf("Expected MatchType='similarity', got '%s'", mod.MatchType)
 		}
@@ -573,15 +570,12 @@ func TestDiff_SimilarityMatching(t *testing.T) {
 	}
 }
 
-func TestDiff_TreeSitterFallback(t *testing.T) {
+func TestDiff_UnifiedDiffFormat(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	norm := normalizer.New(cfg)
 
-	// Configure differ to use tree-sitter
+	// Configure differ with default options
 	opts := NewDefaultDiffOptions()
-
-	opts.UseTreeSitter = true
-	opts.ColorOutput = false // Disable colors for easier testing
 
 	differ := New(norm, opts)
 
@@ -628,12 +622,12 @@ func TestDiff_TreeSitterFallback(t *testing.T) {
 		t.Fatalf("Diff failed: %v", err)
 	}
 
-	if len(result.Modified) != 1 {
-		t.Fatalf("Expected 1 modified resource, got %d", len(result.Modified))
+	if len(result.GetModified()) != 1 {
+		t.Fatalf("Expected 1 modified resource, got %d", len(result.GetModified()))
 	}
 
 	// Verify diff text is generated
-	diffText := result.Modified[0].DiffText
+	diffText := result.GetModified()[0].DiffText
 	if diffText == "" {
 		t.Error("Expected non-empty diff text")
 	}
@@ -646,20 +640,17 @@ func TestDiff_TreeSitterFallback(t *testing.T) {
 		t.Error("Diff should contain added key 'key3'")
 	}
 
-	// Verify side-by-side separator is present
-	if !contains(diffText, "│") {
-		t.Error("Tree-sitter diff should contain side-by-side separator '│'")
+	// Verify unified diff format (contains +/- lines)
+	if !contains(diffText, "+") && !contains(diffText, "-") {
+		t.Error("Unified diff should contain +/- markers")
 	}
 }
 
-func TestDiff_TreeSitterWithDeployment(t *testing.T) {
+func TestDiff_UnifiedDiffWithDeployment(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	norm := normalizer.New(cfg)
 
 	opts := NewDefaultDiffOptions()
-
-	opts.UseTreeSitter = true
-	opts.ColorOutput = false
 
 	differ := New(norm, opts)
 
@@ -713,12 +704,12 @@ func TestDiff_TreeSitterWithDeployment(t *testing.T) {
 		t.Fatalf("Diff failed: %v", err)
 	}
 
-	if len(result.Modified) != 1 {
-		t.Fatalf("Expected 1 modified resource, got %d", len(result.Modified))
+	if len(result.GetModified()) != 1 {
+		t.Fatalf("Expected 1 modified resource, got %d", len(result.GetModified()))
 	}
 
 	// Verify diff text contains replicas change
-	diffText := result.Modified[0].DiffText
+	diffText := result.GetModified()[0].DiffText
 	if !contains(diffText, "replicas") {
 		t.Error("Diff should show replicas change")
 	}
@@ -730,7 +721,6 @@ func TestDiff_FallbackChain(t *testing.T) {
 
 	// Test with default options (auto mode)
 	opts := NewDefaultDiffOptions()
-	opts.ColorOutput = false
 
 	differ := New(norm, opts)
 
@@ -774,12 +764,12 @@ func TestDiff_FallbackChain(t *testing.T) {
 		t.Fatalf("Diff failed: %v", err)
 	}
 
-	if len(result.Modified) != 1 {
-		t.Fatalf("Expected 1 modified resource, got %d", len(result.Modified))
+	if len(result.GetModified()) != 1 {
+		t.Fatalf("Expected 1 modified resource, got %d", len(result.GetModified()))
 	}
 
 	// Some diff should be generated
-	if result.Modified[0].DiffText == "" {
+	if result.GetModified()[0].DiffText == "" {
 		t.Error("Expected non-empty diff text")
 	}
 }
@@ -853,16 +843,16 @@ func TestDiff_SimilarityMatching_Disabled(t *testing.T) {
 	}
 
 	// With similarity matching disabled, these should be reported as added/removed
-	if len(result.Added) != 1 {
-		t.Errorf("Expected 1 added resource without similarity matching, got %d", len(result.Added))
+	if len(result.GetAdded()) != 1 {
+		t.Errorf("Expected 1 added resource without similarity matching, got %d", len(result.GetAdded()))
 	}
 
-	if len(result.Removed) != 1 {
-		t.Errorf("Expected 1 removed resource without similarity matching, got %d", len(result.Removed))
+	if len(result.GetRemoved()) != 1 {
+		t.Errorf("Expected 1 removed resource without similarity matching, got %d", len(result.GetRemoved()))
 	}
 
-	if len(result.Modified) != 0 {
-		t.Errorf("Expected 0 modified resources without similarity matching, got %d", len(result.Modified))
+	if len(result.GetModified()) != 0 {
+		t.Errorf("Expected 0 modified resources without similarity matching, got %d", len(result.GetModified()))
 	}
 }
 
@@ -922,11 +912,11 @@ func TestDiff_SimilarityMatching_BelowThreshold(t *testing.T) {
 
 	// Resources are too different to match (below threshold)
 	// Should be reported as added/removed
-	if len(result.Added) != 1 {
-		t.Errorf("Expected 1 added resource (below threshold), got %d", len(result.Added))
+	if len(result.GetAdded()) != 1 {
+		t.Errorf("Expected 1 added resource (below threshold), got %d", len(result.GetAdded()))
 	}
 
-	if len(result.Removed) != 1 {
-		t.Errorf("Expected 1 removed resource (below threshold), got %d", len(result.Removed))
+	if len(result.GetRemoved()) != 1 {
+		t.Errorf("Expected 1 removed resource (below threshold), got %d", len(result.GetRemoved()))
 	}
 }

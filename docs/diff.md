@@ -5,6 +5,7 @@ The `kyt diff` command compares Kubernetes manifests with smart ignore rules, pr
 ## Table of Contents
 
 - [Overview](#overview)
+- [Similarity Matching](#similarity-matching)
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [Ignore Rules](#ignore-rules)
@@ -20,8 +21,150 @@ The `diff` command solves a common problem: comparing Kubernetes manifests produ
 
 1. **Normalizing both inputs** - Sorts keys, removes default fields
 2. **Applying ignore rules** - Uses JSON Pointers and JQ expressions to ignore specific differences
-3. **Smart resource matching** - Automatically pairs resources even if they've been renamed
-4. **Beautiful output** - Uses tree-sitter for structural, syntax-aware diffs
+3. **Smart resource matching** - Automatically pairs resources even if they've been renamed or moved across namespaces
+4. **Beautiful output** - Unified diff format with optional pager support
+
+## Similarity Matching
+
+kyt uses intelligent similarity matching to automatically pair resources that may have been renamed, relocated, or modified. This is especially useful when comparing production vs staging environments, or validating migrations where resource names may differ.
+
+### How It Works
+
+Resources are matched in three stages:
+
+1. **Exact Match** - Resources with identical Group/Version/Kind, Namespace, and Name are paired first
+2. **Similarity Match** - Remaining resources are compared by structural similarity within the same GVK (Group/Version/Kind)
+3. **Unmatched** - Resources that couldn't be paired are shown as Added or Removed
+
+**Key Features:**
+
+- **Cross-namespace comparison**: Resources are grouped by GVK only (not namespace), allowing `redis` in `prod` to match `redis` in `staging`
+- **Configurable threshold**: Adjust the minimum similarity score (0.0-1.0) required for matching
+- **Smart ConfigMap/Secret matching**: Uses weighted comparison that prioritizes data content over metadata
+- **Fuzzy string matching**: Large string fields use Levenshtein distance for better similarity detection
+
+### Configuration
+
+```yaml
+diff:
+  options:
+    # Minimum similarity score for matching (0.0-1.0, default: 0.7)
+    # Higher values = stricter matching, fewer false positives
+    # Lower values = looser matching, may match dissimilar resources
+    similarityThreshold: 0.7
+    
+    # Boost factor for ConfigMap/Secret data field importance (1-10, default: 2)
+    # Higher values give more weight to data content vs metadata differences
+    # Useful for matching ConfigMaps with different names but same data
+    dataSimilarityBoost: 2
+
+  fuzzyMatching:
+    # Enable Levenshtein distance for comparing similar strings
+    # Especially useful for ConfigMaps with large data fields that differ slightly
+    enabled: true
+    
+    # Minimum string length (in characters) to apply fuzzy matching
+    # Strings shorter than this use exact comparison
+    minStringLength: 100
+```
+
+### CLI Flags
+
+```bash
+# Disable similarity matching (exact name match only)
+kyt diff --exact-match source.yaml target.yaml
+
+# Adjust similarity threshold (default: 0.7)
+kyt diff --similarity-threshold 0.8 source.yaml target.yaml
+
+# Boost ConfigMap/Secret data importance (default: 2, range: 1-10)
+kyt diff --data-similarity-boost 4 source.yaml target.yaml
+```
+
+### Similarity Scoring
+
+**For resources with `spec` (Deployments, Services, etc.):**
+- Spec fields: 90% weight
+- Metadata (namespace, name, labels, annotations): 10% weight
+
+**For ConfigMaps and Secrets:**
+- Data fields: Dynamic weight based on size and boost factor
+  - Small (1KB): ~60-70% weight (with default boost=2)
+  - Large (5KB+): ~90-95% weight
+- Metadata: Remaining weight distributed as:
+  - Namespace: 20%
+  - Name: 30%
+  - Labels: 30%
+  - Annotations: 20%
+
+**Data Similarity Boost Formula:**
+```
+baseWeight = 0.5 + (dataSize / 10000)
+boostAmount = (boost - 1) * 0.1
+dataWeight = min(0.95, baseWeight + boostAmount)
+```
+
+### Examples
+
+**Example 1: Cross-namespace comparison**
+
+```bash
+# Compare production vs staging (different namespaces, similar names)
+kyt diff ./prod ./staging
+
+# redis in prod namespace matches redis in staging namespace
+# Even with slight name differences: redis-master vs redis-primary
+```
+
+**Example 2: ConfigMap matching with name differences**
+
+```yaml
+# prod/.kyt.yaml
+diff:
+  options:
+    dataSimilarityBoost: 4  # Prioritize data content heavily
+```
+
+```bash
+# Matches ConfigMaps even if names differ
+# redis-scripts (prod) matches redis-ha-scripts (staging)
+# If data content is similar, they'll be paired
+kyt diff ./prod/configmaps.yaml ./staging/configmaps.yaml
+```
+
+**Example 3: Strict matching for validation**
+
+```bash
+# Require 90% similarity for matching
+# Reduces false positives
+kyt diff --similarity-threshold 0.9 source.yaml target.yaml
+```
+
+**Example 4: Disable similarity for exact comparison**
+
+```bash
+# Only match resources with identical names
+# Useful when you know names shouldn't change
+kyt diff --exact-match source.yaml target.yaml
+```
+
+### Troubleshooting Similarity Matching
+
+**Resources not being matched:**
+- Increase similarity threshold if too many false matches
+- Decrease similarity threshold if expected matches are missed
+- Check that resources have the same GVK (Group/Version/Kind)
+- Use `--exact-match` to verify names are actually different
+
+**ConfigMaps matching incorrectly:**
+- Lower `dataSimilarityBoost` to give more weight to metadata
+- Increase `similarityThreshold` to require stricter matches
+- Add ignore rules for fields that create false similarities
+
+**Fuzzy matching not working:**
+- Check `fuzzyMatching.enabled` is true in config
+- Verify strings are longer than `minStringLength` (default: 100 chars)
+- Strings shorter than threshold use exact comparison
 
 ## Usage
 
@@ -44,14 +187,22 @@ kyt diff -c .kyt.yaml left.yaml right.yaml
 ### Command Options
 
 ```bash
-kyt diff <left> <right> [flags]
+kyt diff <source> <target> [flags]
 
 Flags:
-  -c, --config string      config file (default: .kyt.yaml)
-  -o, --output string      output format: cli, json, yaml, diff (default "cli")
-      --show-identical     show resources with no differences
-      --exact-match        disable similarity matching (exact name match only)
-      --display string     display mode: side-by-side, inline (default "side-by-side")
+  -c, --config string                config file (default: .kyt.yaml)
+  -o, --output string                write output to file instead of stdout
+      --summary                      show tabular summary of resource changes
+  -U, --unified int                  generate diff with <n> lines of context (default 3)
+      --color string                 colorize output: auto, always, never (default "auto")
+      --exact-match                  disable similarity matching (only exact name matches)
+      --similarity-threshold float   minimum similarity score (0.0-1.0) for matching resources (default 0.7)
+      --data-similarity-boost int    boost factor for ConfigMap/Secret data fields (1-10) (default 2)
+      --include string               comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')
+      --exclude string               comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')
+  -v, --verbose                      verbose output to stderr
+  -h, --help                         help for diff
+```
       --include string     comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')
       --exclude string     comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')
   -v, --verbose            verbose output to stderr
@@ -126,7 +277,7 @@ Modified Resources (2):
   • Deployment.apps/nginx
   • Service/nginx
 
-[... detailed diffs using tree-sitter ...]
+[... detailed unified diffs ...]
 ```
 
 #### JSON
@@ -160,50 +311,58 @@ kyt diff -o json left.yaml right.yaml
 
 ## Configuration
 
-The `diff` command uses `.kyt.yaml` to configure ignore rules, normalization, and output options.
+The `diff` command uses `.kyt.yaml` to configure ignore rules, normalization, similarity matching, and output options.
 
 ### Full Configuration Example
 
 ```yaml
 # .kyt.yaml
 diff:
-   # Ignore specific differences
-   ignoreDifferences:
-     # Ignore replica count in production (HPA-managed)
-     - group: "apps"
-       kind: "Deployment"
-       namespace: "production"
-       jsonPointers:
-         - /spec/replicas
-   
-     # Ignore Istio sidecars
-     - group: "apps"
-       kind: "Deployment"
-       jqPathExpressions:
-         - .spec.template.spec.containers[] | select(.name == "istio-proxy")
-   
-     # Ignore kubectl last-applied-configuration
-     - group: ""
-       kind: "*"
-       jsonPointers:
-         - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
-   
-   # Normalization options
-   normalization:
-     sortKeys: true
-     sortArrays:
-       - path: ".spec.template.spec.containers[].env"
-         sortBy: "name"
-     removeDefaultFields:
-       - "/status"
-       - "/metadata/managedFields"
-       - "/metadata/creationTimestamp"
-   
-   # CLI options
-   cli:
-     colorize: true
-     showUnchanged: false
-     contextLines: 3
+  # Ignore specific differences
+  ignoreDifferences:
+    # Ignore replica count in production (HPA-managed)
+    - group: "apps"
+      kind: "Deployment"
+      namespace: "production"
+      jsonPointers:
+        - /spec/replicas
+  
+    # Ignore Istio sidecars
+    - group: "apps"
+      kind: "Deployment"
+      jqPathExpressions:
+        - .spec.template.spec.containers[] | select(.name == "istio-proxy")
+  
+    # Ignore kubectl last-applied-configuration
+    - group: ""
+      kind: "*"
+      jsonPointers:
+        - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
+  
+  # Diff options
+  options:
+    contextLines: 3              # Lines of context in unified diff (default: 3)
+    similarityThreshold: 0.7     # Min similarity score for matching (0.0-1.0, default: 0.7)
+    dataSimilarityBoost: 2       # Boost for ConfigMap/Secret data fields (1-10, default: 2)
+  
+  # Fuzzy string matching configuration
+  fuzzyMatching:
+    enabled: true                # Enable Levenshtein distance for strings (default: true)
+    minStringLength: 100         # Min string length for fuzzy matching (default: 100)
+  
+  # Normalization options
+  normalization:
+    sortKeys: true
+    sortArrays:
+      - path: ".spec.template.spec.containers[].env"
+        sortBy: "name"
+    removeDefaultFields:
+      - "/status"
+      - "/metadata/managedFields"
+      - "/metadata/creationTimestamp"
+  
+  # Optional: pipe output through external diff viewer
+  pager: ""  # Examples: "delta --side-by-side", "bat --language=diff", "less -R"
 ```
 
 ## Ignore Rules

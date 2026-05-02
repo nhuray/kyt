@@ -9,7 +9,9 @@ type Config struct {
 type DiffConfig struct {
 	IgnoreDifferences []ResourceIgnoreDifferences `yaml:"ignoreDifferences"`
 	Normalization     NormalizationConfig         `yaml:"normalization"`
-	CLI               CLIConfig                   `yaml:"cli"`
+	Options           OptionsConfig               `yaml:"options"`
+	FuzzyMatching     FuzzyMatchingConfig         `yaml:"fuzzyMatching"`
+	Pager             string                      `yaml:"pager,omitempty"`
 }
 
 // ResourceIgnoreDifferences defines ignore rules for specific resource types
@@ -70,24 +72,39 @@ type ArraySortConfig struct {
 	SortBy string `yaml:"sortBy"`
 }
 
-// CLIConfig controls CLI display options for the diff command
-type CLIConfig struct {
-	// Display is the display mode: "side-by-side", "inline"
-	Display string `yaml:"display"`
+// FuzzyMatchingConfig controls fuzzy string matching behavior
+type FuzzyMatchingConfig struct {
+	// Enabled enables Levenshtein distance for comparing similar strings
+	// When disabled, only exact string matches are considered equal
+	// Default: true
+	Enabled bool `yaml:"enabled"`
 
-	// Colorize enables colored output
-	Colorize bool `yaml:"colorize"`
+	// MinStringLength is the minimum string length (in characters) to apply fuzzy matching
+	// Strings shorter than this use exact comparison
+	// Higher values = faster but less accurate for short strings
+	// Lower values = slower but more accurate
+	// Default: 100
+	MinStringLength int `yaml:"minStringLength,omitempty"`
+}
 
-	// ShowUnchanged shows resources that have no differences
-	ShowUnchanged bool `yaml:"showUnchanged"`
-
+// OptionsConfig controls diff generation options
+type OptionsConfig struct {
 	// ContextLines is the number of context lines for unified diff (default: 3)
 	ContextLines int `yaml:"contextLines,omitempty"`
 
-	// StringSimilarityThreshold is the minimum string length to trigger fuzzy matching
-	// Strings longer than this will use Levenshtein distance for similarity
-	// Default: 100 characters
-	StringSimilarityThreshold int `yaml:"stringSimilarityThreshold,omitempty"`
+	// SimilarityThreshold is the minimum similarity score (0.0-1.0) for matching resources
+	// Only used when similarity matching is enabled
+	// Default: 0.7 (70% similarity)
+	SimilarityThreshold float64 `yaml:"similarityThreshold,omitempty"`
+
+	// DataSimilarityBoost is a boost factor (1-10) for ConfigMap/Secret data field importance
+	// Higher values give more weight to data content vs metadata differences
+	// boost=1: no boost (original weighting)
+	// boost=2: data fields count 2x more (default)
+	// boost=4: data fields count 4x more
+	// boost=10: data fields heavily prioritized
+	// Default: 2
+	DataSimilarityBoost int `yaml:"dataSimilarityBoost,omitempty"`
 }
 
 // NewDefaultConfig returns a Config with sensible defaults
@@ -106,13 +123,16 @@ func NewDefaultConfig() *Config {
 					"/metadata/uid",
 				},
 			},
-			CLI: CLIConfig{
-				Display:                   "side-by-side",
-				Colorize:                  true,
-				ShowUnchanged:             false,
-				ContextLines:              3,
-				StringSimilarityThreshold: 100, // Enable fuzzy matching for strings > 100 chars
+			Options: OptionsConfig{
+				ContextLines:        3,
+				SimilarityThreshold: 0.7,
+				DataSimilarityBoost: 2,
 			},
+			FuzzyMatching: FuzzyMatchingConfig{
+				Enabled:         true,
+				MinStringLength: 100,
+			},
+			Pager: "", // Use $PAGER by default
 		},
 	}
 }
@@ -130,21 +150,28 @@ func (c *Config) Merge(other *Config) {
 	c.Diff.Normalization.SortArrays = append(c.Diff.Normalization.SortArrays, other.Diff.Normalization.SortArrays...)
 	c.Diff.Normalization.RemoveDefaultFields = append(c.Diff.Normalization.RemoveDefaultFields, other.Diff.Normalization.RemoveDefaultFields...)
 
-	// CLI config: other takes precedence
-	if other.Diff.CLI.Display != "" {
-		c.Diff.CLI.Display = other.Diff.CLI.Display
+	// Options config: other takes precedence
+	if other.Diff.Options.ContextLines > 0 {
+		c.Diff.Options.ContextLines = other.Diff.Options.ContextLines
 	}
-	if other.Diff.CLI.Colorize {
-		c.Diff.CLI.Colorize = true
+	if other.Diff.Options.SimilarityThreshold > 0 {
+		c.Diff.Options.SimilarityThreshold = other.Diff.Options.SimilarityThreshold
 	}
-	if other.Diff.CLI.ShowUnchanged {
-		c.Diff.CLI.ShowUnchanged = true
+	if other.Diff.Options.DataSimilarityBoost > 0 {
+		c.Diff.Options.DataSimilarityBoost = other.Diff.Options.DataSimilarityBoost
 	}
-	if other.Diff.CLI.ContextLines > 0 {
-		c.Diff.CLI.ContextLines = other.Diff.CLI.ContextLines
+
+	// FuzzyMatching config: other takes precedence
+	if !other.Diff.FuzzyMatching.Enabled {
+		c.Diff.FuzzyMatching.Enabled = false
 	}
-	if other.Diff.CLI.StringSimilarityThreshold > 0 {
-		c.Diff.CLI.StringSimilarityThreshold = other.Diff.CLI.StringSimilarityThreshold
+	if other.Diff.FuzzyMatching.MinStringLength > 0 {
+		c.Diff.FuzzyMatching.MinStringLength = other.Diff.FuzzyMatching.MinStringLength
+	}
+
+	// Pager: other takes precedence if non-empty
+	if other.Diff.Pager != "" {
+		c.Diff.Pager = other.Diff.Pager
 	}
 }
 

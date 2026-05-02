@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"strings"
 
-	"github.com/nhuray/kyt/pkg/differ/treesitter"
+	"github.com/aymanbagabas/go-udiff"
 	"github.com/nhuray/kyt/pkg/manifest"
 	"github.com/nhuray/kyt/pkg/normalizer"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -34,13 +32,6 @@ func New(norm *normalizer.Normalizer, opts *DiffOptions) *Differ {
 
 // Diff compares two manifest sets and returns the differences
 func (d *Differ) Diff(source, target *manifest.ManifestSet) (*DiffResult, error) {
-	result := &DiffResult{
-		Added:     []manifest.ResourceKey{},
-		Removed:   []manifest.ResourceKey{},
-		Modified:  []ResourceDiff{},
-		Identical: []manifest.ResourceKey{},
-	}
-
 	// Normalize both sets
 	normalizedSource := make(map[manifest.ResourceKey]*unstructured.Unstructured)
 	for key, obj := range source.Resources {
@@ -63,11 +54,18 @@ func (d *Differ) Diff(source, target *manifest.ManifestSet) (*DiffResult, error)
 	// Set up resource cache for similarity matching
 	SetResourceCache(normalizedSource, normalizedTarget)
 
-	// Perform 2-stage matching
-	matcher := NewResourceMatcherWithStringThreshold(
-		d.options.EnableSimilarityMatching,
-		d.options.SimilarityThreshold,
-		d.options.StringSimilarityThreshold,
+	// Perform resource matching
+	// Fuzzy string matching can be enabled/disabled and has a minimum length threshold
+	strThreshold := 0
+	if d.options.FuzzyStringMatchingEnabled {
+		strThreshold = d.options.FuzzyStringMinLength
+	}
+
+	matcher := NewResourceMatcherWithOptions(
+		d.options.EnableSimilarityMatching, // Enable/disable similarity matching
+		d.options.SimilarityThreshold,      // Structural similarity threshold (e.g., 0.7)
+		strThreshold,                       // String fuzzy matching threshold (0 = disabled, >0 = character count)
+		d.options.DataSimilarityBoost,      // ConfigMap/Secret data boost factor (1-10)
 	)
 
 	matches, unmatchedSource, unmatchedTarget := matcher.MatchResources(
@@ -75,7 +73,28 @@ func (d *Differ) Diff(source, target *manifest.ManifestSet) (*DiffResult, error)
 		normalizedTarget,
 	)
 
-	// Process matched pairs
+	var changes []ResourceDiff
+	identicalCount := 0
+
+	// Process Added resources (in target only)
+	for _, key := range unmatchedTarget {
+		diff, err := d.generateAddedDiff(key, normalizedTarget[key])
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate diff for added resource %s: %w", key.String(), err)
+		}
+		changes = append(changes, diff)
+	}
+
+	// Process Removed resources (in source only)
+	for _, key := range unmatchedSource {
+		diff, err := d.generateRemovedDiff(key, normalizedSource[key])
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate diff for removed resource %s: %w", key.String(), err)
+		}
+		changes = append(changes, diff)
+	}
+
+	// Process Modified resources
 	for _, match := range matches {
 		sourceObj := match.SourceResource
 		targetObj := match.TargetResource
@@ -87,50 +106,150 @@ func (d *Differ) Diff(source, target *manifest.ManifestSet) (*DiffResult, error)
 		}
 
 		if equal {
-			result.Identical = append(result.Identical, match.SourceKey)
-		} else {
-			// Generate diff
-			diffText, diffLines, err := d.generateDiff(match.SourceKey, sourceObj, targetObj)
-			if err != nil {
-				return nil, fmt.Errorf("failed to generate diff for %s: %w", match.SourceKey.String(), err)
-			}
-
-			result.Modified = append(result.Modified, ResourceDiff{
-				SourceKey:       match.SourceKey,
-				TargetKey:       match.TargetKey,
-				Key:             match.SourceKey, // For backward compatibility
-				Source:          sourceObj,
-				Target:          targetObj,
-				DiffText:        diffText,
-				DiffLines:       diffLines,
-				MatchType:       string(match.Type),
-				SimilarityScore: match.SimilarityScore,
-			})
+			identicalCount++
+			continue
 		}
-	}
 
-	// Process unmatched resources
-	result.Removed = unmatchedSource
-	result.Added = unmatchedTarget
+		// Generate diff for modified resource
+		diff, err := d.generateModifiedDiff(match, sourceObj, targetObj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate diff for modified resource %s: %w", match.SourceKey.String(), err)
+		}
+		changes = append(changes, diff)
+	}
 
 	// Calculate summary
-	allKeys := make(map[manifest.ResourceKey]bool)
-	for key := range normalizedSource {
-		allKeys[key] = true
-	}
-	for key := range normalizedTarget {
-		allKeys[key] = true
-	}
-
-	result.Summary = DiffSummary{
-		TotalResources: len(allKeys),
-		AddedCount:     len(result.Added),
-		RemovedCount:   len(result.Removed),
-		ModifiedCount:  len(result.Modified),
-		IdenticalCount: len(result.Identical),
+	summary := DiffSummary{
+		Added:     len(unmatchedTarget),
+		Removed:   len(unmatchedSource),
+		Modified:  len(changes) - len(unmatchedTarget) - len(unmatchedSource),
+		Identical: identicalCount,
 	}
 
-	return result, nil
+	return &DiffResult{
+		Changes: changes,
+		Summary: summary,
+	}, nil
+}
+
+// generateAddedDiff generates a diff for a resource that only exists in target
+func (d *Differ) generateAddedDiff(key manifest.ResourceKey, resource *unstructured.Unstructured) (ResourceDiff, error) {
+	// Convert to YAML
+	targetYAML, err := yaml.Marshal(resource.Object)
+	if err != nil {
+		return ResourceDiff{}, fmt.Errorf("failed to marshal target: %w", err)
+	}
+
+	// Generate unified diff: /dev/null -> b/<key>
+	edits := udiff.Strings("", string(targetYAML))
+	unified, err := udiff.ToUnified(
+		"/dev/null",
+		fmt.Sprintf("b/%s", key.String()),
+		"",
+		edits,
+		0, // No context for additions
+	)
+	if err != nil {
+		return ResourceDiff{}, fmt.Errorf("failed to generate unified diff: %w", err)
+	}
+
+	// Count insertions (all lines are insertions)
+	insertions := countLines(string(targetYAML))
+
+	return ResourceDiff{
+		SourceKey:  nil,
+		TargetKey:  &key,
+		Source:     nil,
+		Target:     resource,
+		ChangeType: ChangeTypeAdded,
+		DiffText:   unified,
+		Edits:      edits,
+		Insertions: insertions,
+		Deletions:  0,
+	}, nil
+}
+
+// generateRemovedDiff generates a diff for a resource that only exists in source
+func (d *Differ) generateRemovedDiff(key manifest.ResourceKey, resource *unstructured.Unstructured) (ResourceDiff, error) {
+	// Convert to YAML
+	sourceYAML, err := yaml.Marshal(resource.Object)
+	if err != nil {
+		return ResourceDiff{}, fmt.Errorf("failed to marshal source: %w", err)
+	}
+
+	// Generate unified diff: a/<key> -> /dev/null
+	edits := udiff.Strings(string(sourceYAML), "")
+	unified, err := udiff.ToUnified(
+		fmt.Sprintf("a/%s", key.String()),
+		"/dev/null",
+		string(sourceYAML),
+		edits,
+		0, // No context for deletions
+	)
+	if err != nil {
+		return ResourceDiff{}, fmt.Errorf("failed to generate unified diff: %w", err)
+	}
+
+	// Count deletions (all lines are deletions)
+	deletions := countLines(string(sourceYAML))
+
+	return ResourceDiff{
+		SourceKey:  &key,
+		TargetKey:  nil,
+		Source:     resource,
+		Target:     nil,
+		ChangeType: ChangeTypeRemoved,
+		DiffText:   unified,
+		Edits:      edits,
+		Insertions: 0,
+		Deletions:  deletions,
+	}, nil
+}
+
+// generateModifiedDiff generates a diff for a resource that exists in both but differs
+func (d *Differ) generateModifiedDiff(match Match, source, target *unstructured.Unstructured) (ResourceDiff, error) {
+	// Convert to YAML
+	sourceYAML, err := yaml.Marshal(source.Object)
+	if err != nil {
+		return ResourceDiff{}, fmt.Errorf("failed to marshal source: %w", err)
+	}
+
+	targetYAML, err := yaml.Marshal(target.Object)
+	if err != nil {
+		return ResourceDiff{}, fmt.Errorf("failed to marshal target: %w", err)
+	}
+
+	// Generate edits using go-udiff
+	edits := udiff.Strings(string(sourceYAML), string(targetYAML))
+
+	// Generate unified diff with context lines
+	unified, err := udiff.ToUnified(
+		fmt.Sprintf("a/%s", match.SourceKey.String()),
+		fmt.Sprintf("b/%s", match.TargetKey.String()),
+		string(sourceYAML),
+		edits,
+		d.options.ContextLines,
+	)
+	if err != nil {
+		return ResourceDiff{}, fmt.Errorf("failed to generate unified diff: %w", err)
+	}
+
+	// Count insertions and deletions
+	insertions, deletions := countChanges(edits, string(sourceYAML))
+
+	return ResourceDiff{
+		SourceKey:       &match.SourceKey,
+		TargetKey:       &match.TargetKey,
+		Source:          source,
+		Target:          target,
+		ChangeType:      ChangeTypeModified,
+		MatchType:       string(match.Type),
+		SimilarityScore: match.SimilarityScore,
+		DiffText:        unified,
+		Edits:           edits,
+		Insertions:      insertions,
+		Deletions:       deletions,
+	}, nil
 }
 
 // areResourcesEqual checks if two resources are equal by comparing their JSON representations
@@ -148,151 +267,32 @@ func areResourcesEqual(a, b *unstructured.Unstructured) (bool, error) {
 	return bytes.Equal(aJSON, bJSON), nil
 }
 
-// generateDiff generates a diff between two resources
-func (d *Differ) generateDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured) (string, int, error) {
-	// Convert resources to YAML to preserve original format
-	sourceYAML, err := yaml.Marshal(source.Object)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to marshal source: %w", err)
+// countLines counts the number of lines in a string
+func countLines(s string) int {
+	if s == "" {
+		return 0
 	}
-
-	targetYAML, err := yaml.Marshal(target.Object)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to marshal target: %w", err)
+	count := strings.Count(s, "\n")
+	// If no trailing newline, count the last line
+	if len(s) > 0 && s[len(s)-1] != '\n' {
+		count++
 	}
-
-	// If output format is unified, always use unified diff
-	if d.options.OutputFormat == "unified" {
-		return d.generateUnifiedDiff(key, sourceYAML, targetYAML)
-	}
-
-	// Try tree-sitter diff first if enabled
-	if d.options.UseTreeSitter {
-		diffText, diffLines, err := d.generateTreeSitterDiff(key, source, target, sourceYAML, targetYAML)
-		if err == nil {
-			return diffText, diffLines, nil
-		}
-		// Fall through to unified diff
-	}
-
-	// Generate unified diff as fallback
-	return d.generateUnifiedDiff(key, sourceYAML, targetYAML)
+	return count
 }
 
-// generateUnifiedDiff generates a unified diff
-func (d *Differ) generateUnifiedDiff(key manifest.ResourceKey, sourceYAML, targetYAML []byte) (string, int, error) {
-	// Create temp files
-	tmpDir, err := os.MkdirTemp("", "kyt-diff-*")
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to create temp dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
+// countChanges counts insertions and deletions from edit operations
+func countChanges(edits []udiff.Edit, source string) (insertions, deletions int) {
+	for _, edit := range edits {
+		// Deletions: content removed from source
+		if edit.End > edit.Start {
+			deleted := source[edit.Start:edit.End]
+			deletions += countLines(deleted)
+		}
 
-	sourceFile := filepath.Join(tmpDir, "source.yaml")
-	targetFile := filepath.Join(tmpDir, "target.yaml")
-
-	if err := os.WriteFile(sourceFile, sourceYAML, 0644); err != nil {
-		return "", 0, fmt.Errorf("failed to write source file: %w", err)
-	}
-
-	if err := os.WriteFile(targetFile, targetYAML, 0644); err != nil {
-		return "", 0, fmt.Errorf("failed to write target file: %w", err)
-	}
-
-	// Use diff command
-	args := []string{
-		"-u",
-		fmt.Sprintf("-U%d", d.options.ContextLines),
-		"--label", fmt.Sprintf("a/%s", key.String()),
-		"--label", fmt.Sprintf("b/%s", key.String()),
-		sourceFile,
-		targetFile,
-	}
-
-	cmd := exec.Command("diff", args...)
-	output, err := cmd.CombinedOutput()
-
-	// diff returns exit code 1 when there are differences, which is expected
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			if exitErr.ExitCode() == 1 {
-				// This is expected - means there are differences
-				err = nil
-			}
+		// Insertions: content added to target
+		if edit.New != "" {
+			insertions += countLines(edit.New)
 		}
 	}
-
-	if err != nil && len(output) == 0 {
-		return "", 0, fmt.Errorf("diff command failed: %w", err)
-	}
-
-	// Count diff lines (lines starting with +, -, or @@)
-	lines := bytes.Split(output, []byte("\n"))
-	diffLines := 0
-	for _, line := range lines {
-		if len(line) > 0 && (line[0] == '+' || line[0] == '-' || line[0] == '@') {
-			diffLines++
-		}
-	}
-
-	return string(output), diffLines, nil
-}
-
-// generateTreeSitterDiff generates a diff using Go-native tree-sitter parser
-func (d *Differ) generateTreeSitterDiff(key manifest.ResourceKey, source, target *unstructured.Unstructured, sourceYAML, targetYAML []byte) (string, int, error) {
-	// Validate that both resources are valid Kubernetes resources
-	if err := treesitter.ValidateKubernetesResource(source); err != nil {
-		return "", 0, fmt.Errorf("invalid source resource: %w", err)
-	}
-	if err := treesitter.ValidateKubernetesResource(target); err != nil {
-		return "", 0, fmt.Errorf("invalid target resource: %w", err)
-	}
-
-	// Use the provided YAML bytes directly (no re-marshaling)
-
-	// Parse YAML with tree-sitter
-	parser := treesitter.NewParser()
-	defer parser.Close()
-
-	sourceTree, err := parser.ParseYAML(sourceYAML)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to parse source YAML: %w", err)
-	}
-
-	targetTree, err := parser.ParseYAML(targetYAML)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to parse target YAML: %w", err)
-	}
-
-	// Perform diff
-	differ := treesitter.NewDiffer(sourceTree, targetTree, sourceYAML, targetYAML)
-	diffResult, err := differ.Diff()
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to generate tree-sitter diff: %w", err)
-	}
-
-	// Format output using line-based formatter
-	formatter := treesitter.NewLineFormatter(d.options.TreeSitterWidth, d.options.ColorOutput, sourceYAML, targetYAML)
-
-	// Create resource keys for both source and target
-	sourceKey := manifest.NewResourceKey(source)
-	targetKey := manifest.NewResourceKey(target)
-
-	sourceLabel := fmt.Sprintf("a/%s", sourceKey.String())
-	targetLabel := fmt.Sprintf("b/%s", targetKey.String())
-
-	var diffText string
-	// Use display mode from options
-	if d.options.DisplayMode == "inline" {
-		// Use inline display (unified diff style)
-		diffText = formatter.FormatInline(diffResult, sourceLabel, targetLabel)
-	} else {
-		// Use side-by-side display (default)
-		diffText = formatter.FormatSideBySide(diffResult, sourceLabel, targetLabel)
-	}
-
-	// Count diff lines (approximate - count newlines)
-	diffLines := bytes.Count([]byte(diffText), []byte("\n"))
-
-	return diffText, diffLines, nil
+	return insertions, deletions
 }

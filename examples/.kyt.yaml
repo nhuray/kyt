@@ -54,10 +54,27 @@ diff:
       - "/metadata/resourceVersion"
       - "/metadata/uid"
 
-  # CLI options
-  cli:
-    display: side-by-side
-    colorize: true # Enable colored output
-    showUnchanged: false # Show resources with no differences
-    contextLines: 3 # Context lines for unified diff
-    stringSimilarityThreshold: 100 # Minimum string length for fuzzy matching (0 = disable)
+  # Diff options
+  options:
+    contextLines: 3 # Context lines for unified diff (default: 3)
+    similarityThreshold: 0.7 # Min similarity score for matching resources (0.0-1.0, default: 0.7)
+    dataSimilarityBoost: 2 # Boost factor for ConfigMap/Secret data fields (1-10, default: 2)
+                           # Higher values give more weight to data content vs metadata
+                           # Useful for matching ConfigMaps with different names but same data
+
+  # Fuzzy string matching configuration
+  fuzzyMatching:
+    # Enable Levenshtein distance for comparing similar strings
+    # When disabled, only exact string matches are considered equal
+    # This is especially useful for ConfigMaps with large data fields that differ slightly
+    enabled: true # default: true
+    
+    # Minimum string length (in characters) to apply fuzzy matching
+    # Strings shorter than this use exact comparison
+    # Higher values = faster but less accurate for short strings
+    # Lower values = slower but more accurate
+    minStringLength: 100 # default: 100
+  
+  # Optional: pipe output through external diff viewer
+  # Only used when stdout is a terminal
+  pager: "" # Examples: "delta --side-by-side", "bat --language=diff", "less -R"
