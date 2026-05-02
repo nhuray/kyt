@@ -9,7 +9,7 @@
 ✅ Respect `$PAGER` environment variable
 ✅ Rename `diff.cli` → `diff.options`
 ✅ Default: no pager, colorized unified diff to terminal
-✅ Add `--stat` flag for summary
+✅ Add `--summary` flag for tabular resource summary
 ✅ Add `-U<n>` flag for context lines
 ✅ Add `--color=auto|always|never` flag
 ✅ Git-style exit codes (0=no diff, 1=has diff)
@@ -384,21 +384,30 @@ func countChanges(edits []udiff.Edit, source string) (insertions, deletions int)
 ```go
 package reporter
 
+import (
+    "fmt"
+    "io"
+    "strings"
+    "unicode/utf8"
+    
+    "github.com/nhuray/kyt/pkg/differ"
+)
+
 type Reporter struct {
-    showStat bool
-    colorize bool
+    showSummary bool
+    colorize    bool
 }
 
-func NewReporter(showStat, colorize bool) *Reporter {
+func NewReporter(showSummary, colorize bool) *Reporter {
     return &Reporter{
-        showStat: showStat,
-        colorize: colorize,
+        showSummary: showSummary,
+        colorize:    colorize,
     }
 }
 
 func (r *Reporter) Report(result *differ.DiffResult, w io.Writer) error {
-    if r.showStat {
-        return r.reportStat(result, w)
+    if r.showSummary {
+        return r.reportSummary(result, w)
     }
     return r.reportDiff(result, w)
 }
@@ -416,52 +425,235 @@ func (r *Reporter) reportDiff(result *differ.DiffResult, w io.Writer) error {
     return nil
 }
 
-func (r *Reporter) reportStat(result *differ.DiffResult, w io.Writer) error {
-    maxKeyLength := 0
+func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
+    // Table configuration
+    const (
+        kindWidth       = 16
+        leftWidth       = 21
+        rightWidth      = 27
+        matchTypeWidth  = 11
+        similarityWidth = 17
+        changesWidth    = 10
+    )
+    
+    // Colors
+    const (
+        cyan    = "\033[36m"
+        red     = "\033[31m"
+        green   = "\033[32m"
+        yellow  = "\033[33m"
+        gray    = "\033[90m"
+        reset   = "\033[0m"
+        bold    = "\033[1m"
+    )
+    
+    // Header
+    header := fmt.Sprintf(
+        "%-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %s",
+        kindWidth, "KIND",
+        leftWidth, "LEFT",
+        rightWidth, "RIGHT",
+        matchTypeWidth, "MATCH TYPE",
+        similarityWidth, "SIMILARITY SCORE",
+        "CHANGES",
+    )
+    
+    if r.colorize {
+        header = bold + header + reset
+    }
+    
+    fmt.Fprintln(w, header)
+    
+    // Separator
+    separator := strings.Repeat("─", kindWidth+1) + "┼" +
+        strings.Repeat("─", leftWidth+2) + "┼" +
+        strings.Repeat("─", rightWidth+2) + "┼" +
+        strings.Repeat("─", matchTypeWidth+2) + "┼" +
+        strings.Repeat("─", similarityWidth+2) + "┼" +
+        strings.Repeat("─", changesWidth+2)
+    fmt.Fprintln(w, separator)
+    
+    // Rows
     for _, change := range result.Changes {
-        keyLength := len(r.getResourceDisplayName(change))
-        if keyLength > maxKeyLength {
-            maxKeyLength = keyLength
+        r.printSummaryRow(w, change, kindWidth, leftWidth, rightWidth, matchTypeWidth, similarityWidth)
+    }
+    
+    // Add identical resources count if any
+    if result.Summary.Identical > 0 {
+        identicalMsg := fmt.Sprintf("... and %d identical resources (not shown)", result.Summary.Identical)
+        if r.colorize {
+            identicalMsg = gray + identicalMsg + reset
         }
+        fmt.Fprintln(w)
+        fmt.Fprintln(w, identicalMsg)
     }
     
-    // Print per-resource stats with line changes
-    for _, change := range result.Changes {
-        r.printResourceStat(w, change, maxKeyLength)
-    }
-    
-    // Print summary line with resource counts (not line counts)
+    // Summary line
+    fmt.Fprintln(w)
     parts := []string{}
     if result.Summary.Added > 0 {
-        parts = append(parts, fmt.Sprintf("%d added", result.Summary.Added))
+        text := fmt.Sprintf("%d added", result.Summary.Added)
+        if r.colorize {
+            text = green + text + reset
+        }
+        parts = append(parts, text)
     }
     if result.Summary.Removed > 0 {
-        parts = append(parts, fmt.Sprintf("%d removed", result.Summary.Removed))
+        text := fmt.Sprintf("%d removed", result.Summary.Removed)
+        if r.colorize {
+            text = red + text + reset
+        }
+        parts = append(parts, text)
     }
     if result.Summary.Modified > 0 {
-        parts = append(parts, fmt.Sprintf("%d modified", result.Summary.Modified))
+        text := fmt.Sprintf("%d modified", result.Summary.Modified)
+        if r.colorize {
+            text = yellow + text + reset
+        }
+        parts = append(parts, text)
     }
     if result.Summary.Identical > 0 {
-        parts = append(parts, fmt.Sprintf("%d identical", result.Summary.Identical))
+        text := fmt.Sprintf("%d identical", result.Summary.Identical)
+        if r.colorize {
+            text = gray + text + reset
+        }
+        parts = append(parts, text)
     }
     
-    fmt.Fprintf(w, " %s\n", strings.Join(parts, ", "))
+    summaryLine := "SUMMARY: " + strings.Join(parts, ", ")
+    if r.colorize {
+        summaryLine = bold + summaryLine + reset
+    }
+    fmt.Fprintln(w, summaryLine)
     
     return nil
 }
 
-func (r *Reporter) printResourceStat(w io.Writer, change differ.ResourceDiff, maxKeyLength int) error {
-    displayName := r.getResourceDisplayName(change)
-    total := change.Insertions + change.Deletions
-    bar := makeBar(change.Insertions, change.Deletions, 40)
+func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, kindWidth, leftWidth, rightWidth, matchTypeWidth, similarityWidth int) error {
+    const (
+        red     = "\033[31m"
+        green   = "\033[32m"
+        yellow  = "\033[33m"
+        gray    = "\033[90m"
+        reset   = "\033[0m"
+    )
     
-    if r.colorize {
-        bar = colorizeBar(bar)
+    // Extract kind and resource names
+    kind := ""
+    leftName := ""
+    rightName := ""
+    
+    if change.SourceKey != nil {
+        kind = change.SourceKey.Kind
+        leftName = formatResourceName(*change.SourceKey)
+    }
+    if change.TargetKey != nil {
+        if kind == "" {
+            kind = change.TargetKey.Kind
+        }
+        rightName = formatResourceName(*change.TargetKey)
     }
     
-    // Show per-resource line change stats
-    fmt.Fprintf(w, " %-*s | %4d %s\n", maxKeyLength, displayName, total, bar)
+    // Highlight name differences
+    if r.colorize {
+        leftName = highlightDifference(leftName, rightName, change.ChangeType)
+        rightName = highlightDifference(rightName, leftName, change.ChangeType)
+    }
+    
+    // Match type (only show for modified with similarity)
+    matchType := ""
+    if change.ChangeType == differ.ChangeTypeModified {
+        if change.MatchType == "similarity" {
+            matchType = "similarity"
+        } else {
+            matchType = "exact"
+        }
+    }
+    
+    // Similarity score (only for similarity matches)
+    similarityScore := ""
+    if change.MatchType == "similarity" && change.ChangeType == differ.ChangeTypeModified {
+        similarityScore = fmt.Sprintf("%.2f", change.SimilarityScore)
+    }
+    
+    // Changes (+insertions / -deletions)
+    changes := fmt.Sprintf("+%d / -%d", change.Insertions, change.Deletions)
+    if r.colorize {
+        if change.Insertions > 0 && change.Deletions > 0 {
+            changes = yellow + changes + reset
+        } else if change.Insertions > 0 {
+            changes = green + changes + reset
+        } else if change.Deletions > 0 {
+            changes = red + changes + reset
+        } else {
+            changes = gray + changes + reset
+        }
+    }
+    
+    // Format row
+    fmt.Fprintf(w, "%-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %s\n",
+        kindWidth, truncate(kind, kindWidth),
+        leftWidth, truncate(leftName, leftWidth),
+        rightWidth, truncate(rightName, rightWidth),
+        matchTypeWidth, matchType,
+        similarityWidth, similarityScore,
+        changes,
+    )
+    
     return nil
+}
+
+// formatResourceName formats a resource key as "namespace/name"
+func formatResourceName(key manifest.ResourceKey) string {
+    if key.Namespace != "" {
+        return key.Namespace + "/" + key.Name
+    }
+    return key.Name
+}
+
+// highlightDifference highlights the differing parts between two strings
+// For now, this is a simple implementation that highlights the whole name if different
+// TODO: Could be enhanced to highlight only the differing characters
+func highlightDifference(text, other string, changeType differ.ChangeType) string {
+    const (
+        red    = "\033[31m"
+        green  = "\033[32m"
+        yellow = "\033[33m"
+        reset  = "\033[0m"
+    )
+    
+    if text == "" || text == other {
+        return text
+    }
+    
+    // Apply color based on change type
+    switch changeType {
+    case differ.ChangeTypeAdded:
+        return green + text + reset
+    case differ.ChangeTypeRemoved:
+        return red + text + reset
+    case differ.ChangeTypeModified:
+        // Highlight the difference
+        if text != other {
+            return yellow + text + reset
+        }
+    }
+    
+    return text
+}
+
+// truncate truncates a string to fit within width, adding ellipsis if needed
+func truncate(s string, width int) string {
+    if utf8.RuneCountInString(s) <= width {
+        return s
+    }
+    
+    // Truncate and add ellipsis
+    runes := []rune(s)
+    if width > 3 {
+        return string(runes[:width-3]) + "..."
+    }
+    return string(runes[:width])
 }
 
 func colorizeUnifiedDiff(diffText string) string {
@@ -513,8 +705,6 @@ func colorizeUnifiedDiff(diffText string) string {
     
     return result.String()
 }
-
-// Additional helper functions: getResourceDisplayName, makeBar, colorizeBar, pluralize
 ```
 
 ---
@@ -526,7 +716,7 @@ func colorizeUnifiedDiff(diffText string) string {
 ```go
 var (
     diffOutput                    string
-    diffStat                      bool
+    diffSummary                   bool
     diffUnified                   int
     diffColor                     string
     diffStringSimilarityThreshold float64
@@ -537,8 +727,8 @@ func init() {
     diffCmd.Flags().StringVarP(&diffOutput, "output", "o", "",
         "Write diff to file instead of stdout")
     
-    diffCmd.Flags().BoolVar(&diffStat, "stat", false,
-        "Show diffstat summary (like git diff --stat)")
+    diffCmd.Flags().BoolVar(&diffSummary, "summary", false,
+        "Show tabular summary of resource changes")
     
     diffCmd.Flags().IntVarP(&diffUnified, "unified", "U", 3,
         "Generate diff with <n> lines of context")
@@ -620,7 +810,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
     result, _ := differ.Diff(sourceManifests, targetManifests)
     
     // Create reporter
-    reporter := reporter.NewReporter(diffStat, colorize)
+    reporter := reporter.NewReporter(diffSummary, colorize)
     
     // Generate output
     reporter.Report(result, outputWriter)
@@ -737,20 +927,37 @@ Output:
 +  replicas: 3
 ```
 
-### Summary Statistics
+### Resource Summary
+
+Show a tabular summary of all resource changes:
 
 ```bash
-kyt diff --stat v1/ v2/
+kyt diff --summary v1/ v2/
 ```
 
 Output:
 ```
- apps/v1/Deployment/default/frontend        |   12 +++--
- apps/v1/Deployment/default/backend         |   45 ++++++++++----
- v1/Service/default/api (new)               |   67 ++++++++++++++++++++
- v1/ConfigMap/default/old-config (deleted)  |   23 --------
- 2 added, 1 removed, 3 modified, 7 identical
+KIND            │ LEFT                 │   RIGHT                    │ MATCH TYPE │ SIMILARITY SCORE │ CHANGES
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ConfigMap       │ redis/redis-scripts  │ redis-ha/redis-ha-scripts  │ similarity │ 0.77             │ +14 / -2
+Deployment      │ redis/redis          │ redis-ha/redis-ha          │ exact      │                  │ +5 / -3
+Namespace       │ redis                │                            │            │                  │ +0 / -12
+Secret          │                      │ redis/redis-secret         │            │                  │ +12 / -0
+Service         │ redis/redis          │ redis-ha/redis-ha          │ exact      │                  │ +8 / -4
+ServiceAccount  │ redis/redis          │ redis/redis                │ exact      │                  │ +0 / -0
+
+... and 4 identical resources (not shown)
+
+SUMMARY: 1 added, 1 removed, 3 modified, 4 identical
 ```
+
+Features:
+- **Columnar view**: Shows KIND, LEFT (source), RIGHT (target), MATCH TYPE, SIMILARITY SCORE, and CHANGES
+- **Color coding**: Added (green), Removed (red), Modified (yellow), Identical (gray)
+- **Name highlighting**: Differences in resource names are highlighted
+- **Similarity display**: Only shown when resources matched by similarity
+- **Change counts**: Shows +insertions / -deletions per resource
+
 
 ### Output Options
 
@@ -822,7 +1029,7 @@ Now returns `1` when differences found (was `0`)
 
 ### 9.1 Unit Tests
 - `pkg/differ/differ_test.go` - Test Added/Removed/Modified diff generation
-- `pkg/reporter/reporter_test.go` - Test full diff and --stat output
+- `pkg/reporter/reporter_test.go` - Test full diff and --summary output, table formatting
 - `pkg/pager/pager_test.go` - Test pager logic and TTY detection
 
 ### 9.2 Integration Tests
@@ -838,12 +1045,12 @@ Now returns `1` when differences found (was `0`)
 | 2 | Type system updates | 1 hour |
 | 3 | Pager implementation | 2 hours |
 | 4 | Diff generation with go-udiff | 3 hours |
-| 5 | Reporter implementation | 2 hours |
+| 5 | Reporter implementation (tabular summary) | 3 hours |
 | 6 | CLI updates | 2 hours |
 | 7 | Config & validation | 1 hour |
 | 8 | Documentation | 2 hours |
 | 9 | Testing | 3 hours |
-| **Total** | | **~16 hours** |
+| **Total** | | **~17 hours** |
 
 ---
 
@@ -874,11 +1081,21 @@ Now returns `1` when differences found (was `0`)
 - **Git alignment**: Matches git's philosophy
 
 ### Resource-Level vs Line-Level Stats
-- **Per-resource stats**: Show line insertions/deletions for each resource (in `--stat` output)
+- **Per-resource stats**: Show line insertions/deletions for each resource (in `--summary` output)
 - **Summary stats**: Show resource counts only (added/removed/modified/identical)
 - **Rationale**: Kubernetes resources are distinct units (like database records), not accumulations of line changes
 - **Git comparison**: Git shows line changes across files; kyt shows line changes per resource but counts resources in summary
 - **User mental model**: "I added 2 Services, modified 1 Deployment" is clearer than "45 insertions across resources"
+
+### Tabular Summary Design
+- **Columnar format**: Inspired by kubectl get output and database query results
+- **Left/Right terminology**: Clear indication of source (LEFT) vs target (RIGHT)
+- **Match type visibility**: Shows whether resources matched exactly or by similarity
+- **Similarity transparency**: Only displayed when relevant (similarity matching)
+- **Change visualization**: Shows +insertions / -deletions per resource for quick scanning
+- **Color coding**: Visual distinction between added (green), removed (red), modified (yellow)
+- **Name highlighting**: Highlights differences in resource names to spot renames/moves
+- **Compact identical**: Identical resources shown as count only to reduce noise
 
 ---
 
