@@ -26,6 +26,7 @@ var (
 	diffDataSimilarityBoost int
 	diffIncludeKinds        string
 	diffExcludeKinds        string
+	diffContext             string
 )
 
 var diffCmd = &cobra.Command{
@@ -39,6 +40,7 @@ Supports:
 - Tabular summary with --summary flag
 - Smart similarity matching for renamed resources
 - Resource filtering by kind (include/exclude)
+- Live cluster comparison using namespace syntax (ns:namespace)
 
 Exit Codes:
 - 0: No differences found
@@ -51,9 +53,28 @@ Resource Filtering:
 - Supports short names (cm, svc, deploy), singular (configmap, service), and plural (configmaps, services)
 - Both flags accept comma-separated lists
 
+Cluster Comparison:
+- Use ns:namespace syntax to compare resources from a Kubernetes namespace
+- Requires --context flag to specify the cluster context
+- Example: kyt diff --context prod ns:default ns:staging
+- Fetches ~15 common resource types (pods, deployments, services, etc.)
+- Use --include/--exclude to filter resource types
+
 Examples:
   # Compare two directories
   kyt diff ./source-manifests ./target-manifests
+
+  # Compare two namespaces in the same cluster
+  kyt diff --context prod ns:default ns:staging
+
+  # Compare local manifests against live cluster
+  kyt diff ./manifests --context prod ns:production
+
+  # Compare live cluster against local manifests
+  kyt diff --context prod ns:production ./manifests
+
+  # Compare specific resource types from cluster
+  kyt diff --context prod --include deploy,svc ns:default ns:staging
 
   # Show tabular summary instead of full diff
   kyt diff --summary ./source ./target
@@ -104,18 +125,20 @@ func init() {
 	diffCmd.Flags().IntVar(&diffDataSimilarityBoost, "data-similarity-boost", 2, "boost factor for ConfigMap/Secret data fields (1-10, higher = more weight on data)")
 	diffCmd.Flags().StringVar(&diffIncludeKinds, "include", "", "comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')")
 	diffCmd.Flags().StringVar(&diffExcludeKinds, "exclude", "", "comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')")
+	diffCmd.Flags().StringVar(&diffContext, "context", "", "Kubernetes context to use for namespace inputs (ns:namespace)")
 
 	rootCmd.AddCommand(diffCmd)
 }
 
 func runDiff(cmd *cobra.Command, args []string) error {
-	sourcePath := args[0]
-	targetPath := args[1]
+	// Parse input sources
+	sourceInput := parseInput(args[0])
+	targetInput := parseInput(args[1])
 
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "Comparing:\n")
-		fmt.Fprintf(os.Stderr, "  Source: %s\n", sourcePath)
-		fmt.Fprintf(os.Stderr, "  Target: %s\n", targetPath)
+		fmt.Fprintf(os.Stderr, "  Source: %s\n", formatInputForDisplay(sourceInput, diffContext))
+		fmt.Fprintf(os.Stderr, "  Target: %s\n", formatInputForDisplay(targetInput, diffContext))
 	}
 
 	// Load configuration
@@ -130,11 +153,11 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	// Parse source manifests
 	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "\nParsing source manifests...\n")
+		fmt.Fprintf(os.Stderr, "\nLoading source manifests...\n")
 	}
-	sourceManifests, err := parseManifests(sourcePath)
+	sourceManifests, err := loadManifests(sourceInput, diffContext)
 	if err != nil {
-		return fmt.Errorf("failed to parse source manifests: %w", err)
+		return fmt.Errorf("failed to load source manifests: %w", err)
 	}
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "  Found %d resources in source\n", sourceManifests.Len())
@@ -142,11 +165,11 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	// Parse target manifests
 	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "Parsing target manifests...\n")
+		fmt.Fprintf(os.Stderr, "Loading target manifests...\n")
 	}
-	targetManifests, err := parseManifests(targetPath)
+	targetManifests, err := loadManifests(targetInput, diffContext)
 	if err != nil {
-		return fmt.Errorf("failed to parse target manifests: %w", err)
+		return fmt.Errorf("failed to load target manifests: %w", err)
 	}
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "  Found %d resources in target\n", targetManifests.Len())
