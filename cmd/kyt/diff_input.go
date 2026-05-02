@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/nhuray/kyt/pkg/cluster"
 	"github.com/nhuray/kyt/pkg/manifest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // inputType represents the type of input source
@@ -42,18 +44,55 @@ func parseInput(arg string) inputSource {
 }
 
 // loadManifests loads manifests from either a file/directory or a Kubernetes namespace
+// contextName should already be resolved (either from --context flag or current context)
 func loadManifests(input inputSource, contextName string) (*manifest.ManifestSet, error) {
 	switch input.Type {
 	case inputTypeFile:
 		return loadManifestsFromFile(input.Value)
 	case inputTypeNamespace:
-		if contextName == "" {
-			return nil, fmt.Errorf("--context flag is required when using namespace inputs (ns:namespace)")
-		}
 		return loadManifestsFromNamespace(input.Value, contextName)
 	default:
 		return nil, fmt.Errorf("unknown input type: %s", input.Type)
 	}
+}
+
+// getCurrentContext retrieves the current context from kubeconfig
+func getCurrentContext() (string, error) {
+	// Determine kubeconfig path
+	kubeconfigPath := os.Getenv("KUBECONFIG")
+	if kubeconfigPath == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get home directory: %w", err)
+		}
+		kubeconfigPath = filepath.Join(home, ".kube", "config")
+	}
+
+	// Check if kubeconfig file exists
+	if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("kubeconfig not found at %s", kubeconfigPath)
+	}
+
+	// Load kubeconfig
+	loadingRules := &clientcmd.ClientConfigLoadingRules{
+		ExplicitPath: kubeconfigPath,
+	}
+
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		loadingRules,
+		&clientcmd.ConfigOverrides{},
+	)
+
+	rawConfig, err := kubeConfig.RawConfig()
+	if err != nil {
+		return "", fmt.Errorf("failed to load kubeconfig: %w", err)
+	}
+
+	if rawConfig.CurrentContext == "" {
+		return "", fmt.Errorf("no current context set in kubeconfig")
+	}
+
+	return rawConfig.CurrentContext, nil
 }
 
 // loadManifestsFromFile loads manifests from a file or directory

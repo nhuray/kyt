@@ -55,7 +55,8 @@ Resource Filtering:
 
 Cluster Comparison:
 - Use ns:namespace syntax to compare resources from a Kubernetes namespace
-- Requires --context flag to specify the cluster context
+- Use --context flag to specify cluster context (defaults to current context)
+- Example: kyt diff ns:default ns:staging
 - Example: kyt diff --context prod ns:default ns:staging
 - Fetches ~15 common resource types (pods, deployments, services, etc.)
 - Use --include/--exclude to filter resource types
@@ -64,17 +65,20 @@ Examples:
   # Compare two directories
   kyt diff ./source-manifests ./target-manifests
 
-  # Compare two namespaces in the same cluster
+  # Compare two namespaces (uses current context)
+  kyt diff ns:default ns:staging
+
+  # Compare two namespaces in a specific cluster
   kyt diff --context prod ns:default ns:staging
 
   # Compare local manifests against live cluster
-  kyt diff ./manifests --context prod ns:production
+  kyt diff ./manifests ns:production
 
   # Compare live cluster against local manifests
-  kyt diff --context prod ns:production ./manifests
+  kyt diff ns:production ./manifests
 
   # Compare specific resource types from cluster
-  kyt diff --context prod --include deploy,svc ns:default ns:staging
+  kyt diff --include deploy,svc ns:default ns:staging
 
   # Show tabular summary instead of full diff
   kyt diff --summary ./source ./target
@@ -125,7 +129,7 @@ func init() {
 	diffCmd.Flags().IntVar(&diffDataSimilarityBoost, "data-similarity-boost", 2, "boost factor for ConfigMap/Secret data fields (1-10, higher = more weight on data)")
 	diffCmd.Flags().StringVar(&diffIncludeKinds, "include", "", "comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')")
 	diffCmd.Flags().StringVar(&diffExcludeKinds, "exclude", "", "comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')")
-	diffCmd.Flags().StringVar(&diffContext, "context", "", "Kubernetes context to use for namespace inputs (ns:namespace)")
+	diffCmd.Flags().StringVar(&diffContext, "context", "", "Kubernetes context to use for namespace inputs (defaults to current context)")
 
 	rootCmd.AddCommand(diffCmd)
 }
@@ -135,10 +139,24 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	sourceInput := parseInput(args[0])
 	targetInput := parseInput(args[1])
 
+	// Determine the effective context to use
+	// If either input is a namespace and no context is specified, get the current context
+	effectiveContext := diffContext
+	if effectiveContext == "" && (sourceInput.Type == inputTypeNamespace || targetInput.Type == inputTypeNamespace) {
+		currentContext, err := getCurrentContext()
+		if err != nil {
+			return fmt.Errorf("no --context flag provided and failed to get current context from kubeconfig: %w", err)
+		}
+		effectiveContext = currentContext
+		if rootVerbose {
+			fmt.Fprintf(os.Stderr, "Using current context: %s\n\n", effectiveContext)
+		}
+	}
+
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "Comparing:\n")
-		fmt.Fprintf(os.Stderr, "  Source: %s\n", formatInputForDisplay(sourceInput, diffContext))
-		fmt.Fprintf(os.Stderr, "  Target: %s\n", formatInputForDisplay(targetInput, diffContext))
+		fmt.Fprintf(os.Stderr, "  Source: %s\n", formatInputForDisplay(sourceInput, effectiveContext))
+		fmt.Fprintf(os.Stderr, "  Target: %s\n", formatInputForDisplay(targetInput, effectiveContext))
 	}
 
 	// Load configuration
@@ -155,7 +173,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "\nLoading source manifests...\n")
 	}
-	sourceManifests, err := loadManifests(sourceInput, diffContext)
+	sourceManifests, err := loadManifests(sourceInput, effectiveContext)
 	if err != nil {
 		return fmt.Errorf("failed to load source manifests: %w", err)
 	}
@@ -167,7 +185,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "Loading target manifests...\n")
 	}
-	targetManifests, err := loadManifests(targetInput, diffContext)
+	targetManifests, err := loadManifests(targetInput, effectiveContext)
 	if err != nil {
 		return fmt.Errorf("failed to load target manifests: %w", err)
 	}
