@@ -60,24 +60,23 @@ type ResourceDiff struct {
     // Diff output
     DiffText    string
     Edits       []udiff.Edit
-    Insertions  int
-    Deletions   int
+    
+    // Per-resource stats (for --stat)
+    Insertions  int  // Lines added in this resource
+    Deletions   int  // Lines deleted in this resource
 }
 
 type DiffResult struct {
-    Changes   []ResourceDiff
-    Identical []manifest.ResourceKey
-    Summary   DiffSummary
+    Changes []ResourceDiff  // Only Added, Removed, Modified
+    Summary DiffSummary
 }
 
 type DiffSummary struct {
-    Total      int
-    Added      int
-    Removed    int
-    Modified   int
-    Identical  int
-    Insertions int
-    Deletions  int
+    // Resource counts only (not line counts)
+    Added     int  // Resources only in target
+    Removed   int  // Resources only in source
+    Modified  int  // Resources that differ
+    Identical int  // Resources that are identical (count only, keys not stored)
 }
 
 type DiffOptions struct {
@@ -219,7 +218,7 @@ func (d *Differ) Diff(sourceManifests, targetManifests []manifest.Manifest) (*Di
     )
     
     var changes []ResourceDiff
-    var identical []manifest.ResourceKey
+    identicalCount := 0  // Count only, don't store keys
     
     // Process Added
     for _, key := range unmatchedTarget {
@@ -234,25 +233,31 @@ func (d *Differ) Diff(sourceManifests, targetManifests []manifest.Manifest) (*Di
     }
     
     // Process Modified
+    modifiedCount := 0
     for _, match := range matches {
         sourceRes := sourceMap[match.SourceKey]
         targetRes := targetMap[match.TargetKey]
         
         if d.areEqual(sourceRes, targetRes) {
-            identical = append(identical, match.SourceKey)
+            identicalCount++  // Just count, don't store
             continue
         }
         
         diff, _ := d.generateModifiedDiff(match, sourceRes, targetRes)
         changes = append(changes, diff)
+        modifiedCount++
     }
     
-    summary := d.calculateSummary(changes, len(identical))
+    summary := DiffSummary{
+        Added:     len(unmatchedTarget),
+        Removed:   len(unmatchedSource),
+        Modified:  modifiedCount,
+        Identical: identicalCount,
+    }
     
     return &DiffResult{
-        Changes:   changes,
-        Identical: identical,
-        Summary:   summary,
+        Changes: changes,
+        Summary: summary,
     }, nil
 }
 ```
@@ -420,16 +425,27 @@ func (r *Reporter) reportStat(result *differ.DiffResult, w io.Writer) error {
         }
     }
     
+    // Print per-resource stats with line changes
     for _, change := range result.Changes {
         r.printResourceStat(w, change, maxKeyLength)
     }
     
-    resourcesChanged := result.Summary.Added + result.Summary.Removed + result.Summary.Modified
-    fmt.Fprintf(w, " %d file%s changed, %d insertion%s(+), %d deletion%s(-)\n",
-        resourcesChanged, pluralize(resourcesChanged),
-        result.Summary.Insertions, pluralize(result.Summary.Insertions),
-        result.Summary.Deletions, pluralize(result.Summary.Deletions),
-    )
+    // Print summary line with resource counts (not line counts)
+    parts := []string{}
+    if result.Summary.Added > 0 {
+        parts = append(parts, fmt.Sprintf("%d added", result.Summary.Added))
+    }
+    if result.Summary.Removed > 0 {
+        parts = append(parts, fmt.Sprintf("%d removed", result.Summary.Removed))
+    }
+    if result.Summary.Modified > 0 {
+        parts = append(parts, fmt.Sprintf("%d modified", result.Summary.Modified))
+    }
+    if result.Summary.Identical > 0 {
+        parts = append(parts, fmt.Sprintf("%d identical", result.Summary.Identical))
+    }
+    
+    fmt.Fprintf(w, " %s\n", strings.Join(parts, ", "))
     
     return nil
 }
@@ -443,6 +459,7 @@ func (r *Reporter) printResourceStat(w io.Writer, change differ.ResourceDiff, ma
         bar = colorizeBar(bar)
     }
     
+    // Show per-resource line change stats
     fmt.Fprintf(w, " %-*s | %4d %s\n", maxKeyLength, displayName, total, bar)
     return nil
 }
@@ -728,9 +745,11 @@ kyt diff --stat v1/ v2/
 
 Output:
 ```
- apps/v1/Deployment/default/frontend  | 12 +++--
- apps/v1/Deployment/default/backend   | 45 ++++++++++----
- 4 files changed, 123 insertions(+), 38 deletions(-)
+ apps/v1/Deployment/default/frontend        |   12 +++--
+ apps/v1/Deployment/default/backend         |   45 ++++++++++----
+ v1/Service/default/api (new)               |   67 ++++++++++++++++++++
+ v1/ConfigMap/default/old-config (deleted)  |   23 --------
+ 2 added, 1 removed, 3 modified, 7 identical
 ```
 
 ### Output Options
@@ -853,6 +872,13 @@ Now returns `1` when differences found (was `0`)
 - **Tool ecosystem**: Can pipe to diff2html, delta, etc.
 - **Less complexity**: One output format to maintain
 - **Git alignment**: Matches git's philosophy
+
+### Resource-Level vs Line-Level Stats
+- **Per-resource stats**: Show line insertions/deletions for each resource (in `--stat` output)
+- **Summary stats**: Show resource counts only (added/removed/modified/identical)
+- **Rationale**: Kubernetes resources are distinct units (like database records), not accumulations of line changes
+- **Git comparison**: Git shows line changes across files; kyt shows line changes per resource but counts resources in summary
+- **User mental model**: "I added 2 Services, modified 1 Deployment" is clearer than "45 insertions across resources"
 
 ---
 
