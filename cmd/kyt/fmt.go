@@ -13,7 +13,8 @@ import (
 
 var (
 	// Fmt command flags
-	fmtWrite bool
+	fmtWrite                  bool
+	fmtRemoveServerSideFields bool
 )
 
 var fmtCmd = &cobra.Command{
@@ -23,6 +24,7 @@ var fmtCmd = &cobra.Command{
 
 By default, reads from the specified path and writes to stdout.
 Use -w to write changes back to the source files.
+Use -R to remove server-side fields (useful for formatting applied manifests).
 
 Examples:
   # Format a file to stdout
@@ -37,6 +39,12 @@ Examples:
   # Format from stdin
   cat deployment.yaml | kyt fmt
 
+  # Remove server-side fields from applied manifests
+  kubectl get deploy my-app -o yaml | kyt fmt -R
+
+  # Clean and format manifests from the cluster
+  kyt fmt -R applied-manifests/
+
   # Chain with other tools
   kustomize build . | kyt fmt | kubectl apply -f -
 `,
@@ -47,6 +55,7 @@ Examples:
 
 func init() {
 	fmtCmd.Flags().BoolVarP(&fmtWrite, "write", "w", false, "write formatted output back to source files")
+	fmtCmd.Flags().BoolVarP(&fmtRemoveServerSideFields, "remove-server-side-fields", "R", false, "remove server-side fields (managedFields, resourceVersion, uid, etc.)")
 	rootCmd.AddCommand(fmtCmd)
 }
 
@@ -112,6 +121,11 @@ func runFmt(cmd *cobra.Command, args []string) error {
 	formattedSet := manifest.NewManifestSet()
 
 	for key, obj := range manifestSet.Resources {
+		// Remove server-side fields if requested
+		if fmtRemoveServerSideFields {
+			cleanServerSideFields(obj)
+		}
+
 		f, err := fmtr.Format(obj)
 		if err != nil {
 			return fmt.Errorf("failed to format %s: %w", key.String(), err)
@@ -221,4 +235,36 @@ func writeBackToSource(sourcePath string, manifestSet *manifest.ManifestSet) err
 	}
 
 	return nil
+}
+
+// cleanServerSideFields removes server-side fields that are added by Kubernetes
+// when resources are applied to the cluster. This is useful for formatting manifests
+// that were retrieved from the cluster (e.g., via kubectl get).
+func cleanServerSideFields(obj *unstructured.Unstructured) {
+	if obj == nil {
+		return
+	}
+
+	// Get metadata
+	metadata, ok := obj.Object["metadata"].(map[string]interface{})
+	if !ok {
+		return
+	}
+
+	// Remove server-side metadata fields
+	fieldsToRemove := []string{
+		"managedFields",     // Field management information
+		"resourceVersion",   // Resource version
+		"uid",               // Unique identifier
+		"selfLink",          // Deprecated self link
+		"generation",        // Generation number
+		"creationTimestamp", // Creation timestamp
+	}
+
+	for _, field := range fieldsToRemove {
+		delete(metadata, field)
+	}
+
+	// Also remove status field from the root object
+	delete(obj.Object, "status")
 }
