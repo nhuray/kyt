@@ -169,11 +169,17 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "  Config: %s\n", rootConfigFile)
 	}
 
+	// Determine verbose writer for cluster operations
+	var verboseWriter io.Writer
+	if rootVerbose {
+		verboseWriter = os.Stderr
+	}
+
 	// Parse source manifests
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "\nLoading source manifests...\n")
 	}
-	sourceManifests, err := loadManifests(sourceInput, effectiveContext)
+	sourceManifests, err := loadManifests(sourceInput, effectiveContext, verboseWriter)
 	if err != nil {
 		return fmt.Errorf("failed to load source manifests: %w", err)
 	}
@@ -185,7 +191,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "Loading target manifests...\n")
 	}
-	targetManifests, err := loadManifests(targetInput, effectiveContext)
+	targetManifests, err := loadManifests(targetInput, effectiveContext, verboseWriter)
 	if err != nil {
 		return fmt.Errorf("failed to load target manifests: %w", err)
 	}

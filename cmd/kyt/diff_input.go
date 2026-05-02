@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,12 +46,13 @@ func parseInput(arg string) inputSource {
 
 // loadManifests loads manifests from either a file/directory or a Kubernetes namespace
 // contextName should already be resolved (either from --context flag or current context)
-func loadManifests(input inputSource, contextName string) (*manifest.ManifestSet, error) {
+// verboseWriter is used for verbose logging (typically os.Stderr, or nil to disable)
+func loadManifests(input inputSource, contextName string, verboseWriter io.Writer) (*manifest.ManifestSet, error) {
 	switch input.Type {
 	case inputTypeFile:
 		return loadManifestsFromFile(input.Value)
 	case inputTypeNamespace:
-		return loadManifestsFromNamespace(input.Value, contextName)
+		return loadManifestsFromNamespace(input.Value, contextName, verboseWriter)
 	default:
 		return nil, fmt.Errorf("unknown input type: %s", input.Type)
 	}
@@ -113,16 +115,16 @@ func loadManifestsFromFile(path string) (*manifest.ManifestSet, error) {
 }
 
 // loadManifestsFromNamespace loads manifests from a Kubernetes namespace
-func loadManifestsFromNamespace(namespace, contextName string) (*manifest.ManifestSet, error) {
+func loadManifestsFromNamespace(namespace, contextName string, verboseWriter io.Writer) (*manifest.ManifestSet, error) {
 	// Create cluster client (kubeconfigPath="", contextName=contextName)
-	client, err := cluster.NewClusterClient("", contextName)
+	client, err := cluster.NewClusterClientWithVerbose("", contextName, verboseWriter)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create cluster client: %w", err)
+		return nil, err // Error already has helpful message from cluster package
 	}
 
 	// Validate namespace exists
 	if err := client.ValidateNamespace(namespace); err != nil {
-		return nil, err
+		return nil, err // Error already has helpful message
 	}
 
 	// Get common resource types
