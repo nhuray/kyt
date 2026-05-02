@@ -59,8 +59,8 @@ kyt diff ns:prod ns:staging --context my-cluster
 kyt diff ns:prod ./manifests
 
 # Cross-cluster (two-step process)
-kyt diff ns:prod --context cluster1 -o /tmp/cluster1.yaml
-kyt diff ns:prod --context cluster2 -o /tmp/cluster2.yaml
+kubectl get all -n prod -o yaml --context cluster1 > /tmp/cluster1.yaml
+kubectl get all -n prod -o yaml --context cluster2 > /tmp/cluster2.yaml
 kyt diff /tmp/cluster1.yaml /tmp/cluster2.yaml
 ```
 
@@ -461,8 +461,8 @@ helm template my-app | kyt diff ns:production -
 ### Cross-Cluster Comparison
 ```bash
 # Two-step process for different clusters
-kyt diff ns:app --context cluster1 -o /tmp/cluster1.yaml
-kyt diff ns:app --context cluster2 -o /tmp/cluster2.yaml
+kubectl get all -n app -o yaml --context cluster1 > /tmp/cluster1.yaml
+kubectl get all -n app -o yaml --context cluster2 > /tmp/cluster2.yaml
 kyt diff /tmp/cluster1.yaml /tmp/cluster2.yaml
 ```
 
