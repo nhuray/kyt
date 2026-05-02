@@ -21,6 +21,7 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 - 🎨 **JQ Path Expressions**: Powerful filtering with wildcards and conditionals
 - 📊 **Multiple Output Formats**: Unified diff with optional pager support (less, delta, bat)
 - 🎯 **Smart Normalization**: Removes managed fields, applies ignore rules, sorts keys (used by `diff`)
+- ☸️ **Live Cluster Comparison**: Compare local manifests against live Kubernetes resources
 - 🔧 **Format**: Sort keys consistently with `kyt fmt`
 - 🔀 **Pipe-friendly**: Works seamlessly with kubectl, kustomize, helm
 - 🤖 **Intelligent Similarity Matching**: Automatically detects renamed resources across namespaces
@@ -30,6 +31,8 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 
 ## Use Cases
 
+- **Compare local manifests vs live cluster**: Detect configuration drift between Git (desired state) and actual cluster state
+- **Compare across namespaces**: Compare production vs staging environments directly in the cluster
 - **Compare Helm vs Kustomize outputs**: Validate migrations by comparing rendered manifests while ignoring expected differences (field order, formatting, etc.)
 - **Detect configuration drift**: Compare desired state (Git) with actual cluster state (`kubectl get`), ignoring dynamic fields like timestamps and resource versions
 - **CI/CD validation**: Ensure manifest changes are intentional by comparing PR changes against production, with rules to ignore acceptable differences
@@ -50,10 +53,16 @@ make build
 # Compare directories
 ./bin/kyt diff ./kustomize-output ./helm-output
 
+# Compare local manifests against live cluster
+./bin/kyt diff ./manifests ns:production
+
+# Compare two namespaces in the cluster
+./bin/kyt diff ns:production ns:staging
+
 # Normalize a manifest file
 ./bin/kyt fmt deployment.yaml
 
-# Pipe manifests through ky
+# Pipe manifests through kyt
 kustomize build . | kyt fmt | kubectl apply -f -
 
 # Use custom config
@@ -67,7 +76,28 @@ kustomize build . | kyt fmt | kubectl apply -f -
 
 ### `kyt diff` - Compare manifests
 
-Compare two Kubernetes manifest files or directories with smart ignore rules and intelligent similarity matching.
+Compare two Kubernetes manifest files, directories, or live cluster namespaces with smart ignore rules and intelligent similarity matching.
+
+**Live Cluster Comparison:**
+
+Use the `ns:namespace` syntax to fetch and compare resources directly from Kubernetes clusters. kyt automatically uses your current kubectl context, or you can specify a different context with `--context`.
+
+```bash
+# Compare local manifests against live cluster (uses current context)
+kyt diff ./manifests ns:production
+
+# Compare two namespaces in the same cluster
+kyt diff ns:production ns:staging
+
+# Compare using a specific cluster context
+kyt diff --context prod ns:production ns:staging
+
+# Compare specific resource types from cluster
+kyt diff --include deploy,svc,cm ns:production ns:staging
+
+# Verbose output shows connection and resource fetching details
+kyt diff -v ns:production ns:staging
+```
 
 **Similarity Matching:**
 
@@ -261,6 +291,7 @@ kyt version
 
 ## Documentation
 
+- **[Cluster Comparison Guide](docs/cluster-comparison.md)** - Complete guide to comparing live Kubernetes resources
 - **[fmt Command Guide](docs/fmt.md)** - Complete guide to formatting manifests with configuration options
 - **[diff Command Guide](docs/diff.md)** - Advanced comparison techniques with JQ expressions and examples
 - **[Example Configs](examples/)** - Sample configurations and manifests
@@ -269,9 +300,9 @@ kyt version
 
 The project has comprehensive test coverage:
 
-- **60+ tests total** (52 unit + 9 integration)
+- **240+ tests total** covering all major functionality
 - All tests passing
-- Covers: config loading, manifest parsing, normalization, diffing, output formatting, CLI commands
+- Covers: config loading, manifest parsing, normalization, diffing, output formatting, CLI commands, cluster operations
 
 Run tests:
 
@@ -315,6 +346,7 @@ make run-json
 
 **Go Libraries:**
 
+- [client-go](https://github.com/kubernetes/client-go) - Kubernetes client library for live cluster access
 - [go-udiff](https://github.com/aymanbagabas/go-udiff) - Unified diff generation
 - [ArgoCD](https://github.com/argoproj/argo-cd) - Ignore rules engine
 - [gojq](https://github.com/itchyny/gojq) - JQ implementation in Go
