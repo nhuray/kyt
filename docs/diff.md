@@ -277,7 +277,7 @@ Modified Resources (2):
   • Deployment.apps/nginx
   • Service/nginx
 
-[... detailed diffs using tree-sitter ...]
+[... detailed unified diffs ...]
 ```
 
 #### JSON

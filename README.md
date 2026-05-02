@@ -12,7 +12,7 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 
 1. **Formatting manifests** - Sorts keys alphabetically for consistent YAML structure
 2. **Smart comparison** - Normalizes and compares manifests using ArgoCD-compatible ignore rules (removes fields, applies custom rules, sorts keys)
-3. **Beautiful diffs** - Uses tree-sitter for structural, syntax-aware diffs that are easy to read
+3. **Beautiful diffs** - Generates unified diff output (git-style) that's easy to read and integrate with tools
 
 **Key Features:**
 
@@ -315,7 +315,7 @@ make run-json
 
 **Go Libraries:**
 
-- [tree-sitter](https://github.com/tree-sitter/tree-sitter) - Syntax tree parser
+- [go-udiff](https://github.com/aymanbagabas/go-udiff) - Unified diff generation
 - [ArgoCD](https://github.com/argoproj/argo-cd) - Ignore rules engine
 - [gojq](https://github.com/itchyny/gojq) - JQ implementation in Go
 - [cobra](https://github.com/spf13/cobra) - CLI framework

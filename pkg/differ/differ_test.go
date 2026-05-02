@@ -99,7 +99,7 @@ func TestDiff_ModifiedResources(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	norm := normalizer.New(cfg)
 
-	// Use default options for tree-sitter test output
+	// Use default diff options
 	opts := NewDefaultDiffOptions()
 
 	differ := New(norm, opts)
@@ -570,11 +570,11 @@ func TestDiff_SimilarityMatching(t *testing.T) {
 	}
 }
 
-func TestDiff_TreeSitterFallback(t *testing.T) {
+func TestDiff_UnifiedDiffFormat(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	norm := normalizer.New(cfg)
 
-	// Configure differ to use tree-sitter
+	// Configure differ with default options
 	opts := NewDefaultDiffOptions()
 
 	differ := New(norm, opts)
@@ -646,7 +646,7 @@ func TestDiff_TreeSitterFallback(t *testing.T) {
 	}
 }
 
-func TestDiff_TreeSitterWithDeployment(t *testing.T) {
+func TestDiff_UnifiedDiffWithDeployment(t *testing.T) {
 	cfg := config.NewDefaultConfig()
 	norm := normalizer.New(cfg)
 
