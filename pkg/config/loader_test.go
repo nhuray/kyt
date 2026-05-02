@@ -14,12 +14,26 @@ func TestNewDefaultConfig(t *testing.T) {
 		t.Error("Expected sortKeys to be true by default")
 	}
 
-	if cfg.Diff.CLI.Display != "side-by-side" {
-		t.Errorf("Expected default display to be 'side-by-side', got %s", cfg.Diff.CLI.Display)
+	// Check options defaults
+	if cfg.Diff.Options.ContextLines != 3 {
+		t.Errorf("Expected default context lines to be 3, got %d", cfg.Diff.Options.ContextLines)
 	}
 
-	if !cfg.Diff.CLI.Colorize {
-		t.Error("Expected colorize to be true by default")
+	if cfg.Diff.Options.SimilarityThreshold != 0.7 {
+		t.Errorf("Expected default similarity threshold to be 0.7, got %f", cfg.Diff.Options.SimilarityThreshold)
+	}
+
+	if cfg.Diff.Options.DataSimilarityBoost != 2 {
+		t.Errorf("Expected default data similarity boost to be 2, got %d", cfg.Diff.Options.DataSimilarityBoost)
+	}
+
+	// Check fuzzy matching defaults
+	if !cfg.Diff.FuzzyMatching.Enabled {
+		t.Error("Expected fuzzy matching to be enabled by default")
+	}
+
+	if cfg.Diff.FuzzyMatching.MinStringLength != 100 {
+		t.Errorf("Expected default min string length to be 100, got %d", cfg.Diff.FuzzyMatching.MinStringLength)
 	}
 }
 
@@ -35,8 +49,8 @@ func TestConfigMerge(t *testing.T) {
 					},
 				},
 			},
-			CLI: CLIConfig{
-				Display: "side-by-side",
+			Options: OptionsConfig{
+				ContextLines: 3,
 			},
 		},
 	}
@@ -52,9 +66,9 @@ func TestConfigMerge(t *testing.T) {
 					},
 				},
 			},
-			CLI: CLIConfig{
-				Display:  "inline",
-				Colorize: true,
+			Options: OptionsConfig{
+				ContextLines:        5,
+				DataSimilarityBoost: 4,
 			},
 		},
 	}
@@ -66,13 +80,13 @@ func TestConfigMerge(t *testing.T) {
 		t.Errorf("Expected 2 ignore rules after merge, got %d", len(cfg1.Diff.IgnoreDifferences))
 	}
 
-	// Check that CLI config was overridden
-	if cfg1.Diff.CLI.Display != "inline" {
-		t.Errorf("Expected display to be 'inline' after merge, got %s", cfg1.Diff.CLI.Display)
+	// Check that options were overridden
+	if cfg1.Diff.Options.ContextLines != 5 {
+		t.Errorf("Expected context lines to be 5 after merge, got %d", cfg1.Diff.Options.ContextLines)
 	}
 
-	if !cfg1.Diff.CLI.Colorize {
-		t.Error("Expected colorize to be true after merge")
+	if cfg1.Diff.Options.DataSimilarityBoost != 4 {
+		t.Errorf("Expected data similarity boost to be 4 after merge, got %d", cfg1.Diff.Options.DataSimilarityBoost)
 	}
 }
 
@@ -189,15 +203,15 @@ func TestResourceIgnoreDifferencesMatchesResource(t *testing.T) {
 func TestLoaderLoadBytes(t *testing.T) {
 	yaml := `
 diff:
-  diff:
   ignoreDifferences:
     - group: "apps"
       kind: "Deployment"
       jsonPointers:
         - /spec/replicas
 
-  cli:
-    display: inline
+  options:
+    contextLines: 5
+    dataSimilarityBoost: 3
 `
 
 	loader := NewLoader()
@@ -214,8 +228,12 @@ diff:
 		t.Errorf("Expected group 'apps', got %s", cfg.Diff.IgnoreDifferences[0].Group)
 	}
 
-	if cfg.Diff.CLI.Display != "inline" {
-		t.Errorf("Expected display 'inline', got %s", cfg.Diff.CLI.Display)
+	if cfg.Diff.Options.ContextLines != 5 {
+		t.Errorf("Expected context lines 5, got %d", cfg.Diff.Options.ContextLines)
+	}
+
+	if cfg.Diff.Options.DataSimilarityBoost != 3 {
+		t.Errorf("Expected data similarity boost 3, got %d", cfg.Diff.Options.DataSimilarityBoost)
 	}
 }
 
@@ -258,16 +276,17 @@ func TestLoaderLoadDefault(t *testing.T) {
 		t.Fatalf("Failed to load default config: %v", err)
 	}
 
-	if cfg.Diff.CLI.Display != "side-by-side" {
-		t.Errorf("Expected default display 'side-by-side', got %s", cfg.Diff.CLI.Display)
+	if cfg.Diff.Options.ContextLines != 3 {
+		t.Errorf("Expected default context lines 3, got %d", cfg.Diff.Options.ContextLines)
 	}
 
 	// Test with existing config file
 	configPath := filepath.Join(tmpDir, DefaultConfigFileName)
 	content := `
 diff:
-  cli:
-    display: inline
+  options:
+    contextLines: 5
+    dataSimilarityBoost: 4
 `
 	err = os.WriteFile(configPath, []byte(content), 0644)
 	if err != nil {
@@ -279,8 +298,12 @@ diff:
 		t.Fatalf("Failed to load default config: %v", err)
 	}
 
-	if cfg.Diff.CLI.Display != "inline" {
-		t.Errorf("Expected display 'inline', got %s", cfg.Diff.CLI.Display)
+	if cfg.Diff.Options.ContextLines != 5 {
+		t.Errorf("Expected context lines 5, got %d", cfg.Diff.Options.ContextLines)
+	}
+
+	if cfg.Diff.Options.DataSimilarityBoost != 4 {
+		t.Errorf("Expected data similarity boost 4, got %d", cfg.Diff.Options.DataSimilarityBoost)
 	}
 }
 
@@ -341,8 +364,8 @@ func TestLoaderSearchConfig(t *testing.T) {
 	configPath := filepath.Join(tmpDir, DefaultConfigFileName)
 	content := `
 diff:
-  cli:
-    display: inline
+  options:
+    contextLines: 5
 `
 	err = os.WriteFile(configPath, []byte(content), 0644)
 	if err != nil {
@@ -359,8 +382,8 @@ diff:
 		t.Errorf("Expected to find config at %s, found at %s", configPath, foundPath)
 	}
 
-	if cfg.Diff.CLI.Display != "inline" {
-		t.Errorf("Expected display 'inline', got %s", cfg.Diff.CLI.Display)
+	if cfg.Diff.Options.ContextLines != 5 {
+		t.Errorf("Expected context lines 5, got %d", cfg.Diff.Options.ContextLines)
 	}
 }
 
@@ -379,8 +402,9 @@ func TestLoaderSave(t *testing.T) {
 					},
 				},
 			},
-			CLI: CLIConfig{
-				Display: "inline",
+			Options: OptionsConfig{
+				ContextLines:        5,
+				DataSimilarityBoost: 3,
 			},
 		},
 	}
@@ -402,7 +426,11 @@ func TestLoaderSave(t *testing.T) {
 		t.Fatalf("Failed to load saved config: %v", err)
 	}
 
-	if loadedCfg.Diff.CLI.Display != "inline" {
-		t.Errorf("Expected display 'inline', got %s", loadedCfg.Diff.CLI.Display)
+	if loadedCfg.Diff.Options.ContextLines != 5 {
+		t.Errorf("Expected context lines 5, got %d", loadedCfg.Diff.Options.ContextLines)
+	}
+
+	if loadedCfg.Diff.Options.DataSimilarityBoost != 3 {
+		t.Errorf("Expected data similarity boost 3, got %d", loadedCfg.Diff.Options.DataSimilarityBoost)
 	}
 }
