@@ -75,8 +75,8 @@ func loadManifestsFromFile(path string) (*manifest.ManifestSet, error) {
 
 // loadManifestsFromNamespace loads manifests from a Kubernetes namespace
 func loadManifestsFromNamespace(namespace, contextName string) (*manifest.ManifestSet, error) {
-	// Create cluster client
-	client, err := cluster.NewClusterClient(contextName, "")
+	// Create cluster client (kubeconfigPath="", contextName=contextName)
+	client, err := cluster.NewClusterClient("", contextName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cluster client: %w", err)
 	}
