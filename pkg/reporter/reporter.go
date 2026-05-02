@@ -300,10 +300,11 @@ func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, chan
 	case differ.ChangeTypeModified:
 		// Show both for modified resources, but hide zeros
 		if change.Insertions > 0 && change.Deletions > 0 {
-			// Both insertions and deletions
-			diff = fmt.Sprintf("+%d / -%d", change.Insertions, change.Deletions)
+			// Both insertions and deletions - color separately
 			if r.colorize {
-				diff = yellow + diff + reset
+				diff = green + fmt.Sprintf("+%d", change.Insertions) + reset + " / " + red + fmt.Sprintf("-%d", change.Deletions) + reset
+			} else {
+				diff = fmt.Sprintf("+%d / -%d", change.Insertions, change.Deletions)
 			}
 		} else if change.Insertions > 0 {
 			// Only insertions
