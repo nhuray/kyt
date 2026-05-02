@@ -30,7 +30,7 @@ var (
 )
 
 var diffCmd = &cobra.Command{
-	Use:   "diff <source> <target>",
+	Use:   "diff <left> <right>",
 	Short: "Compare Kubernetes manifests",
 	Long: `Compare Kubernetes manifests with configurable ignore rules.
 
@@ -63,7 +63,7 @@ Cluster Comparison:
 
 Examples:
   # Compare two directories
-  kyt diff ./source-manifests ./target-manifests
+  kyt diff ./left-manifests ./right-manifests
 
   # Compare two namespaces (uses current context)
   kyt diff ns:default ns:staging
@@ -81,27 +81,27 @@ Examples:
   kyt diff --include deploy,svc ns:default ns:staging
 
   # Show tabular summary instead of full diff
-  kyt diff --summary ./source ./target
+  kyt diff --summary ./left ./right
 
   # Compare with custom config
-  kyt diff -c .kyt.yaml ./source ./target
+  kyt diff -c .kyt.yaml ./left ./right
 
   # Write output to file
-  kyt diff -o diff.txt ./source ./target
+  kyt diff -o diff.txt ./left ./right
 
   # Use 5 lines of context (default is 3)
-  kyt diff -U5 ./source ./target
+  kyt diff -U5 ./left ./right
 
   # Compare only ConfigMaps and Secrets
-  kyt diff --include cm,secrets ./source ./target
+  kyt diff --include cm,secrets ./left ./right
 
   # Compare all except Secrets
-  kyt diff --exclude secrets ./source ./target
+  kyt diff --exclude secrets ./left ./right
 
   # Compare Deployments and Services only (multiple forms supported)
-  kyt diff --include deploy,svc ./source ./target
-  kyt diff --include deployments,services ./source ./target
-  kyt diff --include Deployment,Service ./source ./target
+  kyt diff --include deploy,svc ./left ./right
+  kyt diff --include deployments,services ./left ./right
+  kyt diff --include Deployment,Service ./left ./right
 
   # Compare Helm vs Kustomize
   helm template my-chart > /tmp/helm.yaml
@@ -109,9 +109,9 @@ Examples:
   kyt diff /tmp/helm.yaml /tmp/kustomize.yaml
 
   # Control color output
-  kyt diff --color=always ./source ./target  # Always colorize
-  kyt diff --color=never ./source ./target   # Never colorize
-  kyt diff --color=auto ./source ./target    # Auto (default, based on TTY)
+  kyt diff --color=always ./left ./right  # Always colorize
+  kyt diff --color=never ./left ./right   # Never colorize
+  kyt diff --color=auto ./left ./right    # Auto (default, based on TTY)
 `,
 	Args:          cobra.ExactArgs(2),
 	RunE:          runDiff,
@@ -155,8 +155,8 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "Comparing:\n")
-		fmt.Fprintf(os.Stderr, "  Source: %s\n", formatInputForDisplay(sourceInput, effectiveContext))
-		fmt.Fprintf(os.Stderr, "  Target: %s\n", formatInputForDisplay(targetInput, effectiveContext))
+		fmt.Fprintf(os.Stderr, "  Left: %s\n", formatInputForDisplay(sourceInput, effectiveContext))
+		fmt.Fprintf(os.Stderr, "  Right: %s\n", formatInputForDisplay(targetInput, effectiveContext))
 	}
 
 	// Load configuration
@@ -175,28 +175,28 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		verboseWriter = os.Stderr
 	}
 
-	// Parse source manifests
+	// Parse left manifests
 	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "\nLoading source manifests...\n")
+		fmt.Fprintf(os.Stderr, "\nLoading left manifests...\n")
 	}
 	sourceManifests, err := loadManifests(sourceInput, effectiveContext, verboseWriter)
 	if err != nil {
-		return fmt.Errorf("failed to load source manifests: %w", err)
+		return fmt.Errorf("failed to load left manifests: %w", err)
 	}
 	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "  Found %d resources in source\n", sourceManifests.Len())
+		fmt.Fprintf(os.Stderr, "  Found %d resources in left\n", sourceManifests.Len())
 	}
 
-	// Parse target manifests
+	// Parse right manifests
 	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "Loading target manifests...\n")
+		fmt.Fprintf(os.Stderr, "Loading right manifests...\n")
 	}
 	targetManifests, err := loadManifests(targetInput, effectiveContext, verboseWriter)
 	if err != nil {
-		return fmt.Errorf("failed to load target manifests: %w", err)
+		return fmt.Errorf("failed to load right manifests: %w", err)
 	}
 	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "  Found %d resources in target\n", targetManifests.Len())
+		fmt.Fprintf(os.Stderr, "  Found %d resources in right\n", targetManifests.Len())
 	}
 
 	// Apply resource kind filtering
@@ -226,7 +226,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		targetManifests = filterManifests(targetManifests, matcher, includeFilters, excludeFilters)
 
 		if rootVerbose {
-			fmt.Fprintf(os.Stderr, "  After filtering: %d source, %d target\n", sourceManifests.Len(), targetManifests.Len())
+			fmt.Fprintf(os.Stderr, "  After filtering: %d left, %d right\n", sourceManifests.Len(), targetManifests.Len())
 		}
 	}
 
@@ -402,7 +402,7 @@ func filterManifests(manifestSet *manifest.ManifestSet, matcher *resourcekind.Ma
 
 		// Add to filtered set
 		filtered.Resources[key] = obj
-		// Preserve source file information if available
+		// Preserve left file information if available
 		if sourcePath, ok := manifestSet.GetSourceFile(key); ok {
 			filtered.SourceFile[key] = sourcePath
 		}
