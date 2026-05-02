@@ -229,7 +229,7 @@ func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, chan
 		similarityScore = fmt.Sprintf("%.2f", change.SimilarityScore)
 	}
 
-	// Diff (+insertions / -deletions) - hide +0 / -0 for added/removed
+	// Diff (+insertions / -deletions) - hide +0 / -0
 	diff := ""
 	switch change.ChangeType {
 	case differ.ChangeTypeAdded:
@@ -245,18 +245,28 @@ func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, chan
 			diff = red + diff + reset
 		}
 	case differ.ChangeTypeModified:
-		// Show both for modified resources
-		diff = fmt.Sprintf("+%d / -%d", change.Insertions, change.Deletions)
-		if r.colorize {
-			if change.Insertions > 0 && change.Deletions > 0 {
+		// Show both for modified resources, but hide zeros
+		if change.Insertions > 0 && change.Deletions > 0 {
+			// Both insertions and deletions
+			diff = fmt.Sprintf("+%d / -%d", change.Insertions, change.Deletions)
+			if r.colorize {
 				diff = yellow + diff + reset
-			} else if change.Insertions > 0 {
-				diff = green + diff + reset
-			} else if change.Deletions > 0 {
-				diff = red + diff + reset
-			} else {
-				diff = gray + diff + reset
 			}
+		} else if change.Insertions > 0 {
+			// Only insertions
+			diff = fmt.Sprintf("+%d", change.Insertions)
+			if r.colorize {
+				diff = green + diff + reset
+			}
+		} else if change.Deletions > 0 {
+			// Only deletions
+			diff = fmt.Sprintf("-%d", change.Deletions)
+			if r.colorize {
+				diff = red + diff + reset
+			}
+		} else {
+			// No changes (shouldn't happen for modified, but handle it)
+			diff = ""
 		}
 	}
 
