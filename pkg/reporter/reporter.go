@@ -260,14 +260,30 @@ func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, chan
 		}
 	}
 
-	// Format row
+	// Format row with proper padding for ANSI codes
+	// For fields with ANSI codes, we need to manually pad them because %-*s counts the ANSI bytes
 	// Note: ignoring write error here as this is called in a loop,
 	// and the parent function will catch any persistent write failures
-	_, _ = fmt.Fprintf(w, "%-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %s\n",
-		changeWidth, changeIndicator,
+
+	// Pad changeIndicator to account for ANSI codes
+	changeVisibleLen := visibleLength(changeIndicator)
+	changePadding := changeWidth - changeVisibleLen
+	if changePadding < 0 {
+		changePadding = 0
+	}
+
+	// Pad rightName to account for ANSI codes (underline)
+	rightVisibleLen := visibleLength(rightName)
+	rightPadding := rightWidth - rightVisibleLen
+	if rightPadding < 0 {
+		rightPadding = 0
+	}
+
+	_, _ = fmt.Fprintf(w, "%s%s │ %-*s │ %-*s │ %s%s │ %-*s │ %-*s │ %s\n",
+		changeIndicator, strings.Repeat(" ", changePadding),
 		kindWidth, kind,
 		leftWidth, leftName,
-		rightWidth, rightName,
+		rightName, strings.Repeat(" ", rightPadding),
 		matchTypeWidth, matchType,
 		similarityWidth, similarityScore,
 		diff,
@@ -326,6 +342,32 @@ func underlineResourceNameDifferences(leftName, rightName string) string {
 	}
 
 	return result.String()
+}
+
+// visibleLength returns the visible length of a string, excluding ANSI escape codes
+func visibleLength(s string) int {
+	// Simple ANSI code stripper - matches \033[...m patterns
+	inEscape := false
+	visibleCount := 0
+
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\033' && i+1 < len(s) && s[i+1] == '[' {
+			inEscape = true
+			i++ // skip the '['
+			continue
+		}
+
+		if inEscape {
+			if s[i] == 'm' {
+				inEscape = false
+			}
+			continue
+		}
+
+		visibleCount++
+	}
+
+	return visibleCount
 }
 
 // colorizeUnifiedDiff applies colors to unified diff output
