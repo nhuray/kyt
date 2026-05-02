@@ -176,35 +176,36 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 	if result.Summary.Added > 0 {
 		text := fmt.Sprintf("%d added", result.Summary.Added)
 		if r.colorize {
-			text = green + text + reset
+			text = bold + green + text + reset
 		}
 		parts = append(parts, text)
 	}
 	if result.Summary.Modified > 0 {
 		text := fmt.Sprintf("%d modified", result.Summary.Modified)
 		if r.colorize {
-			text = yellow + text + reset
+			text = bold + yellow + text + reset
 		}
 		parts = append(parts, text)
 	}
 	if result.Summary.Removed > 0 {
 		text := fmt.Sprintf("%d removed", result.Summary.Removed)
 		if r.colorize {
-			text = red + text + reset
+			text = bold + red + text + reset
 		}
 		parts = append(parts, text)
 	}
 	if result.Summary.Identical > 0 {
 		text := fmt.Sprintf("%d identical", result.Summary.Identical)
 		if r.colorize {
-			text = gray + text + reset
+			text = bold + gray + text + reset
 		}
 		parts = append(parts, text)
 	}
 
 	summaryLine := "SUMMARY: " + strings.Join(parts, ", ")
 	if r.colorize {
-		summaryLine = bold + summaryLine + reset
+		// Make "SUMMARY:" bold as well
+		summaryLine = bold + "SUMMARY:" + reset + " " + strings.Join(parts, ", ")
 	}
 	if _, err := fmt.Fprintln(w, summaryLine); err != nil {
 		return fmt.Errorf("failed to write summary line: %w", err)
