@@ -67,9 +67,12 @@ type DiffOptions struct {
 	// ContextLines is the number of context lines for unified diff (default: 3)
 	ContextLines int
 
-	// StringSimilarityThreshold is the minimum threshold for string-based resource matching
-	// When > 0, enables similarity-based matching for resources (0.0-1.0)
-	// Default: 0.0 (disabled)
+	// StringSimilarityThreshold is the minimum string length (in characters) for fuzzy string matching
+	// Used by the similarity scorer when comparing large string fields (e.g., ConfigMap data)
+	// Strings longer than this threshold will use Levenshtein distance for better matching
+	// This helps match ConfigMaps/Secrets with large data fields that differ slightly
+	// Default: 1.0 (100 characters when converted to int)
+	// Note: Stored as float64 (0.0-1.0) in config, converted to int (character count) internally
 	StringSimilarityThreshold float64
 }
 
@@ -77,6 +80,6 @@ type DiffOptions struct {
 func NewDefaultDiffOptions() *DiffOptions {
 	return &DiffOptions{
 		ContextLines:              3,
-		StringSimilarityThreshold: 0.0, // Disabled by default
+		StringSimilarityThreshold: 1.0, // 100 characters (1.0 * 100)
 	}
 }

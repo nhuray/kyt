@@ -97,7 +97,7 @@ func init() {
 	diffCmd.Flags().BoolVar(&diffSummary, "summary", false, "show tabular summary of resource changes")
 	diffCmd.Flags().IntVarP(&diffUnified, "unified", "U", 3, "generate diff with <n> lines of context")
 	diffCmd.Flags().StringVar(&diffColor, "color", "auto", "colorize output: auto, always, never")
-	diffCmd.Flags().Float64Var(&diffStringSimilarityThreshold, "string-similarity-threshold", 0.0, "similarity threshold (0.0-1.0, 0.0 disables)")
+	diffCmd.Flags().Float64Var(&diffStringSimilarityThreshold, "string-similarity-threshold", 1.0, "min string length for fuzzy matching (0.0-10.0, 1.0 = 100 chars)")
 	diffCmd.Flags().StringVar(&diffIncludeKinds, "include", "", "comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')")
 	diffCmd.Flags().StringVar(&diffExcludeKinds, "exclude", "", "comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')")
 

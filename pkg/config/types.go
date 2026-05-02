@@ -76,9 +76,10 @@ type OptionsConfig struct {
 	// ContextLines is the number of context lines for unified diff (default: 3)
 	ContextLines int `yaml:"contextLines,omitempty"`
 
-	// StringSimilarityThreshold is the similarity threshold for fuzzy matching (0.0-1.0)
-	// 0.0 disables fuzzy matching, 1.0 requires exact match
-	// Default: 0.0 (disabled)
+	// StringSimilarityThreshold is the minimum string length (0.0-1.0) for fuzzy matching
+	// Used when comparing large string fields in ConfigMaps/Secrets
+	// Value is multiplied by 100 to get character count (e.g., 1.0 = 100 characters)
+	// Default: 1.0 (100 characters)
 	StringSimilarityThreshold float64 `yaml:"stringSimilarityThreshold,omitempty"`
 }
 
@@ -100,7 +101,7 @@ func NewDefaultConfig() *Config {
 			},
 			Options: OptionsConfig{
 				ContextLines:              3,
-				StringSimilarityThreshold: 0.0, // Disabled by default
+				StringSimilarityThreshold: 1.0, // 100 characters
 			},
 			Pager: "", // Use $PAGER by default
 		},
