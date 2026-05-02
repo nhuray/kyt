@@ -55,14 +55,13 @@ func (d *Differ) Diff(source, target *manifest.ManifestSet) (*DiffResult, error)
 	SetResourceCache(normalizedSource, normalizedTarget)
 
 	// Perform resource matching
-	// Similarity matching is always enabled with 0.7 threshold
 	// StringSimilarityThreshold controls string fuzzy matching in the scorer
 	strThreshold := int(d.options.StringSimilarityThreshold * 100)
 
 	matcher := NewResourceMatcherWithStringThreshold(
-		true,         // Always enable similarity matching
-		0.7,          // Structural similarity threshold (70%)
-		strThreshold, // String fuzzy matching threshold (character count)
+		d.options.EnableSimilarityMatching, // Enable/disable similarity matching
+		d.options.SimilarityThreshold,      // Structural similarity threshold (e.g., 0.7)
+		strThreshold,                       // String fuzzy matching threshold (character count)
 	)
 
 	matches, unmatchedSource, unmatchedTarget := matcher.MatchResources(

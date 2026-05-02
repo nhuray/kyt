@@ -21,6 +21,8 @@ var (
 	diffSummary                   bool
 	diffUnified                   int
 	diffColor                     string
+	diffExactMatch                bool
+	diffSimilarityThreshold       float64
 	diffStringSimilarityThreshold float64
 	diffIncludeKinds              string
 	diffExcludeKinds              string
@@ -97,6 +99,8 @@ func init() {
 	diffCmd.Flags().BoolVar(&diffSummary, "summary", false, "show tabular summary of resource changes")
 	diffCmd.Flags().IntVarP(&diffUnified, "unified", "U", 3, "generate diff with <n> lines of context")
 	diffCmd.Flags().StringVar(&diffColor, "color", "auto", "colorize output: auto, always, never")
+	diffCmd.Flags().BoolVar(&diffExactMatch, "exact-match", false, "disable similarity matching (only exact name matches)")
+	diffCmd.Flags().Float64Var(&diffSimilarityThreshold, "similarity-threshold", 0.7, "minimum similarity score (0.0-1.0) for matching resources")
 	diffCmd.Flags().Float64Var(&diffStringSimilarityThreshold, "string-similarity-threshold", 1.0, "min string length for fuzzy matching (0.0-10.0, 1.0 = 100 chars)")
 	diffCmd.Flags().StringVar(&diffIncludeKinds, "include", "", "comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')")
 	diffCmd.Flags().StringVar(&diffExcludeKinds, "exclude", "", "comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')")
@@ -228,15 +232,23 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get similarity threshold (CLI overrides config)
-	similarityThreshold := diffStringSimilarityThreshold
+	similarityThreshold := diffSimilarityThreshold
+	if !cmd.Flags().Changed("similarity-threshold") && cfg.Diff.Options.SimilarityThreshold > 0 {
+		similarityThreshold = cfg.Diff.Options.SimilarityThreshold
+	}
+
+	// Get string similarity threshold (CLI overrides config)
+	stringSimilarityThreshold := diffStringSimilarityThreshold
 	if !cmd.Flags().Changed("string-similarity-threshold") && cfg.Diff.Options.StringSimilarityThreshold > 0 {
-		similarityThreshold = cfg.Diff.Options.StringSimilarityThreshold
+		stringSimilarityThreshold = cfg.Diff.Options.StringSimilarityThreshold
 	}
 
 	// Create differ
 	diffOpts := &differ.DiffOptions{
 		ContextLines:              contextLines,
-		StringSimilarityThreshold: similarityThreshold,
+		EnableSimilarityMatching:  !diffExactMatch,
+		SimilarityThreshold:       similarityThreshold,
+		StringSimilarityThreshold: stringSimilarityThreshold,
 	}
 	d := differ.New(norm, diffOpts)
 

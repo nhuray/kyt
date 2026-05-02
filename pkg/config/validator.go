@@ -102,6 +102,11 @@ func (v *Validator) validateOptionsConfig(opts *OptionsConfig) error {
 		return fmt.Errorf("contextLines must be non-negative, got: %d", opts.ContextLines)
 	}
 
+	// Similarity threshold must be between 0 and 1
+	if opts.SimilarityThreshold < 0 || opts.SimilarityThreshold > 1 {
+		return fmt.Errorf("similarityThreshold must be between 0 and 1, got: %f", opts.SimilarityThreshold)
+	}
+
 	// String similarity threshold must be between 0 and 10 (represents 0-1000 characters)
 	if opts.StringSimilarityThreshold < 0 || opts.StringSimilarityThreshold > 10 {
 		return fmt.Errorf("stringSimilarityThreshold must be between 0 and 10, got: %f", opts.StringSimilarityThreshold)

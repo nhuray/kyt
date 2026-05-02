@@ -76,7 +76,12 @@ type OptionsConfig struct {
 	// ContextLines is the number of context lines for unified diff (default: 3)
 	ContextLines int `yaml:"contextLines,omitempty"`
 
-	// StringSimilarityThreshold is the minimum string length (0.0-1.0) for fuzzy matching
+	// SimilarityThreshold is the minimum similarity score (0.0-1.0) for matching resources
+	// Only used when similarity matching is enabled
+	// Default: 0.7 (70% similarity)
+	SimilarityThreshold float64 `yaml:"similarityThreshold,omitempty"`
+
+	// StringSimilarityThreshold is the minimum string length (0.0-10.0) for fuzzy matching
 	// Used when comparing large string fields in ConfigMaps/Secrets
 	// Value is multiplied by 100 to get character count (e.g., 1.0 = 100 characters)
 	// Default: 1.0 (100 characters)
@@ -101,6 +106,7 @@ func NewDefaultConfig() *Config {
 			},
 			Options: OptionsConfig{
 				ContextLines:              3,
+				SimilarityThreshold:       0.7,
 				StringSimilarityThreshold: 1.0, // 100 characters
 			},
 			Pager: "", // Use $PAGER by default
@@ -124,6 +130,9 @@ func (c *Config) Merge(other *Config) {
 	// Options config: other takes precedence
 	if other.Diff.Options.ContextLines > 0 {
 		c.Diff.Options.ContextLines = other.Diff.Options.ContextLines
+	}
+	if other.Diff.Options.SimilarityThreshold > 0 {
+		c.Diff.Options.SimilarityThreshold = other.Diff.Options.SimilarityThreshold
 	}
 	if other.Diff.Options.StringSimilarityThreshold > 0 {
 		c.Diff.Options.StringSimilarityThreshold = other.Diff.Options.StringSimilarityThreshold

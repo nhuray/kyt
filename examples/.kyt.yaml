@@ -57,7 +57,8 @@ diff:
   # Diff options
   options:
     contextLines: 3 # Context lines for unified diff (default: 3)
-    stringSimilarityThreshold: 1.0 # Min string length for fuzzy matching (0.0-10.0, represents 0-1000 chars, default: 1.0 = 100 chars)
+    similarityThreshold: 0.7 # Min similarity score for matching resources (0.0-1.0, default: 0.7)
+    stringSimilarityThreshold: 1.0 # Min string length for fuzzy matching (0.0-10.0, 1.0 = 100 chars, default: 1.0)
   
   # Optional: pipe output through external diff viewer
   # Only used when stdout is a terminal
