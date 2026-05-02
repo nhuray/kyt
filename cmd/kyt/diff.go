@@ -26,10 +26,11 @@ var (
 	diffDataSimilarityBoost int
 	diffIncludeKinds        string
 	diffExcludeKinds        string
+	diffContext             string
 )
 
 var diffCmd = &cobra.Command{
-	Use:   "diff <source> <target>",
+	Use:   "diff <left> <right>",
 	Short: "Compare Kubernetes manifests",
 	Long: `Compare Kubernetes manifests with configurable ignore rules.
 
@@ -39,6 +40,7 @@ Supports:
 - Tabular summary with --summary flag
 - Smart similarity matching for renamed resources
 - Resource filtering by kind (include/exclude)
+- Live cluster comparison using namespace syntax (ns:namespace)
 
 Exit Codes:
 - 0: No differences found
@@ -51,32 +53,55 @@ Resource Filtering:
 - Supports short names (cm, svc, deploy), singular (configmap, service), and plural (configmaps, services)
 - Both flags accept comma-separated lists
 
+Cluster Comparison:
+- Use ns:namespace syntax to compare resources from a Kubernetes namespace
+- Use --context flag to specify cluster context (defaults to current context)
+- Example: kyt diff ns:default ns:staging
+- Example: kyt diff --context prod ns:default ns:staging
+- Fetches ~15 common resource types (pods, deployments, services, etc.)
+- Use --include/--exclude to filter resource types
+
 Examples:
   # Compare two directories
-  kyt diff ./source-manifests ./target-manifests
+  kyt diff ./left-manifests ./right-manifests
+
+  # Compare two namespaces (uses current context)
+  kyt diff ns:default ns:staging
+
+  # Compare two namespaces in a specific cluster
+  kyt diff --context prod ns:default ns:staging
+
+  # Compare local manifests against live cluster
+  kyt diff ./manifests ns:production
+
+  # Compare live cluster against local manifests
+  kyt diff ns:production ./manifests
+
+  # Compare specific resource types from cluster
+  kyt diff --include deploy,svc ns:default ns:staging
 
   # Show tabular summary instead of full diff
-  kyt diff --summary ./source ./target
+  kyt diff --summary ./left ./right
 
   # Compare with custom config
-  kyt diff -c .kyt.yaml ./source ./target
+  kyt diff -c .kyt.yaml ./left ./right
 
   # Write output to file
-  kyt diff -o diff.txt ./source ./target
+  kyt diff -o diff.txt ./left ./right
 
   # Use 5 lines of context (default is 3)
-  kyt diff -U5 ./source ./target
+  kyt diff -U5 ./left ./right
 
   # Compare only ConfigMaps and Secrets
-  kyt diff --include cm,secrets ./source ./target
+  kyt diff --include cm,secrets ./left ./right
 
   # Compare all except Secrets
-  kyt diff --exclude secrets ./source ./target
+  kyt diff --exclude secrets ./left ./right
 
   # Compare Deployments and Services only (multiple forms supported)
-  kyt diff --include deploy,svc ./source ./target
-  kyt diff --include deployments,services ./source ./target
-  kyt diff --include Deployment,Service ./source ./target
+  kyt diff --include deploy,svc ./left ./right
+  kyt diff --include deployments,services ./left ./right
+  kyt diff --include Deployment,Service ./left ./right
 
   # Compare Helm vs Kustomize
   helm template my-chart > /tmp/helm.yaml
@@ -84,9 +109,9 @@ Examples:
   kyt diff /tmp/helm.yaml /tmp/kustomize.yaml
 
   # Control color output
-  kyt diff --color=always ./source ./target  # Always colorize
-  kyt diff --color=never ./source ./target   # Never colorize
-  kyt diff --color=auto ./source ./target    # Auto (default, based on TTY)
+  kyt diff --color=always ./left ./right  # Always colorize
+  kyt diff --color=never ./left ./right   # Never colorize
+  kyt diff --color=auto ./left ./right    # Auto (default, based on TTY)
 `,
 	Args:          cobra.ExactArgs(2),
 	RunE:          runDiff,
@@ -104,18 +129,34 @@ func init() {
 	diffCmd.Flags().IntVar(&diffDataSimilarityBoost, "data-similarity-boost", 2, "boost factor for ConfigMap/Secret data fields (1-10, higher = more weight on data)")
 	diffCmd.Flags().StringVar(&diffIncludeKinds, "include", "", "comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')")
 	diffCmd.Flags().StringVar(&diffExcludeKinds, "exclude", "", "comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')")
+	diffCmd.Flags().StringVar(&diffContext, "context", "", "Kubernetes context to use for namespace inputs (defaults to current context)")
 
 	rootCmd.AddCommand(diffCmd)
 }
 
 func runDiff(cmd *cobra.Command, args []string) error {
-	sourcePath := args[0]
-	targetPath := args[1]
+	// Parse input sources
+	sourceInput := parseInput(args[0])
+	targetInput := parseInput(args[1])
+
+	// Determine the effective context to use
+	// If either input is a namespace and no context is specified, get the current context
+	effectiveContext := diffContext
+	if effectiveContext == "" && (sourceInput.Type == inputTypeNamespace || targetInput.Type == inputTypeNamespace) {
+		currentContext, err := getCurrentContext()
+		if err != nil {
+			return fmt.Errorf("no --context flag provided and failed to get current context from kubeconfig: %w", err)
+		}
+		effectiveContext = currentContext
+		if rootVerbose {
+			fmt.Fprintf(os.Stderr, "Using current context: %s\n\n", effectiveContext)
+		}
+	}
 
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "Comparing:\n")
-		fmt.Fprintf(os.Stderr, "  Source: %s\n", sourcePath)
-		fmt.Fprintf(os.Stderr, "  Target: %s\n", targetPath)
+		fmt.Fprintf(os.Stderr, "  Left: %s\n", formatInputForDisplay(sourceInput, effectiveContext))
+		fmt.Fprintf(os.Stderr, "  Right: %s\n", formatInputForDisplay(targetInput, effectiveContext))
 	}
 
 	// Load configuration
@@ -128,28 +169,34 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "  Config: %s\n", rootConfigFile)
 	}
 
-	// Parse source manifests
+	// Determine verbose writer for cluster operations
+	var verboseWriter io.Writer
 	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "\nParsing source manifests...\n")
-	}
-	sourceManifests, err := parseManifests(sourcePath)
-	if err != nil {
-		return fmt.Errorf("failed to parse source manifests: %w", err)
-	}
-	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "  Found %d resources in source\n", sourceManifests.Len())
+		verboseWriter = os.Stderr
 	}
 
-	// Parse target manifests
+	// Parse left manifests
 	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "Parsing target manifests...\n")
+		fmt.Fprintf(os.Stderr, "\nLoading left manifests...\n")
 	}
-	targetManifests, err := parseManifests(targetPath)
+	sourceManifests, err := loadManifests(sourceInput, effectiveContext, verboseWriter)
 	if err != nil {
-		return fmt.Errorf("failed to parse target manifests: %w", err)
+		return fmt.Errorf("failed to load left manifests: %w", err)
 	}
 	if rootVerbose {
-		fmt.Fprintf(os.Stderr, "  Found %d resources in target\n", targetManifests.Len())
+		fmt.Fprintf(os.Stderr, "  Found %d resources in left\n", sourceManifests.Len())
+	}
+
+	// Parse right manifests
+	if rootVerbose {
+		fmt.Fprintf(os.Stderr, "Loading right manifests...\n")
+	}
+	targetManifests, err := loadManifests(targetInput, effectiveContext, verboseWriter)
+	if err != nil {
+		return fmt.Errorf("failed to load right manifests: %w", err)
+	}
+	if rootVerbose {
+		fmt.Fprintf(os.Stderr, "  Found %d resources in right\n", targetManifests.Len())
 	}
 
 	// Apply resource kind filtering
@@ -179,7 +226,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		targetManifests = filterManifests(targetManifests, matcher, includeFilters, excludeFilters)
 
 		if rootVerbose {
-			fmt.Fprintf(os.Stderr, "  After filtering: %d source, %d target\n", sourceManifests.Len(), targetManifests.Len())
+			fmt.Fprintf(os.Stderr, "  After filtering: %d left, %d right\n", sourceManifests.Len(), targetManifests.Len())
 		}
 	}
 
@@ -332,23 +379,6 @@ func (nopWriteCloser) Close() error {
 	return nil
 }
 
-// parseManifests parses manifests from a file or directory
-func parseManifests(path string) (*manifest.ManifestSet, error) {
-	parser := manifest.NewParser()
-
-	// Check if path is a file or directory
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to stat path: %w", err)
-	}
-
-	if info.IsDir() {
-		return parser.ParseDirectory(path)
-	}
-
-	return parser.ParseFile(path)
-}
-
 // filterManifests filters a ManifestSet based on include/exclude filters
 func filterManifests(manifestSet *manifest.ManifestSet, matcher *resourcekind.Matcher, includeFilters, excludeFilters []string) *manifest.ManifestSet {
 	filtered := manifest.NewManifestSet()
@@ -372,7 +402,7 @@ func filterManifests(manifestSet *manifest.ManifestSet, matcher *resourcekind.Ma
 
 		// Add to filtered set
 		filtered.Resources[key] = obj
-		// Preserve source file information if available
+		// Preserve left file information if available
 		if sourcePath, ok := manifestSet.GetSourceFile(key); ok {
 			filtered.SourceFile[key] = sourcePath
 		}

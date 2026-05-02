@@ -72,13 +72,13 @@ diff:
 
 ```bash
 # Disable similarity matching (exact name match only)
-kyt diff --exact-match source.yaml target.yaml
+kyt diff --exact-match source.yaml right.yaml
 
 # Adjust similarity threshold (default: 0.7)
-kyt diff --similarity-threshold 0.8 source.yaml target.yaml
+kyt diff --similarity-threshold 0.8 source.yaml right.yaml
 
 # Boost ConfigMap/Secret data importance (default: 2, range: 1-10)
-kyt diff --data-similarity-boost 4 source.yaml target.yaml
+kyt diff --data-similarity-boost 4 source.yaml right.yaml
 ```
 
 ### Similarity Scoring
@@ -137,7 +137,7 @@ kyt diff ./prod/configmaps.yaml ./staging/configmaps.yaml
 ```bash
 # Require 90% similarity for matching
 # Reduces false positives
-kyt diff --similarity-threshold 0.9 source.yaml target.yaml
+kyt diff --similarity-threshold 0.9 source.yaml right.yaml
 ```
 
 **Example 4: Disable similarity for exact comparison**
@@ -145,7 +145,7 @@ kyt diff --similarity-threshold 0.9 source.yaml target.yaml
 ```bash
 # Only match resources with identical names
 # Useful when you know names shouldn't change
-kyt diff --exact-match source.yaml target.yaml
+kyt diff --exact-match source.yaml right.yaml
 ```
 
 ### Troubleshooting Similarity Matching
@@ -187,7 +187,7 @@ kyt diff -c .kyt.yaml left.yaml right.yaml
 ### Command Options
 
 ```bash
-kyt diff <source> <target> [flags]
+kyt diff <left> <right> [flags]
 
 Flags:
   -c, --config string                config file (default: .kyt.yaml)
@@ -225,28 +225,28 @@ All forms are case-insensitive and can be mixed in the same command.
 
 ```bash
 # Include only ConfigMaps and Secrets
-kyt diff --include cm,secrets ./source ./target
+kyt diff --include cm,secrets ./left ./right
 
 # Exclude Secrets from comparison
-kyt diff --exclude secrets ./source ./target
+kyt diff --exclude secrets ./left ./right
 
 # Include multiple resource types (using different name forms)
-kyt diff --include deploy,svc,cm ./source ./target
-kyt diff --include deployments,services,configmaps ./source ./target
-kyt diff --include Deployment,Service,ConfigMap ./source ./target
+kyt diff --include deploy,svc,cm ./left ./right
+kyt diff --include deployments,services,configmaps ./left ./right
+kyt diff --include Deployment,Service,ConfigMap ./left ./right
 
 # Compare only StatefulSets and DaemonSets
-kyt diff --include sts,ds ./source ./target
+kyt diff --include sts,ds ./left ./right
 
 # Exclude multiple types
-kyt diff --exclude secrets,cm,svc ./source ./target
+kyt diff --exclude secrets,cm,svc ./left ./right
 ```
 
 **Note:** 
 - `--include` and `--exclude` can be used together
 - When `--include` is specified, only those resource kinds are compared
 - When `--exclude` is specified, those resource kinds are skipped
-- Filters apply to both source and target manifests
+- Filters apply to both left and right manifests
 
 ### Exit Codes
 
@@ -664,7 +664,7 @@ Compare only certain resource types using the `--include` and `--exclude` flags:
 kyt diff --include cm,secrets ./prod ./staging
 
 # Compare all resources except Secrets (skip sensitive data)
-kyt diff --exclude secrets ./source ./target
+kyt diff --exclude secrets ./left ./right
 
 # Compare only workload resources
 kyt diff --include deploy,sts,ds,job ./helm-output ./kustomize-output
