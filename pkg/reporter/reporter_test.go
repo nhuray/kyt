@@ -101,7 +101,7 @@ func TestNewReporter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			reporter := NewReporter(tt.showSummary, tt.colorize)
 			if reporter == nil {
-				t.Error("Expected non-nil reporter")
+				t.Fatal("Expected non-nil reporter")
 			}
 			if reporter.showSummary != tt.showSummary {
 				t.Errorf("Expected showSummary=%v, got %v", tt.showSummary, reporter.showSummary)

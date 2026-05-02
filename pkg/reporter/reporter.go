@@ -19,7 +19,9 @@ func (r *Reporter) reportDiff(result *differ.DiffResult, w io.Writer) error {
 			diffText = colorizeUnifiedDiff(diffText)
 		}
 
-		fmt.Fprint(w, diffText)
+		if _, err := fmt.Fprint(w, diffText); err != nil {
+			return fmt.Errorf("failed to write diff: %w", err)
+		}
 	}
 	return nil
 }
@@ -62,7 +64,9 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 		header = bold + header + reset
 	}
 
-	fmt.Fprintln(w, header)
+	if _, err := fmt.Fprintln(w, header); err != nil {
+		return fmt.Errorf("failed to write header: %w", err)
+	}
 
 	// Separator
 	separator := strings.Repeat("─", kindWidth+1) + "┼" +
@@ -71,7 +75,9 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 		strings.Repeat("─", matchTypeWidth+2) + "┼" +
 		strings.Repeat("─", similarityWidth+2) + "┼" +
 		strings.Repeat("─", changesWidth+2)
-	fmt.Fprintln(w, separator)
+	if _, err := fmt.Fprintln(w, separator); err != nil {
+		return fmt.Errorf("failed to write separator: %w", err)
+	}
 
 	// Rows
 	for _, change := range result.Changes {
@@ -84,12 +90,18 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 		if r.colorize {
 			identicalMsg = gray + identicalMsg + reset
 		}
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, identicalMsg)
+		if _, err := fmt.Fprintln(w); err != nil {
+			return fmt.Errorf("failed to write newline: %w", err)
+		}
+		if _, err := fmt.Fprintln(w, identicalMsg); err != nil {
+			return fmt.Errorf("failed to write identical message: %w", err)
+		}
 	}
 
 	// Summary line
-	fmt.Fprintln(w)
+	if _, err := fmt.Fprintln(w); err != nil {
+		return fmt.Errorf("failed to write newline: %w", err)
+	}
 	parts := []string{}
 	if result.Summary.Added > 0 {
 		text := fmt.Sprintf("%d added", result.Summary.Added)
@@ -124,7 +136,9 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 	if r.colorize {
 		summaryLine = bold + summaryLine + reset
 	}
-	fmt.Fprintln(w, summaryLine)
+	if _, err := fmt.Fprintln(w, summaryLine); err != nil {
+		return fmt.Errorf("failed to write summary line: %w", err)
+	}
 
 	return nil
 }
@@ -192,7 +206,9 @@ func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, kind
 	}
 
 	// Format row
-	fmt.Fprintf(w, "%-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %s\n",
+	// Note: ignoring write error here as this is called in a loop,
+	// and the parent function will catch any persistent write failures
+	_, _ = fmt.Fprintf(w, "%-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %s\n",
 		kindWidth, truncate(kind, kindWidth),
 		leftWidth, truncate(leftName, leftWidth),
 		rightWidth, truncate(rightName, rightWidth),

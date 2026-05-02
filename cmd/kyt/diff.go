@@ -196,7 +196,11 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to close output file: %v\n", closeErr)
+			}
+		}()
 		outputWriter = file
 		usePager = false
 	} else {
@@ -220,7 +224,11 @@ func runDiff(cmd *cobra.Command, args []string) error {
 			usePager = false
 		}
 	}
-	defer outputWriter.Close()
+	defer func() {
+		if closeErr := outputWriter.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close output: %v\n", closeErr)
+		}
+	}()
 
 	// Determine colorization
 	colorize := shouldColorize(diffColor, !usePager)
