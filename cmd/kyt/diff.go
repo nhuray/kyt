@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
+	"github.com/nhuray/kyt/pkg/config"
 	"github.com/nhuray/kyt/pkg/differ"
 	"github.com/nhuray/kyt/pkg/manifest"
 	"github.com/nhuray/kyt/pkg/normalizer"
+	"github.com/nhuray/kyt/pkg/pager"
 	"github.com/nhuray/kyt/pkg/reporter"
 	"github.com/nhuray/kyt/pkg/resourcekind"
 	"github.com/spf13/cobra"
@@ -14,15 +17,11 @@ import (
 
 var (
 	// Diff command flags
-	diffOutputFormat              string
-	diffNoColor                   bool
-	diffShowIdentical             bool
-	diffDisplayMode               string
-	diffSkipNormalize             bool
-	diffExactMatch                bool
-	diffSimilarityThreshold       float64
-	diffWidth                     int
-	diffStringSimilarityThreshold int
+	diffOutput                    string
+	diffSummary                   bool
+	diffUnified                   int
+	diffColor                     string
+	diffStringSimilarityThreshold float64
 	diffIncludeKinds              string
 	diffExcludeKinds              string
 )
@@ -33,23 +32,16 @@ var diffCmd = &cobra.Command{
 	Long: `Compare Kubernetes manifests with configurable ignore rules.
 
 Supports:
-- JSON Pointer ignore rules (RFC 6901)
-- JQ path expression ignore rules
-- Tree-sitter based structural diff (built-in, syntax-aware)
-- Unified diff fallback
-- Multiple output formats (CLI, JSON, YAML)
+- Unified diff format (git-style)
+- Configurable pager support (with $PAGER fallback)
+- Tabular summary with --summary flag
 - Smart similarity matching for renamed resources
 - Resource filtering by kind (include/exclude)
 
-Display Modes:
-- side-by-side: Show changes side-by-side (default, best for wide terminals)
-- inline: Show changes inline (unified diff style, better for narrow terminals)
-
-Output Formats:
-- cli: Human-readable CLI output with diffs (default)
-- json: JSON format for programmatic use
-- yaml: YAML format for programmatic use
-- diff: Unified diff format only
+Exit Codes:
+- 0: No differences found
+- 1: Differences found
+- 2+: Error occurred
 
 Resource Filtering:
 - Use --include to only compare specific resource kinds
@@ -61,14 +53,17 @@ Examples:
   # Compare two directories
   kyt diff ./source-manifests ./target-manifests
 
-  # Use inline display mode
-  kyt diff --display inline ./source ./target
+  # Show tabular summary instead of full diff
+  kyt diff --summary ./source ./target
 
   # Compare with custom config
   kyt diff -c .kyt.yaml ./source ./target
 
-  # Output as JSON
-  kyt diff --output json ./source ./target
+  # Write output to file
+  kyt diff -o diff.txt ./source ./target
+
+  # Use 5 lines of context (default is 3)
+  kyt diff -U5 ./source ./target
 
   # Compare only ConfigMaps and Secrets
   kyt diff --include cm,secrets ./source ./target
@@ -86,8 +81,10 @@ Examples:
   kustomize build ./overlay > /tmp/kustomize.yaml
   kyt diff /tmp/helm.yaml /tmp/kustomize.yaml
 
-  # Disable similarity matching (exact name match only)
-  kyt diff --exact-match ./source ./target
+  # Control color output
+  kyt diff --color=always ./source ./target  # Always colorize
+  kyt diff --color=never ./source ./target   # Never colorize
+  kyt diff --color=auto ./source ./target    # Auto (default, based on TTY)
 `,
 	Args:          cobra.ExactArgs(2),
 	RunE:          runDiff,
@@ -96,15 +93,11 @@ Examples:
 }
 
 func init() {
-	diffCmd.Flags().StringVarP(&diffOutputFormat, "output", "o", "", "output format: json, yaml, diff (default: CLI display with headers)")
-	diffCmd.Flags().BoolVar(&diffNoColor, "no-color", false, "disable colored output")
-	diffCmd.Flags().BoolVar(&diffShowIdentical, "show-identical", false, "show identical resources in output")
-	diffCmd.Flags().StringVar(&diffDisplayMode, "display", "side-by-side", "display mode: side-by-side, inline")
-	diffCmd.Flags().IntVar(&diffWidth, "width", 0, "terminal width for diff output (0 = auto-detect, default: 120)")
-	diffCmd.Flags().BoolVar(&diffSkipNormalize, "skip-normalize", false, "skip normalization (use raw manifests)")
-	diffCmd.Flags().BoolVar(&diffExactMatch, "exact-match", false, "disable similarity matching (only exact name matches)")
-	diffCmd.Flags().Float64Var(&diffSimilarityThreshold, "similarity-threshold", 0.7, "minimum similarity score (0.0-1.0) for matching resources")
-	diffCmd.Flags().IntVar(&diffStringSimilarityThreshold, "string-similarity-threshold", 100, "minimum string length for fuzzy matching (0 = disable)")
+	diffCmd.Flags().StringVarP(&diffOutput, "output", "o", "", "write diff to file instead of stdout")
+	diffCmd.Flags().BoolVar(&diffSummary, "summary", false, "show tabular summary of resource changes")
+	diffCmd.Flags().IntVarP(&diffUnified, "unified", "U", 3, "generate diff with <n> lines of context")
+	diffCmd.Flags().StringVar(&diffColor, "color", "auto", "colorize output: auto, always, never")
+	diffCmd.Flags().Float64Var(&diffStringSimilarityThreshold, "string-similarity-threshold", 0.0, "similarity threshold (0.0-1.0, 0.0 disables)")
 	diffCmd.Flags().StringVar(&diffIncludeKinds, "include", "", "comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')")
 	diffCmd.Flags().StringVar(&diffExcludeKinds, "exclude", "", "comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')")
 
@@ -189,82 +182,133 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	// Create normalizer
 	norm := normalizer.New(cfg)
 
-	// Determine string similarity threshold (flag takes precedence over config)
-	stringSimilarityThreshold := diffStringSimilarityThreshold
-	if stringSimilarityThreshold == 100 && cfg.Diff.CLI.StringSimilarityThreshold > 0 {
-		// If flag is at default value, use config value
-		stringSimilarityThreshold = cfg.Diff.CLI.StringSimilarityThreshold
+	// Determine output destination and pager usage
+	var outputWriter io.WriteCloser
+	var usePager bool
+
+	if diffOutput != "" {
+		// Writing to file
+		file, err := os.Create(diffOutput)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %w", err)
+		}
+		defer file.Close()
+		outputWriter = file
+		usePager = false
+	} else {
+		// Writing to stdout - check for pager
+		pagerCmd := getPagerCommand(cfg)
+		p := pager.NewPager(pagerCmd)
+
+		if p.ShouldPage(true) {
+			pagerWriter, err := p.Pipe()
+			if err != nil {
+				// Fallback to stdout
+				fmt.Fprintf(os.Stderr, "Warning: pager failed: %v\n", err)
+				outputWriter = nopWriteCloser{os.Stdout}
+				usePager = false
+			} else {
+				outputWriter = pagerWriter
+				usePager = true
+			}
+		} else {
+			outputWriter = nopWriteCloser{os.Stdout}
+			usePager = false
+		}
+	}
+	defer outputWriter.Close()
+
+	// Determine colorization
+	colorize := shouldColorize(diffColor, !usePager)
+
+	// Get context lines (CLI overrides config)
+	contextLines := diffUnified
+	if !cmd.Flags().Changed("unified") && cfg.Diff.CLI.ContextLines > 0 {
+		contextLines = cfg.Diff.CLI.ContextLines
+	}
+
+	// Get similarity threshold (CLI overrides config)
+	// Note: Config uses int (for character count), we use float64 (for ratio)
+	// For now, convert config int to float: > 0 means enabled, use default 0.7
+	similarityThreshold := diffStringSimilarityThreshold
+	if !cmd.Flags().Changed("string-similarity-threshold") && cfg.Diff.CLI.StringSimilarityThreshold > 0 {
+		// Config value > 0 means similarity enabled, use a sensible default
+		similarityThreshold = 0.7
 	}
 
 	// Create differ
-	outputFormat := "tree-sitter" // Default to tree-sitter for CLI display
-	if diffOutputFormat == "diff" {
-		// When --output diff is specified, use unified diff format
-		outputFormat = "unified"
-	}
-
 	diffOpts := &differ.DiffOptions{
-		UseTreeSitter:             outputFormat != "unified",              // Disable tree-sitter if unified output
-		ColorOutput:               !diffNoColor && diffOutputFormat == "", // Only colorize for CLI display
-		ContextLines:              3,
-		DisplayMode:               diffDisplayMode,
-		OutputFormat:              outputFormat,
-		TreeSitterWidth:           120,
-		EnableSimilarityMatching:  !diffExactMatch,
-		SimilarityThreshold:       diffSimilarityThreshold,
-		StringSimilarityThreshold: stringSimilarityThreshold,
+		ContextLines:              contextLines,
+		StringSimilarityThreshold: similarityThreshold,
 	}
-	// Set width if specified
-	if diffWidth > 0 {
-		diffOpts.TreeSitterWidth = diffWidth
-	}
-	diff := differ.New(norm, diffOpts)
+	d := differ.New(norm, diffOpts)
 
 	// Perform diff
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "\nComparing manifests...\n")
 	}
-	result, err := diff.Diff(sourceManifests, targetManifests)
+	result, err := d.Diff(sourceManifests, targetManifests)
 	if err != nil {
 		return fmt.Errorf("failed to diff manifests: %w", err)
 	}
 
-	// Create reporter based on output format
-	reporterOpts := &reporter.Options{
-		Format:        diffOutputFormat,
-		Colorize:      !diffNoColor,
-		ShowIdentical: diffShowIdentical,
-		Compact:       false,
-	}
-
-	var rep reporter.Reporter
-	switch diffOutputFormat {
-	case "json":
-		rep = reporter.NewJSONReporter(reporterOpts)
-	case "yaml":
-		rep = reporter.NewYAMLReporter(reporterOpts)
-	case "diff":
-		rep = reporter.NewDiffReporter(reporterOpts)
-	case "cli", "":
-		// Default to CLI display with headers
-		rep = reporter.NewCLIReporter(reporterOpts)
-	default:
-		return fmt.Errorf("unsupported output format: %s (must be: cli, json, yaml, diff)", diffOutputFormat)
-	}
+	// Create reporter
+	rep := reporter.NewReporter(diffSummary, colorize)
 
 	// Generate output
 	if rootVerbose {
 		fmt.Fprintf(os.Stderr, "Generating output...\n\n")
 	}
-	if err := rep.Report(result, os.Stdout); err != nil {
+	if err := rep.Report(result, outputWriter); err != nil {
 		return fmt.Errorf("failed to generate report: %w", err)
 	}
 
-	// Exit with appropriate code
-	if result.HasDifferences() {
+	// Git-style exit code: 1 if changes exist, 0 if no changes
+	if hasChanges(result) {
 		return &exitError{code: 1}
 	}
 
+	return nil
+}
+
+// getPagerCommand returns the pager command from environment
+// TODO: Add pager config support in Phase 7
+func getPagerCommand(cfg *config.Config) string {
+	// For now, just use $PAGER environment variable
+	// TODO: Add cfg.Diff.Pager in Phase 7
+	return os.Getenv("PAGER")
+}
+
+// shouldColorize determines whether to colorize output based on flag and context
+func shouldColorize(colorFlag string, notUsingPager bool) bool {
+	switch colorFlag {
+	case "always":
+		return true
+	case "never":
+		return false
+	case "auto":
+		// Don't colorize if using pager (let pager handle it)
+		if !notUsingPager {
+			return false
+		}
+		// Check if stdout is TTY
+		fileInfo, _ := os.Stdout.Stat()
+		return (fileInfo.Mode() & os.ModeCharDevice) != 0
+	}
+	return false
+}
+
+// hasChanges checks if the diff result contains any changes
+func hasChanges(result *differ.DiffResult) bool {
+	return len(result.Changes) > 0
+}
+
+// nopWriteCloser wraps an io.Writer with a no-op Close method
+type nopWriteCloser struct {
+	io.Writer
+}
+
+func (nopWriteCloser) Close() error {
 	return nil
 }
 
