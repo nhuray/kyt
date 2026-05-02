@@ -19,6 +19,10 @@ type SimilarityScorer struct {
 	// StringSimilarityThreshold is the minimum string length for fuzzy matching
 	// Strings longer than this will use Levenshtein distance
 	StringSimilarityThreshold int
+
+	// DataSimilarityBoost is a boost factor (1-10) for ConfigMap/Secret data fields
+	// Higher values give more weight to data content vs metadata
+	DataSimilarityBoost int
 }
 
 // NewDefaultSimilarityScorer returns a scorer with default weights
@@ -30,6 +34,7 @@ func NewDefaultSimilarityScorer() *SimilarityScorer {
 		ArrayMatch:                0.7,
 		MissingFieldScore:         0.0,
 		StringSimilarityThreshold: 100, // Enable fuzzy matching for strings > 100 chars
+		DataSimilarityBoost:       2,   // Default boost factor
 	}
 }
 
@@ -37,6 +42,14 @@ func NewDefaultSimilarityScorer() *SimilarityScorer {
 func NewSimilarityScorerWithThreshold(threshold int) *SimilarityScorer {
 	scorer := NewDefaultSimilarityScorer()
 	scorer.StringSimilarityThreshold = threshold
+	return scorer
+}
+
+// NewSimilarityScorerWithOptions returns a scorer with custom options
+func NewSimilarityScorerWithOptions(stringThreshold int, dataBoost int) *SimilarityScorer {
+	scorer := NewDefaultSimilarityScorer()
+	scorer.StringSimilarityThreshold = stringThreshold
+	scorer.DataSimilarityBoost = dataBoost
 	return scorer
 }
 
@@ -51,11 +64,14 @@ func (s *SimilarityScorer) CompareResources(a, b *unstructured.Unstructured) flo
 	bSpec, bHasSpec := bObj["spec"]
 
 	if aHasSpec && bHasSpec {
-		// Both have spec - compare spec fields
+		// Both have spec - compare spec (90%) + metadata (10%)
 		aSpecMap, aOk := aSpec.(map[string]interface{})
 		bSpecMap, bOk := bSpec.(map[string]interface{})
 		if aOk && bOk {
-			return s.CompareSpecs(aSpecMap, bSpecMap)
+			specScore := s.CompareSpecs(aSpecMap, bSpecMap)
+			metadataScore := s.compareMetadata(a, b)
+			// Weighted combination: spec=90%, metadata=10%
+			return (specScore * 0.9) + (metadataScore * 0.1)
 		}
 	}
 
@@ -84,6 +100,121 @@ func (s *SimilarityScorer) CompareResources(a, b *unstructured.Unstructured) flo
 	}
 
 	return s.CompareSpecs(aFiltered, bFiltered)
+}
+
+// compareMetadata compares metadata fields with appropriate weights
+// Used for spec-based resources to include metadata in similarity scoring
+func (s *SimilarityScorer) compareMetadata(a, b *unstructured.Unstructured) float64 {
+	weights := map[string]float64{
+		"namespace":   0.2, // 20% - namespace can differ across environments
+		"name":        0.3, // 30% - name differences matter
+		"labels":      0.3, // 30% - labels important for grouping
+		"annotations": 0.2, // 20% - annotations often differ, less critical
+	}
+
+	totalScore := 0.0
+	totalWeight := 0.0
+
+	// Compare namespace (can differ in cross-environment comparisons)
+	aNamespace := a.GetNamespace()
+	bNamespace := b.GetNamespace()
+	if aNamespace != "" || bNamespace != "" {
+		if aNamespace == bNamespace {
+			totalScore += weights["namespace"] * s.ExactMatchScore
+		} else {
+			totalScore += weights["namespace"] * s.KeyOnlyMatch // Partial credit
+		}
+		totalWeight += weights["namespace"]
+	}
+
+	// Compare name
+	aName := a.GetName()
+	bName := b.GetName()
+	if aName != "" || bName != "" {
+		if aName == bName {
+			totalScore += weights["name"] * s.ExactMatchScore
+		} else {
+			totalScore += weights["name"] * s.KeyOnlyMatch // Partial credit
+		}
+		totalWeight += weights["name"]
+	}
+
+	// Compare labels
+	aLabels := a.GetLabels()
+	bLabels := b.GetLabels()
+	if len(aLabels) > 0 || len(bLabels) > 0 {
+		labelsScore := s.compareMapFields(aLabels, bLabels)
+		totalScore += labelsScore * weights["labels"]
+		totalWeight += weights["labels"]
+	}
+
+	// Compare annotations
+	aAnnotations := a.GetAnnotations()
+	bAnnotations := b.GetAnnotations()
+	if len(aAnnotations) > 0 || len(bAnnotations) > 0 {
+		annotationsScore := s.compareMapFields(aAnnotations, bAnnotations)
+		totalScore += annotationsScore * weights["annotations"]
+		totalWeight += weights["annotations"]
+	}
+
+	if totalWeight == 0 {
+		return s.ExactMatchScore
+	}
+
+	return totalScore / totalWeight
+}
+
+// compareMapFields compares two string maps (for labels/annotations)
+func (s *SimilarityScorer) compareMapFields(a, b map[string]string) float64 {
+	if len(a) == 0 && len(b) == 0 {
+		return s.ExactMatchScore
+	}
+
+	// Convert to map[string]interface{} for comparison
+	aMap := make(map[string]interface{})
+	bMap := make(map[string]interface{})
+
+	for k, v := range a {
+		aMap[k] = v
+	}
+	for k, v := range b {
+		bMap[k] = v
+	}
+
+	// Get all unique keys
+	allKeys := make(map[string]bool)
+	for k := range aMap {
+		allKeys[k] = true
+	}
+	for k := range bMap {
+		allKeys[k] = true
+	}
+
+	totalScore := 0.0
+	totalWeight := float64(len(allKeys))
+
+	for key := range allKeys {
+		aVal, aExists := aMap[key]
+		bVal, bExists := bMap[key]
+
+		if !aExists || !bExists {
+			// Key exists in only one map
+			continue // Score 0 for this key
+		}
+
+		// Both exist - compare values
+		if reflect.DeepEqual(aVal, bVal) {
+			totalScore += s.ExactMatchScore
+		} else {
+			totalScore += s.KeyOnlyMatch // Partial credit for key match
+		}
+	}
+
+	if totalWeight == 0 {
+		return s.ExactMatchScore
+	}
+
+	return totalScore / totalWeight
 }
 
 // CompareSpecs compares two spec maps and returns similarity score
@@ -186,6 +317,19 @@ func (s *SimilarityScorer) compareConfigMapOrSecret(a, b map[string]interface{},
 
 		// Special handling for metadata subfields
 		switch key {
+		case "metadata.namespace":
+			aNamespace, aExists, _ := unstructured.NestedString(a, "metadata", "namespace")
+			bNamespace, bExists, _ := unstructured.NestedString(b, "metadata", "namespace")
+
+			if !aExists || !bExists {
+				score = s.MissingFieldScore
+			} else if aNamespace == bNamespace {
+				score = s.ExactMatchScore
+			} else {
+				score = s.KeyOnlyMatch // Namespaces different but key exists
+			}
+			exists = true
+
 		case "metadata.name":
 			aName, aExists, _ := unstructured.NestedString(a, "metadata", "name")
 			bName, bExists, _ := unstructured.NestedString(b, "metadata", "name")
@@ -208,6 +352,18 @@ func (s *SimilarityScorer) compareConfigMapOrSecret(a, b map[string]interface{},
 			} else {
 				// Compare labels as maps
 				score = s.compareObjects(aLabels, bLabels) * s.StructuralMatch
+			}
+			exists = true
+
+		case "metadata.annotations":
+			aAnnotations, aExists, _ := unstructured.NestedMap(a, "metadata", "annotations")
+			bAnnotations, bExists, _ := unstructured.NestedMap(b, "metadata", "annotations")
+
+			if !aExists || !bExists {
+				score = s.MissingFieldScore
+			} else {
+				// Compare annotations as maps
+				score = s.compareObjects(aAnnotations, bAnnotations) * s.StructuralMatch
 			}
 			exists = true
 
@@ -254,6 +410,7 @@ func (s *SimilarityScorer) compareConfigMapOrSecret(a, b map[string]interface{},
 
 // calculateConfigMapWeights computes weights for ConfigMap/Secret fields
 // Gives higher weight to data fields based on size, lower weight to metadata
+// Metadata weight distribution: namespace 20%, name 30%, labels 30%, annotations 20%
 func (s *SimilarityScorer) calculateConfigMapWeights(a, b map[string]interface{}, kind string) map[string]float64 {
 	weights := make(map[string]float64)
 
@@ -295,14 +452,25 @@ func (s *SimilarityScorer) calculateConfigMapWeights(a, b map[string]interface{}
 		dataSize = dataSize / 2
 	}
 
-	// Calculate dynamic weight for data fields
-	// Formula: min(0.9, 0.5 + (dataSize / 10000))
-	dataWeight := 0.5
+	// Calculate dynamic weight for data fields with boost
+	// Base formula: baseWeight = 0.5 + (dataSize / 10000)
+	// Boost formula: dataWeight = min(0.95, baseWeight + (boost-1)*0.1)
+	baseWeight := 0.5
 	if dataSize > 0 {
-		dataWeight = 0.5 + (float64(dataSize) / 10000.0)
-		if dataWeight > 0.9 {
-			dataWeight = 0.9
-		}
+		baseWeight = 0.5 + (float64(dataSize) / 10000.0)
+	}
+
+	// Apply boost (default is 2, which adds 0.1 to base weight)
+	boost := s.DataSimilarityBoost
+	if boost < 1 {
+		boost = 1 // Minimum boost is 1 (no boost)
+	}
+	boostAmount := float64(boost-1) * 0.1
+	dataWeight := baseWeight + boostAmount
+
+	// Cap at 0.95 to ensure metadata always has some influence
+	if dataWeight > 0.95 {
+		dataWeight = 0.95
 	}
 
 	// Assign weights ONLY to data fields that exist
@@ -322,8 +490,10 @@ func (s *SimilarityScorer) calculateConfigMapWeights(a, b map[string]interface{}
 	// Only include metadata fields if metadata exists
 	if hasMetadata {
 		remainingWeight := 1.0 - dataWeight
-		weights["metadata.name"] = remainingWeight * 0.4   // 40% of remaining
-		weights["metadata.labels"] = remainingWeight * 0.6 // 60% of remaining
+		weights["metadata.namespace"] = remainingWeight * 0.2   // 20% of remaining
+		weights["metadata.name"] = remainingWeight * 0.3        // 30% of remaining
+		weights["metadata.labels"] = remainingWeight * 0.3      // 30% of remaining
+		weights["metadata.annotations"] = remainingWeight * 0.2 // 20% of remaining
 	}
 
 	return weights

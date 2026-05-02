@@ -19,13 +19,14 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 - 🎯 **ArgoCD-Compatible Rules**: Uses the same ignore syntax as ArgoCD's `ignoreDifferences`
 - 🔍 **JSON Pointer Support**: RFC 6901 compliant JSON Pointers for precise field targeting
 - 🎨 **JQ Path Expressions**: Powerful filtering with wildcards and conditionals
-- 📊 **Multiple Output Formats**: CLI (with colors), JSON
+- 📊 **Multiple Output Formats**: Unified diff with optional pager support (less, delta, bat)
 - 🎯 **Smart Normalization**: Removes managed fields, applies ignore rules, sorts keys (used by `diff`)
 - 🔧 **Format**: Sort keys consistently with `kyt fmt`
 - 🔀 **Pipe-friendly**: Works seamlessly with kubectl, kustomize, helm
-- 🤖 **Smart Similarity Matching**: Automatically detects renamed resources
+- 🤖 **Intelligent Similarity Matching**: Automatically detects renamed resources across namespaces
+- 🎚️ **Configurable Matching**: Adjust similarity thresholds and data field importance
 - 🎛️ **Resource Filtering**: Include/exclude specific resource kinds (supports short names like `cm`, `svc`, `deploy`)
-- ⚡ **Fast & Reliable**: Written in Go with 60+ passing tests
+- ⚡ **Fast & Reliable**: Written in Go with comprehensive test coverage
 
 ## Use Cases
 
@@ -66,7 +67,11 @@ kustomize build . | kyt fmt | kubectl apply -f -
 
 ### `kyt diff` - Compare manifests
 
-Compare two Kubernetes manifest files or directories with smart ignore rules.
+Compare two Kubernetes manifest files or directories with smart ignore rules and intelligent similarity matching.
+
+**Similarity Matching:**
+
+kyt can automatically detect renamed or relocated resources across namespaces using structural similarity. This is particularly useful when comparing production vs staging environments where resource names and namespaces may differ.
 
 ```bash
 # Basic comparison
@@ -75,26 +80,35 @@ kyt diff source.yaml target.yaml
 # Compare directories
 kyt diff ./helm-output ./kustomize-output
 
-# Show identical resources
-kyt diff --show-identical source.yaml target.yaml
-
-# JSON output for CI/CD
-kyt diff -o json source.yaml target.yaml
-
-# Verbose mode for debugging
-kyt diff -v source.yaml target.yaml
+# Compare across namespaces (prod vs staging)
+kyt diff ./prod-manifests ./staging-manifests
 
 # Disable similarity matching (exact name match only)
 kyt diff --exact-match source.yaml target.yaml
 
-# Use inline display mode (unified diff style)
-kyt diff --display inline source.yaml target.yaml
+# Adjust similarity threshold (0.0-1.0, default: 0.7)
+kyt diff --similarity-threshold 0.8 source.yaml target.yaml
+
+# Boost ConfigMap/Secret data field importance (1-10, default: 2)
+# Higher values prioritize data content over metadata differences
+kyt diff --data-similarity-boost 4 source.yaml target.yaml
 
 # Compare only specific resource types
 kyt diff --include cm,svc,deploy source.yaml target.yaml
 
 # Exclude specific resource types
 kyt diff --exclude secrets source.yaml target.yaml
+
+# Show summary of changes
+kyt diff --summary source.yaml target.yaml
+
+# Control output colorization
+kyt diff --color always source.yaml target.yaml   # Always colorize
+kyt diff --color never source.yaml target.yaml    # Never colorize
+kyt diff --color auto source.yaml target.yaml     # Auto (default)
+
+# Write output to file
+kyt diff -o diff.txt source.yaml target.yaml
 ```
 
 **Exit Codes:**
@@ -132,32 +146,55 @@ kyt version
 
 ## Configuration
 
-The `diff` command uses `.kyt.yaml` for normalization rules (removing fields, ignore rules). The tool searches for this file in the current directory and parent directories. 
+The `diff` command uses `.kyt.yaml` for normalization rules, similarity matching options, and ignore rules. The tool searches for this file in the current directory and parent directories. 
 The `fmt` command does not use configuration - it only sorts keys.
 
 ```yaml
 # .kyt.yaml
 diff:
-    ignoreDifferences:
-      # Ignore all labels and annotations
-      - group: ""
-        kind: "*"
-        jsonPointers:
-          - /metadata/labels
-          - /metadata/annotations
-    
-      # Ignore Istio sidecar containers
-      - group: "apps"
-        kind: "Deployment"
-        jqPathExpressions:
-          - .spec.template.spec.containers[] | select(.name == "istio-proxy")
-    
-      # Ignore specific fields in Services
-      - group: ""
-        kind: "Service"
-        jsonPointers:
-          - /spec/clusterIP
-          - /spec/clusterIPs
+  # Ignore differences for specific resources
+  ignoreDifferences:
+    # Ignore all labels and annotations
+    - group: ""
+      kind: "*"
+      jsonPointers:
+        - /metadata/labels
+        - /metadata/annotations
+  
+    # Ignore Istio sidecar containers
+    - group: "apps"
+      kind: "Deployment"
+      jqPathExpressions:
+        - .spec.template.spec.containers[] | select(.name == "istio-proxy")
+  
+    # Ignore specific fields in Services
+    - group: ""
+      kind: "Service"
+      jsonPointers:
+        - /spec/clusterIP
+        - /spec/clusterIPs
+
+  # Diff options
+  options:
+    contextLines: 3              # Lines of context in unified diff (default: 3)
+    similarityThreshold: 0.7     # Min similarity score for matching (0.0-1.0, default: 0.7)
+    dataSimilarityBoost: 2       # Boost for ConfigMap/Secret data fields (1-10, default: 2)
+
+  # Fuzzy string matching configuration
+  fuzzyMatching:
+    enabled: true                # Enable Levenshtein distance for strings (default: true)
+    minStringLength: 100         # Min string length for fuzzy matching (default: 100)
+
+  # Normalization options
+  normalization:
+    sortKeys: true               # Sort object keys alphabetically
+    removeDefaultFields:         # Fields to remove before comparison
+      - "/status"
+      - "/metadata/managedFields"
+      - "/metadata/creationTimestamp"
+
+  # Optional: pipe output through external diff viewer
+  pager: ""  # Examples: "delta --side-by-side", "bat --language=diff", "less -R"
 ```
 
 See [examples/.kyt.yaml](examples/.kyt.yaml) for a complete configuration example.

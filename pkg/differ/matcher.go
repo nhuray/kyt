@@ -26,12 +26,12 @@ type Match struct {
 	SimilarityScore float64
 }
 
-// GVKNamespace is a grouping key for resources: (Group, Version, Kind, Namespace)
-type GVKNamespace struct {
-	Group     string
-	Version   string
-	Kind      string
-	Namespace string
+// GVK is a grouping key for resources: (Group, Version, Kind)
+// Namespace is NOT included to allow cross-namespace comparisons
+type GVK struct {
+	Group   string
+	Version string
+	Kind    string
 }
 
 // ResourceMatcher performs 2-stage matching: exact then similarity-based
@@ -54,6 +54,15 @@ func NewResourceMatcher(enableSimilarity bool, threshold float64) *ResourceMatch
 func NewResourceMatcherWithStringThreshold(enableSimilarity bool, threshold float64, stringThreshold int) *ResourceMatcher {
 	return &ResourceMatcher{
 		scorer:                NewSimilarityScorerWithThreshold(stringThreshold),
+		enableSimilarityMatch: enableSimilarity,
+		similarityThreshold:   threshold,
+	}
+}
+
+// NewResourceMatcherWithOptions creates a matcher with custom options
+func NewResourceMatcherWithOptions(enableSimilarity bool, threshold float64, stringThreshold int, dataBoost int) *ResourceMatcher {
+	return &ResourceMatcher{
+		scorer:                NewSimilarityScorerWithOptions(stringThreshold, dataBoost),
 		enableSimilarityMatch: enableSimilarity,
 		similarityThreshold:   threshold,
 	}
@@ -139,9 +148,9 @@ func (m *ResourceMatcher) findSimilarityMatches(
 		return sourceKeys, targetKeys
 	}
 
-	// Group unmatched resources by GVK+Namespace
-	sourceGroups := m.groupByGVKNamespace(sourceKeys)
-	targetGroups := m.groupByGVKNamespace(targetKeys)
+	// Group unmatched resources by GVK
+	sourceGroups := m.groupByGVK(sourceKeys)
+	targetGroups := m.groupByGVK(targetKeys)
 
 	stillUnmatchedSource := []manifest.ResourceKey{}
 	stillUnmatchedTarget := make(map[manifest.ResourceKey]bool)
@@ -150,9 +159,9 @@ func (m *ResourceMatcher) findSimilarityMatches(
 		stillUnmatchedTarget[key] = true
 	}
 
-	// Process each GVK+Namespace group
-	for gvkns, sourceGroupKeys := range sourceGroups {
-		targetGroupKeys, hasTargetGroup := targetGroups[gvkns]
+	// Process each GVK group
+	for gvk, sourceGroupKeys := range sourceGroups {
+		targetGroupKeys, hasTargetGroup := targetGroups[gvk]
 		if !hasTargetGroup {
 			// No target resources of this type - all remain unmatched
 			stillUnmatchedSource = append(stillUnmatchedSource, sourceGroupKeys...)
@@ -186,25 +195,25 @@ func (m *ResourceMatcher) findSimilarityMatches(
 	return stillUnmatchedSource, stillUnmatchedTargetKeys
 }
 
-// groupByGVKNamespace groups resources by their GVK and namespace
-func (m *ResourceMatcher) groupByGVKNamespace(keys []manifest.ResourceKey) map[GVKNamespace][]manifest.ResourceKey {
-	groups := make(map[GVKNamespace][]manifest.ResourceKey)
+// groupByGVK groups resources by their GVK (Group, Version, Kind)
+// Namespace is NOT included to allow cross-namespace comparisons
+func (m *ResourceMatcher) groupByGVK(keys []manifest.ResourceKey) map[GVK][]manifest.ResourceKey {
+	groups := make(map[GVK][]manifest.ResourceKey)
 
 	for _, key := range keys {
-		gvkns := GVKNamespace{
-			Group:     key.Group,
-			Version:   key.Version,
-			Kind:      key.Kind,
-			Namespace: key.Namespace,
+		gvk := GVK{
+			Group:   key.Group,
+			Version: key.Version,
+			Kind:    key.Kind,
 		}
 
-		groups[gvkns] = append(groups[gvkns], key)
+		groups[gvk] = append(groups[gvk], key)
 	}
 
 	return groups
 }
 
-// findBestMatches finds best similarity-based matches within a GVK+Namespace group
+// findBestMatches finds best similarity-based matches within a GVK group
 // Uses greedy matching: pair highest similarity first
 func (m *ResourceMatcher) findBestMatches(
 	sourceKeys []manifest.ResourceKey,

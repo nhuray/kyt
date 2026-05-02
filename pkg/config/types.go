@@ -10,6 +10,7 @@ type DiffConfig struct {
 	IgnoreDifferences []ResourceIgnoreDifferences `yaml:"ignoreDifferences"`
 	Normalization     NormalizationConfig         `yaml:"normalization"`
 	Options           OptionsConfig               `yaml:"options"`
+	FuzzyMatching     FuzzyMatchingConfig         `yaml:"fuzzyMatching"`
 	Pager             string                      `yaml:"pager,omitempty"`
 }
 
@@ -71,6 +72,21 @@ type ArraySortConfig struct {
 	SortBy string `yaml:"sortBy"`
 }
 
+// FuzzyMatchingConfig controls fuzzy string matching behavior
+type FuzzyMatchingConfig struct {
+	// Enabled enables Levenshtein distance for comparing similar strings
+	// When disabled, only exact string matches are considered equal
+	// Default: true
+	Enabled bool `yaml:"enabled"`
+
+	// MinStringLength is the minimum string length (in characters) to apply fuzzy matching
+	// Strings shorter than this use exact comparison
+	// Higher values = faster but less accurate for short strings
+	// Lower values = slower but more accurate
+	// Default: 100
+	MinStringLength int `yaml:"minStringLength,omitempty"`
+}
+
 // OptionsConfig controls diff generation options
 type OptionsConfig struct {
 	// ContextLines is the number of context lines for unified diff (default: 3)
@@ -81,11 +97,14 @@ type OptionsConfig struct {
 	// Default: 0.7 (70% similarity)
 	SimilarityThreshold float64 `yaml:"similarityThreshold,omitempty"`
 
-	// StringSimilarityThreshold is the minimum string length (0.0-10.0) for fuzzy matching
-	// Used when comparing large string fields in ConfigMaps/Secrets
-	// Value is multiplied by 100 to get character count (e.g., 1.0 = 100 characters)
-	// Default: 1.0 (100 characters)
-	StringSimilarityThreshold float64 `yaml:"stringSimilarityThreshold,omitempty"`
+	// DataSimilarityBoost is a boost factor (1-10) for ConfigMap/Secret data field importance
+	// Higher values give more weight to data content vs metadata differences
+	// boost=1: no boost (original weighting)
+	// boost=2: data fields count 2x more (default)
+	// boost=4: data fields count 4x more
+	// boost=10: data fields heavily prioritized
+	// Default: 2
+	DataSimilarityBoost int `yaml:"dataSimilarityBoost,omitempty"`
 }
 
 // NewDefaultConfig returns a Config with sensible defaults
@@ -105,9 +124,13 @@ func NewDefaultConfig() *Config {
 				},
 			},
 			Options: OptionsConfig{
-				ContextLines:              3,
-				SimilarityThreshold:       0.7,
-				StringSimilarityThreshold: 1.0, // 100 characters
+				ContextLines:        3,
+				SimilarityThreshold: 0.7,
+				DataSimilarityBoost: 2,
+			},
+			FuzzyMatching: FuzzyMatchingConfig{
+				Enabled:         true,
+				MinStringLength: 100,
 			},
 			Pager: "", // Use $PAGER by default
 		},
@@ -134,8 +157,16 @@ func (c *Config) Merge(other *Config) {
 	if other.Diff.Options.SimilarityThreshold > 0 {
 		c.Diff.Options.SimilarityThreshold = other.Diff.Options.SimilarityThreshold
 	}
-	if other.Diff.Options.StringSimilarityThreshold > 0 {
-		c.Diff.Options.StringSimilarityThreshold = other.Diff.Options.StringSimilarityThreshold
+	if other.Diff.Options.DataSimilarityBoost > 0 {
+		c.Diff.Options.DataSimilarityBoost = other.Diff.Options.DataSimilarityBoost
+	}
+
+	// FuzzyMatching config: other takes precedence
+	if !other.Diff.FuzzyMatching.Enabled {
+		c.Diff.FuzzyMatching.Enabled = false
+	}
+	if other.Diff.FuzzyMatching.MinStringLength > 0 {
+		c.Diff.FuzzyMatching.MinStringLength = other.Diff.FuzzyMatching.MinStringLength
 	}
 
 	// Pager: other takes precedence if non-empty

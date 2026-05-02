@@ -62,6 +62,39 @@ func (r *DiffResult) HasDifferences() bool {
 	return len(r.Changes) > 0
 }
 
+// GetAdded returns all added resources
+func (r *DiffResult) GetAdded() []ResourceDiff {
+	var added []ResourceDiff
+	for _, change := range r.Changes {
+		if change.ChangeType == ChangeTypeAdded {
+			added = append(added, change)
+		}
+	}
+	return added
+}
+
+// GetRemoved returns all removed resources
+func (r *DiffResult) GetRemoved() []ResourceDiff {
+	var removed []ResourceDiff
+	for _, change := range r.Changes {
+		if change.ChangeType == ChangeTypeRemoved {
+			removed = append(removed, change)
+		}
+	}
+	return removed
+}
+
+// GetModified returns all modified resources
+func (r *DiffResult) GetModified() []ResourceDiff {
+	var modified []ResourceDiff
+	for _, change := range r.Changes {
+		if change.ChangeType == ChangeTypeModified {
+			modified = append(modified, change)
+		}
+	}
+	return modified
+}
+
 // DiffOptions configures how the diff is performed
 type DiffOptions struct {
 	// ContextLines is the number of context lines for unified diff (default: 3)
@@ -77,21 +110,30 @@ type DiffOptions struct {
 	// Default: 0.7 (70% similarity)
 	SimilarityThreshold float64
 
-	// StringSimilarityThreshold is the minimum string length (in characters) for fuzzy string matching
-	// Used by the similarity scorer when comparing large string fields (e.g., ConfigMap data)
-	// Strings longer than this threshold will use Levenshtein distance for better matching
-	// This helps match ConfigMaps/Secrets with large data fields that differ slightly
-	// Default: 1.0 (100 characters when converted to int)
-	// Note: Stored as float64 (0.0-1.0) in config, converted to int (character count) internally
-	StringSimilarityThreshold float64
+	// FuzzyStringMatchingEnabled enables Levenshtein distance for string comparison
+	// When enabled, large strings use fuzzy matching instead of exact comparison
+	// Default: true
+	FuzzyStringMatchingEnabled bool
+
+	// FuzzyStringMinLength is the minimum string length (in characters) for fuzzy matching
+	// Strings shorter than this will use exact comparison
+	// Default: 100
+	FuzzyStringMinLength int
+
+	// DataSimilarityBoost is a boost factor (1-10) for ConfigMap/Secret data field importance
+	// Higher values give more weight to data content vs metadata differences
+	// Default: 2
+	DataSimilarityBoost int
 }
 
 // NewDefaultDiffOptions returns DiffOptions with sensible defaults
 func NewDefaultDiffOptions() *DiffOptions {
 	return &DiffOptions{
-		ContextLines:              3,
-		EnableSimilarityMatching:  true,
-		SimilarityThreshold:       0.7,
-		StringSimilarityThreshold: 1.0, // 100 characters (1.0 * 100)
+		ContextLines:               3,
+		EnableSimilarityMatching:   true,
+		SimilarityThreshold:        0.7,
+		FuzzyStringMatchingEnabled: true,
+		FuzzyStringMinLength:       100,
+		DataSimilarityBoost:        2,
 	}
 }
