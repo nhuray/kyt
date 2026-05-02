@@ -54,10 +54,11 @@ diff:
       - "/metadata/resourceVersion"
       - "/metadata/uid"
 
-  # CLI options
-  cli:
-    display: side-by-side
-    colorize: true # Enable colored output
-    showUnchanged: false # Show resources with no differences
-    contextLines: 3 # Context lines for unified diff
-    stringSimilarityThreshold: 100 # Minimum string length for fuzzy matching (0 = disable)
+  # Diff options
+  options:
+    contextLines: 3 # Context lines for unified diff (default: 3)
+    stringSimilarityThreshold: 0.0 # Similarity threshold for fuzzy matching (0.0-1.0, 0.0 disables)
+  
+  # Optional: pipe output through external diff viewer
+  # Only used when stdout is a terminal
+  pager: "" # Examples: "delta --side-by-side", "bat --language=diff", "less -R"

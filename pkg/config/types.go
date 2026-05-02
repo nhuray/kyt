@@ -9,7 +9,8 @@ type Config struct {
 type DiffConfig struct {
 	IgnoreDifferences []ResourceIgnoreDifferences `yaml:"ignoreDifferences"`
 	Normalization     NormalizationConfig         `yaml:"normalization"`
-	CLI               CLIConfig                   `yaml:"cli"`
+	Options           OptionsConfig               `yaml:"options"`
+	Pager             string                      `yaml:"pager,omitempty"`
 }
 
 // ResourceIgnoreDifferences defines ignore rules for specific resource types
@@ -70,24 +71,15 @@ type ArraySortConfig struct {
 	SortBy string `yaml:"sortBy"`
 }
 
-// CLIConfig controls CLI display options for the diff command
-type CLIConfig struct {
-	// Display is the display mode: "side-by-side", "inline"
-	Display string `yaml:"display"`
-
-	// Colorize enables colored output
-	Colorize bool `yaml:"colorize"`
-
-	// ShowUnchanged shows resources that have no differences
-	ShowUnchanged bool `yaml:"showUnchanged"`
-
+// OptionsConfig controls diff generation options
+type OptionsConfig struct {
 	// ContextLines is the number of context lines for unified diff (default: 3)
 	ContextLines int `yaml:"contextLines,omitempty"`
 
-	// StringSimilarityThreshold is the minimum string length to trigger fuzzy matching
-	// Strings longer than this will use Levenshtein distance for similarity
-	// Default: 100 characters
-	StringSimilarityThreshold int `yaml:"stringSimilarityThreshold,omitempty"`
+	// StringSimilarityThreshold is the similarity threshold for fuzzy matching (0.0-1.0)
+	// 0.0 disables fuzzy matching, 1.0 requires exact match
+	// Default: 0.0 (disabled)
+	StringSimilarityThreshold float64 `yaml:"stringSimilarityThreshold,omitempty"`
 }
 
 // NewDefaultConfig returns a Config with sensible defaults
@@ -106,13 +98,11 @@ func NewDefaultConfig() *Config {
 					"/metadata/uid",
 				},
 			},
-			CLI: CLIConfig{
-				Display:                   "side-by-side",
-				Colorize:                  true,
-				ShowUnchanged:             false,
+			Options: OptionsConfig{
 				ContextLines:              3,
-				StringSimilarityThreshold: 100, // Enable fuzzy matching for strings > 100 chars
+				StringSimilarityThreshold: 0.0, // Disabled by default
 			},
+			Pager: "", // Use $PAGER by default
 		},
 	}
 }
@@ -130,21 +120,17 @@ func (c *Config) Merge(other *Config) {
 	c.Diff.Normalization.SortArrays = append(c.Diff.Normalization.SortArrays, other.Diff.Normalization.SortArrays...)
 	c.Diff.Normalization.RemoveDefaultFields = append(c.Diff.Normalization.RemoveDefaultFields, other.Diff.Normalization.RemoveDefaultFields...)
 
-	// CLI config: other takes precedence
-	if other.Diff.CLI.Display != "" {
-		c.Diff.CLI.Display = other.Diff.CLI.Display
+	// Options config: other takes precedence
+	if other.Diff.Options.ContextLines > 0 {
+		c.Diff.Options.ContextLines = other.Diff.Options.ContextLines
 	}
-	if other.Diff.CLI.Colorize {
-		c.Diff.CLI.Colorize = true
+	if other.Diff.Options.StringSimilarityThreshold > 0 {
+		c.Diff.Options.StringSimilarityThreshold = other.Diff.Options.StringSimilarityThreshold
 	}
-	if other.Diff.CLI.ShowUnchanged {
-		c.Diff.CLI.ShowUnchanged = true
-	}
-	if other.Diff.CLI.ContextLines > 0 {
-		c.Diff.CLI.ContextLines = other.Diff.CLI.ContextLines
-	}
-	if other.Diff.CLI.StringSimilarityThreshold > 0 {
-		c.Diff.CLI.StringSimilarityThreshold = other.Diff.CLI.StringSimilarityThreshold
+
+	// Pager: other takes precedence if non-empty
+	if other.Diff.Pager != "" {
+		c.Diff.Pager = other.Diff.Pager
 	}
 }
 

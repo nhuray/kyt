@@ -223,17 +223,14 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	// Get context lines (CLI overrides config)
 	contextLines := diffUnified
-	if !cmd.Flags().Changed("unified") && cfg.Diff.CLI.ContextLines > 0 {
-		contextLines = cfg.Diff.CLI.ContextLines
+	if !cmd.Flags().Changed("unified") && cfg.Diff.Options.ContextLines > 0 {
+		contextLines = cfg.Diff.Options.ContextLines
 	}
 
 	// Get similarity threshold (CLI overrides config)
-	// Note: Config uses int (for character count), we use float64 (for ratio)
-	// For now, convert config int to float: > 0 means enabled, use default 0.7
 	similarityThreshold := diffStringSimilarityThreshold
-	if !cmd.Flags().Changed("string-similarity-threshold") && cfg.Diff.CLI.StringSimilarityThreshold > 0 {
-		// Config value > 0 means similarity enabled, use a sensible default
-		similarityThreshold = 0.7
+	if !cmd.Flags().Changed("string-similarity-threshold") && cfg.Diff.Options.StringSimilarityThreshold > 0 {
+		similarityThreshold = cfg.Diff.Options.StringSimilarityThreshold
 	}
 
 	// Create differ
@@ -271,11 +268,12 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// getPagerCommand returns the pager command from environment
-// TODO: Add pager config support in Phase 7
+// getPagerCommand returns the pager command from config or environment
 func getPagerCommand(cfg *config.Config) string {
-	// For now, just use $PAGER environment variable
-	// TODO: Add cfg.Diff.Pager in Phase 7
+	// Priority: config > $PAGER
+	if cfg.Diff.Pager != "" {
+		return cfg.Diff.Pager
+	}
 	return os.Getenv("PAGER")
 }
 

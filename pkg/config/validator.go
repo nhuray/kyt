@@ -24,8 +24,8 @@ func (v *Validator) Validate(cfg *Config) error {
 		}
 	}
 
-	// Validate CLI config
-	if err := v.validateCLIConfig(&cfg.Diff.CLI); err != nil {
+	// Validate options config
+	if err := v.validateOptionsConfig(&cfg.Diff.Options); err != nil {
 		return err
 	}
 
@@ -95,21 +95,16 @@ func (v *Validator) validateJQExpression(expr string) error {
 	return nil
 }
 
-// validateCLIConfig validates CLI configuration
-func (v *Validator) validateCLIConfig(cli *CLIConfig) error {
-	// Validate display mode
-	validDisplayModes := map[string]bool{
-		"":             true, // Empty is allowed (will use default)
-		"side-by-side": true,
-		"inline":       true,
-	}
-	if cli.Display != "" && !validDisplayModes[cli.Display] {
-		return fmt.Errorf("invalid display mode: %s (must be one of: side-by-side, inline)", cli.Display)
+// validateOptionsConfig validates options configuration
+func (v *Validator) validateOptionsConfig(opts *OptionsConfig) error {
+	// Context lines must be non-negative
+	if opts.ContextLines < 0 {
+		return fmt.Errorf("contextLines must be non-negative, got: %d", opts.ContextLines)
 	}
 
-	// Context lines must be non-negative
-	if cli.ContextLines < 0 {
-		return fmt.Errorf("contextLines must be non-negative, got: %d", cli.ContextLines)
+	// Similarity threshold must be between 0 and 1
+	if opts.StringSimilarityThreshold < 0 || opts.StringSimilarityThreshold > 1 {
+		return fmt.Errorf("stringSimilarityThreshold must be between 0 and 1, got: %f", opts.StringSimilarityThreshold)
 	}
 
 	return nil
