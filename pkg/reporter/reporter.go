@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/nhuray/kyt/pkg/differ"
 	"github.com/nhuray/kyt/pkg/manifest"
 )
@@ -28,75 +30,17 @@ func (r *Reporter) reportDiff(result *differ.DiffResult, w io.Writer) error {
 
 // reportSummary outputs a tabular summary of changes
 func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
-	// Table configuration - removed fixed widths for LEFT and RIGHT to avoid truncation
-	const (
-		changeWidth     = 6 // "CHANGE"
-		kindWidth       = 16
-		matchTypeWidth  = 11
-		similarityWidth = 17
-		diffWidth       = 10
-	)
-
 	// Colors
 	const (
-		cyan   = "\033[36m"
-		red    = "\033[31m"
-		green  = "\033[32m"
-		yellow = "\033[33m"
-		gray   = "\033[90m"
-		reset  = "\033[0m"
-		bold   = "\033[1m"
+		cyan      = "\033[36m"
+		red       = "\033[31m"
+		green     = "\033[32m"
+		yellow    = "\033[33m"
+		gray      = "\033[90m"
+		reset     = "\033[0m"
+		bold      = "\033[1m"
+		underline = "\033[4m"
 	)
-
-	// Calculate max widths for LEFT and RIGHT columns by scanning all changes
-	leftWidth := len("LEFT")
-	rightWidth := len("RIGHT")
-	for _, change := range result.Changes {
-		if change.SourceKey != nil {
-			name := formatResourceName(*change.SourceKey)
-			if len(name) > leftWidth {
-				leftWidth = len(name)
-			}
-		}
-		if change.TargetKey != nil {
-			name := formatResourceName(*change.TargetKey)
-			if len(name) > rightWidth {
-				rightWidth = len(name)
-			}
-		}
-	}
-
-	// Header
-	header := fmt.Sprintf(
-		"%-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %s",
-		changeWidth, "CHANGE",
-		kindWidth, "KIND",
-		leftWidth, "LEFT",
-		rightWidth, "RIGHT",
-		matchTypeWidth, "MATCH TYPE",
-		similarityWidth, "SIMILARITY SCORE",
-		"DIFF",
-	)
-
-	if r.colorize {
-		header = bold + header + reset
-	}
-
-	if _, err := fmt.Fprintln(w, header); err != nil {
-		return fmt.Errorf("failed to write header: %w", err)
-	}
-
-	// Separator
-	separator := strings.Repeat("─", changeWidth+1) + "┼" +
-		strings.Repeat("─", kindWidth+2) + "┼" +
-		strings.Repeat("─", leftWidth+2) + "┼" +
-		strings.Repeat("─", rightWidth+2) + "┼" +
-		strings.Repeat("─", matchTypeWidth+2) + "┼" +
-		strings.Repeat("─", similarityWidth+2) + "┼" +
-		strings.Repeat("─", diffWidth+2)
-	if _, err := fmt.Fprintln(w, separator); err != nil {
-		return fmt.Errorf("failed to write separator: %w", err)
-	}
 
 	// Sort changes by: CHANGE (A/R/M), then KIND, then LEFT, then RIGHT
 	sortedChanges := make([]differ.ResourceDiff, len(result.Changes))
@@ -149,19 +93,36 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 		return rightI < rightJ
 	})
 
-	// Rows
-	for _, change := range sortedChanges {
-		r.printSummaryRow(w, change, changeWidth, kindWidth, leftWidth, rightWidth, matchTypeWidth, similarityWidth)
+	// Create table
+	t := table.NewWriter()
+	t.SetOutputMirror(w)
+
+	// Configure table style
+	if r.colorize {
+		t.SetStyle(table.StyleRounded)
+		// Set header style
+		t.Style().Color.Header = text.Colors{text.Bold}
+	} else {
+		t.SetStyle(table.StyleRounded)
 	}
+
+	// Add header
+	t.AppendHeader(table.Row{"CHANGE", "KIND", "LEFT", "RIGHT", "MATCH TYPE", "SIMILARITY SCORE", "DIFF"})
+
+	// Add rows
+	for _, change := range sortedChanges {
+		row := r.buildSummaryRow(change)
+		t.AppendRow(row)
+	}
+
+	// Render table
+	t.Render()
 
 	// Add identical resources count if any
 	if result.Summary.Identical > 0 {
-		identicalMsg := fmt.Sprintf("... and %d identical resources (not shown)", result.Summary.Identical)
+		identicalMsg := fmt.Sprintf("\n... and %d identical resources (not shown)", result.Summary.Identical)
 		if r.colorize {
 			identicalMsg = gray + identicalMsg + reset
-		}
-		if _, err := fmt.Fprintln(w); err != nil {
-			return fmt.Errorf("failed to write newline: %w", err)
 		}
 		if _, err := fmt.Fprintln(w, identicalMsg); err != nil {
 			return fmt.Errorf("failed to write identical message: %w", err)
@@ -214,13 +175,12 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 	return nil
 }
 
-// printSummaryRow prints a single row in the summary table
-func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, changeWidth, kindWidth, leftWidth, rightWidth, matchTypeWidth, similarityWidth int) {
+// buildSummaryRow builds a row for the summary table
+func (r *Reporter) buildSummaryRow(change differ.ResourceDiff) table.Row {
 	const (
 		red       = "\033[31m"
 		green     = "\033[32m"
 		yellow    = "\033[33m"
-		gray      = "\033[90m"
 		reset     = "\033[0m"
 		underline = "\033[4m"
 	)
@@ -324,34 +284,7 @@ func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, chan
 		}
 	}
 
-	// Format row with proper padding for ANSI codes
-	// For fields with ANSI codes, we need to manually pad them because %-*s counts the ANSI bytes
-	// Note: ignoring write error here as this is called in a loop,
-	// and the parent function will catch any persistent write failures
-
-	// Pad changeIndicator to account for ANSI codes
-	changeVisibleLen := visibleLength(changeIndicator)
-	changePadding := changeWidth - changeVisibleLen
-	if changePadding < 0 {
-		changePadding = 0
-	}
-
-	// Pad rightName to account for ANSI codes (underline)
-	rightVisibleLen := visibleLength(rightName)
-	rightPadding := rightWidth - rightVisibleLen
-	if rightPadding < 0 {
-		rightPadding = 0
-	}
-
-	_, _ = fmt.Fprintf(w, "%s%s │ %-*s │ %-*s │ %s%s │ %-*s │ %-*s │ %s\n",
-		changeIndicator, strings.Repeat(" ", changePadding),
-		kindWidth, kind,
-		leftWidth, leftName,
-		rightName, strings.Repeat(" ", rightPadding),
-		matchTypeWidth, matchType,
-		similarityWidth, similarityScore,
-		diff,
-	)
+	return table.Row{changeIndicator, kind, leftName, rightName, matchType, similarityScore, diff}
 }
 
 // formatResourceName formats a resource key as "namespace/name"
@@ -406,32 +339,6 @@ func underlineResourceNameDifferences(leftName, rightName string) string {
 	}
 
 	return result.String()
-}
-
-// visibleLength returns the visible length of a string, excluding ANSI escape codes
-func visibleLength(s string) int {
-	// Simple ANSI code stripper - matches \033[...m patterns
-	inEscape := false
-	visibleCount := 0
-
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\033' && i+1 < len(s) && s[i+1] == '[' {
-			inEscape = true
-			i++ // skip the '['
-			continue
-		}
-
-		if inEscape {
-			if s[i] == 'm' {
-				inEscape = false
-			}
-			continue
-		}
-
-		visibleCount++
-	}
-
-	return visibleCount
 }
 
 // colorizeUnifiedDiff applies colors to unified diff output
