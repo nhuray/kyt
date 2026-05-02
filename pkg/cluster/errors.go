@@ -27,7 +27,7 @@ type NoContextError struct {
 }
 
 func (e *NoContextError) Error() string {
-	return fmt.Sprintf("no current context set in kubeconfig\n\nTroubleshooting:\n- Set a current context: kubectl config use-context <context-name>\n- Or specify a context with --context flag\n- List available contexts: kubectl config get-contexts")
+	return "no current context set in kubeconfig\n\nTroubleshooting:\n- Set a current context: kubectl config use-context <context-name>\n- Or specify a context with --context flag\n- List available contexts: kubectl config get-contexts"
 }
 
 // ConnectionError is returned when connection to the cluster fails

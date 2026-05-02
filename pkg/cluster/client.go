@@ -106,7 +106,7 @@ func NewClusterClientWithVerbose(kubeconfigPath, contextName string, verboseWrit
 	}
 
 	if verboseWriter != nil {
-		fmt.Fprintf(verboseWriter, "  Connected to cluster (context: %s)\n", effectiveContext)
+		_, _ = fmt.Fprintf(verboseWriter, "  Connected to cluster (context: %s)\n", effectiveContext)
 	}
 
 	return &ClusterClient{
@@ -128,7 +128,7 @@ func (c *ClusterClient) GetResourcesInNamespace(
 	var fetchedCount int
 
 	if c.verbose != nil {
-		fmt.Fprintf(c.verbose, "  Fetching resources from namespace %q...\n", namespace)
+		_, _ = fmt.Fprintf(c.verbose, "  Fetching resources from namespace %q...\n", namespace)
 	}
 
 	for _, gvr := range resourceTypes {
@@ -149,7 +149,7 @@ func (c *ClusterClient) GetResourcesInNamespace(
 			// We'll handle this gracefully by continuing to the next resource type
 			skippedCount++
 			if c.verbose != nil {
-				fmt.Fprintf(c.verbose, "  Skipped %s/%s: %v\n", gvr.Group, gvr.Resource, err)
+				_, _ = fmt.Fprintf(c.verbose, "  Skipped %s/%s: %v\n", gvr.Group, gvr.Resource, err)
 			}
 			continue
 		}
@@ -159,7 +159,7 @@ func (c *ClusterClient) GetResourcesInNamespace(
 		if resourceCount > 0 {
 			fetchedCount++
 			if c.verbose != nil {
-				fmt.Fprintf(c.verbose, "  Found %d %s\n", resourceCount, gvr.Resource)
+				_, _ = fmt.Fprintf(c.verbose, "  Found %d %s\n", resourceCount, gvr.Resource)
 			}
 		}
 
@@ -169,7 +169,7 @@ func (c *ClusterClient) GetResourcesInNamespace(
 	}
 
 	if c.verbose != nil {
-		fmt.Fprintf(c.verbose, "  Total: %d resources from %d resource types (%d types skipped)\n", len(allResources), fetchedCount, skippedCount)
+		_, _ = fmt.Fprintf(c.verbose, "  Total: %d resources from %d resource types (%d types skipped)\n", len(allResources), fetchedCount, skippedCount)
 	}
 
 	return allResources, nil

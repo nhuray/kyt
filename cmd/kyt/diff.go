@@ -379,23 +379,6 @@ func (nopWriteCloser) Close() error {
 	return nil
 }
 
-// parseManifests parses manifests from a file or directory
-func parseManifests(path string) (*manifest.ManifestSet, error) {
-	parser := manifest.NewParser()
-
-	// Check if path is a file or directory
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to stat path: %w", err)
-	}
-
-	if info.IsDir() {
-		return parser.ParseDirectory(path)
-	}
-
-	return parser.ParseFile(path)
-}
-
 // filterManifests filters a ManifestSet based on include/exclude filters
 func filterManifests(manifestSet *manifest.ManifestSet, matcher *resourcekind.Matcher, includeFilters, excludeFilters []string) *manifest.ManifestSet {
 	filtered := manifest.NewManifestSet()
