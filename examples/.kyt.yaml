@@ -23,7 +23,7 @@ diff:
       kind: "Deployment"
       namespace: "production"
       jsonPointers:
-        - /spec/replicas
+        - /spec/replicas 
 
     # Ignore HPA-managed fields
     - group: "apps"
