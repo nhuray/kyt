@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/nhuray/kyt/pkg/differ"
 	"github.com/nhuray/kyt/pkg/manifest"
@@ -28,14 +27,13 @@ func (r *Reporter) reportDiff(result *differ.DiffResult, w io.Writer) error {
 
 // reportSummary outputs a tabular summary of changes
 func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
-	// Table configuration
+	// Table configuration - removed fixed widths for LEFT and RIGHT to avoid truncation
 	const (
+		changeWidth     = 6 // "CHANGE"
 		kindWidth       = 16
-		leftWidth       = 21
-		rightWidth      = 27
 		matchTypeWidth  = 11
 		similarityWidth = 17
-		changesWidth    = 10
+		diffWidth       = 10
 	)
 
 	// Colors
@@ -49,15 +47,34 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 		bold   = "\033[1m"
 	)
 
+	// Calculate max widths for LEFT and RIGHT columns by scanning all changes
+	leftWidth := len("LEFT")
+	rightWidth := len("RIGHT")
+	for _, change := range result.Changes {
+		if change.SourceKey != nil {
+			name := formatResourceName(*change.SourceKey)
+			if len(name) > leftWidth {
+				leftWidth = len(name)
+			}
+		}
+		if change.TargetKey != nil {
+			name := formatResourceName(*change.TargetKey)
+			if len(name) > rightWidth {
+				rightWidth = len(name)
+			}
+		}
+	}
+
 	// Header
 	header := fmt.Sprintf(
-		"%-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %s",
+		"%-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %s",
+		changeWidth, "CHANGE",
 		kindWidth, "KIND",
 		leftWidth, "LEFT",
 		rightWidth, "RIGHT",
 		matchTypeWidth, "MATCH TYPE",
 		similarityWidth, "SIMILARITY SCORE",
-		"CHANGES",
+		"DIFF",
 	)
 
 	if r.colorize {
@@ -69,19 +86,20 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 	}
 
 	// Separator
-	separator := strings.Repeat("─", kindWidth+1) + "┼" +
+	separator := strings.Repeat("─", changeWidth+1) + "┼" +
+		strings.Repeat("─", kindWidth+2) + "┼" +
 		strings.Repeat("─", leftWidth+2) + "┼" +
 		strings.Repeat("─", rightWidth+2) + "┼" +
 		strings.Repeat("─", matchTypeWidth+2) + "┼" +
 		strings.Repeat("─", similarityWidth+2) + "┼" +
-		strings.Repeat("─", changesWidth+2)
+		strings.Repeat("─", diffWidth+2)
 	if _, err := fmt.Fprintln(w, separator); err != nil {
 		return fmt.Errorf("failed to write separator: %w", err)
 	}
 
 	// Rows
 	for _, change := range result.Changes {
-		r.printSummaryRow(w, change, kindWidth, leftWidth, rightWidth, matchTypeWidth, similarityWidth)
+		r.printSummaryRow(w, change, changeWidth, kindWidth, leftWidth, rightWidth, matchTypeWidth, similarityWidth)
 	}
 
 	// Add identical resources count if any
@@ -144,14 +162,35 @@ func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
 }
 
 // printSummaryRow prints a single row in the summary table
-func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, kindWidth, leftWidth, rightWidth, matchTypeWidth, similarityWidth int) {
+func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, changeWidth, kindWidth, leftWidth, rightWidth, matchTypeWidth, similarityWidth int) {
 	const (
-		red    = "\033[31m"
-		green  = "\033[32m"
-		yellow = "\033[33m"
-		gray   = "\033[90m"
-		reset  = "\033[0m"
+		red       = "\033[31m"
+		green     = "\033[32m"
+		yellow    = "\033[33m"
+		gray      = "\033[90m"
+		reset     = "\033[0m"
+		underline = "\033[4m"
 	)
+
+	// Determine change indicator (A/R/M)
+	changeIndicator := ""
+	switch change.ChangeType {
+	case differ.ChangeTypeAdded:
+		changeIndicator = "A"
+		if r.colorize {
+			changeIndicator = green + changeIndicator + reset
+		}
+	case differ.ChangeTypeRemoved:
+		changeIndicator = "R"
+		if r.colorize {
+			changeIndicator = red + changeIndicator + reset
+		}
+	case differ.ChangeTypeModified:
+		changeIndicator = "M"
+		if r.colorize {
+			changeIndicator = yellow + changeIndicator + reset
+		}
+	}
 
 	// Extract kind and resource names
 	kind := ""
@@ -169,10 +208,9 @@ func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, kind
 		rightName = formatResourceName(*change.TargetKey)
 	}
 
-	// Highlight name differences
-	if r.colorize {
-		leftName = highlightDifference(leftName, rightName, change.ChangeType)
-		rightName = highlightDifference(rightName, leftName, change.ChangeType)
+	// Highlight differences in RIGHT column with underline
+	if r.colorize && leftName != "" && rightName != "" && leftName != rightName {
+		rightName = underlineResourceNameDifferences(leftName, rightName)
 	}
 
 	// Match type (only show for modified with similarity)
@@ -191,30 +229,48 @@ func (r *Reporter) printSummaryRow(w io.Writer, change differ.ResourceDiff, kind
 		similarityScore = fmt.Sprintf("%.2f", change.SimilarityScore)
 	}
 
-	// Changes (+insertions / -deletions)
-	changes := fmt.Sprintf("+%d / -%d", change.Insertions, change.Deletions)
-	if r.colorize {
-		if change.Insertions > 0 && change.Deletions > 0 {
-			changes = yellow + changes + reset
-		} else if change.Insertions > 0 {
-			changes = green + changes + reset
-		} else if change.Deletions > 0 {
-			changes = red + changes + reset
-		} else {
-			changes = gray + changes + reset
+	// Diff (+insertions / -deletions) - hide +0 / -0 for added/removed
+	diff := ""
+	switch change.ChangeType {
+	case differ.ChangeTypeAdded:
+		// Only show insertions for added resources
+		diff = fmt.Sprintf("+%d", change.Insertions)
+		if r.colorize {
+			diff = green + diff + reset
+		}
+	case differ.ChangeTypeRemoved:
+		// Only show deletions for removed resources
+		diff = fmt.Sprintf("-%d", change.Deletions)
+		if r.colorize {
+			diff = red + diff + reset
+		}
+	case differ.ChangeTypeModified:
+		// Show both for modified resources
+		diff = fmt.Sprintf("+%d / -%d", change.Insertions, change.Deletions)
+		if r.colorize {
+			if change.Insertions > 0 && change.Deletions > 0 {
+				diff = yellow + diff + reset
+			} else if change.Insertions > 0 {
+				diff = green + diff + reset
+			} else if change.Deletions > 0 {
+				diff = red + diff + reset
+			} else {
+				diff = gray + diff + reset
+			}
 		}
 	}
 
 	// Format row
 	// Note: ignoring write error here as this is called in a loop,
 	// and the parent function will catch any persistent write failures
-	_, _ = fmt.Fprintf(w, "%-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %s\n",
-		kindWidth, truncate(kind, kindWidth),
-		leftWidth, truncate(leftName, leftWidth),
-		rightWidth, truncate(rightName, rightWidth),
+	_, _ = fmt.Fprintf(w, "%-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %-*s │ %s\n",
+		changeWidth, changeIndicator,
+		kindWidth, kind,
+		leftWidth, leftName,
+		rightWidth, rightName,
 		matchTypeWidth, matchType,
 		similarityWidth, similarityScore,
-		changes,
+		diff,
 	)
 }
 
@@ -226,47 +282,50 @@ func formatResourceName(key manifest.ResourceKey) string {
 	return key.Name
 }
 
-// highlightDifference highlights the differing parts between two strings
-func highlightDifference(text, other string, changeType differ.ChangeType) string {
+// underlineResourceNameDifferences underlines the parts of rightName that differ from leftName
+func underlineResourceNameDifferences(leftName, rightName string) string {
 	const (
-		red    = "\033[31m"
-		green  = "\033[32m"
-		yellow = "\033[33m"
-		reset  = "\033[0m"
+		underline = "\033[4m"
+		reset     = "\033[0m"
 	)
 
-	if text == "" || text == other {
-		return text
+	// If names are identical, no highlighting needed
+	if leftName == rightName {
+		return rightName
 	}
 
-	// Apply color based on change type
-	switch changeType {
-	case differ.ChangeTypeAdded:
-		return green + text + reset
-	case differ.ChangeTypeRemoved:
-		return red + text + reset
-	case differ.ChangeTypeModified:
-		// Highlight the difference
-		if text != other {
-			return yellow + text + reset
+	// Split by "/" to handle namespace/name format
+	leftParts := strings.Split(leftName, "/")
+	rightParts := strings.Split(rightName, "/")
+
+	var result strings.Builder
+
+	// Handle cases where structure differs (e.g., one has namespace, other doesn't)
+	if len(leftParts) != len(rightParts) {
+		// Just underline the whole thing if structure is different
+		return underline + rightName + reset
+	}
+
+	// Compare each part
+	for i, rightPart := range rightParts {
+		if i > 0 {
+			result.WriteString("/")
+		}
+
+		leftPart := ""
+		if i < len(leftParts) {
+			leftPart = leftParts[i]
+		}
+
+		if rightPart != leftPart {
+			// Underline this part
+			result.WriteString(underline + rightPart + reset)
+		} else {
+			result.WriteString(rightPart)
 		}
 	}
 
-	return text
-}
-
-// truncate truncates a string to fit within width, adding ellipsis if needed
-func truncate(s string, width int) string {
-	if utf8.RuneCountInString(s) <= width {
-		return s
-	}
-
-	// Truncate and add ellipsis
-	runes := []rune(s)
-	if width > 3 {
-		return string(runes[:width-3]) + "..."
-	}
-	return string(runes[:width])
+	return result.String()
 }
 
 // colorizeUnifiedDiff applies colors to unified diff output
