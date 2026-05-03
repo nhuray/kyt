@@ -372,7 +372,7 @@ func (m *Model) buildTable() table.Model {
 			{Title: "RIGHT", Width: 30},
 			{Title: "MATCH TYPE", Width: 12},
 			{Title: "SIMILARITY", Width: 11},
-			{Title: "DIFF", Width: 12},
+			{Title: "DIFF", Width: 15},
 		}
 
 		for _, r := range m.filteredRows {
@@ -422,7 +422,7 @@ func (m *Model) buildTable() table.Model {
 			{Title: "RIGHT", Width: 30},
 			{Title: "MATCH TYPE", Width: 12},
 			{Title: "SIMILARITY", Width: 11},
-			{Title: "DIFF", Width: 12},
+			{Title: "DIFF", Width: 15},
 		}
 
 		for _, r := range m.filteredRows {
