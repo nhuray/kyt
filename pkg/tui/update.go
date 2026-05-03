@@ -228,19 +228,19 @@ func (m *Model) handleDiffKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "k", "up":
-		m.viewport.LineUp(1)
+		m.viewport.ScrollUp(1)
 		return m, nil
 
 	case "j", "down":
-		m.viewport.LineDown(1)
+		m.viewport.ScrollDown(1)
 		return m, nil
 
 	case "ctrl+f", "pgdown":
-		m.viewport.ViewDown()
+		m.viewport.PageDown()
 		return m, nil
 
 	case "ctrl+b", "pgup":
-		m.viewport.ViewUp()
+		m.viewport.PageUp()
 		return m, nil
 
 	case "g":
