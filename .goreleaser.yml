@@ -12,7 +12,7 @@ builds:
     binary: kyt
     main: ./cmd/kyt
     env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     
     # Build for multiple platforms
     goos:
