@@ -398,15 +398,16 @@ func (m *Model) buildTable() table.Model {
 	case TabAll:
 		// All tab: CHANGE, KIND, LEFT, RIGHT, MATCH TYPE, SIMILARITY SCORE, DIFF
 		// Define proportional widths (percentages of available width)
-		// Total: CHANGE(8%) + KIND(12%) + LEFT(25%) + RIGHT(25%) + MATCH_TYPE(10%) + SIMILARITY(10%) + DIFF(10%) = 100%
+		// Reduced: CHANGE(6%), MATCH_TYPE(8%), SIMILARITY(8%) to give more space to DIFF(14%)
+		// Total: CHANGE(6%) + KIND(12%) + LEFT(25%) + RIGHT(25%) + MATCH_TYPE(8%) + SIMILARITY(8%) + DIFF(16%) = 100%
 		columns = m.calculateColumns(availableWidth, []columnSpec{
-			{title: "CHANGE", minWidth: 8, ratio: 0.08},
+			{title: "CHANGE", minWidth: 7, ratio: 0.06},
 			{title: "KIND", minWidth: 12, ratio: 0.12},
 			{title: "LEFT", minWidth: 20, ratio: 0.25},
 			{title: "RIGHT", minWidth: 20, ratio: 0.25},
-			{title: "MATCH TYPE", minWidth: 10, ratio: 0.10},
-			{title: "SIMILARITY", minWidth: 10, ratio: 0.10},
-			{title: "DIFF", minWidth: 10, ratio: 0.10},
+			{title: "MATCH TYPE", minWidth: 9, ratio: 0.08},
+			{title: "SIMILARITY", minWidth: 8, ratio: 0.08},
+			{title: "DIFF", minWidth: 14, ratio: 0.16},
 		})
 
 		for _, r := range m.filteredRows {
@@ -451,14 +452,15 @@ func (m *Model) buildTable() table.Model {
 
 	case TabModified:
 		// Modified tab: KIND, LEFT, RIGHT, MATCH TYPE, SIMILARITY SCORE, DIFF
-		// KIND(14%) + LEFT(28%) + RIGHT(28%) + MATCH_TYPE(10%) + SIMILARITY(10%) + DIFF(10%) = 100%
+		// Reduced: MATCH_TYPE(8%), SIMILARITY(8%) to give more space to DIFF(16%)
+		// KIND(14%) + LEFT(27%) + RIGHT(27%) + MATCH_TYPE(8%) + SIMILARITY(8%) + DIFF(16%) = 100%
 		columns = m.calculateColumns(availableWidth, []columnSpec{
 			{title: "KIND", minWidth: 12, ratio: 0.14},
-			{title: "LEFT", minWidth: 20, ratio: 0.28},
-			{title: "RIGHT", minWidth: 20, ratio: 0.28},
-			{title: "MATCH TYPE", minWidth: 10, ratio: 0.10},
-			{title: "SIMILARITY", minWidth: 10, ratio: 0.10},
-			{title: "DIFF", minWidth: 10, ratio: 0.10},
+			{title: "LEFT", minWidth: 20, ratio: 0.27},
+			{title: "RIGHT", minWidth: 20, ratio: 0.27},
+			{title: "MATCH TYPE", minWidth: 9, ratio: 0.08},
+			{title: "SIMILARITY", minWidth: 8, ratio: 0.08},
+			{title: "DIFF", minWidth: 14, ratio: 0.16},
 		})
 
 		for _, r := range m.filteredRows {

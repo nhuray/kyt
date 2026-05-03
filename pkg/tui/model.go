@@ -96,6 +96,8 @@ func NewModel(result *differ.DiffResult, leftSource, rightSource string) *Model 
 		result:      result,
 		leftSource:  leftSource,
 		rightSource: rightSource,
+		width:       120, // Default width, will be updated by WindowSizeMsg
+		height:      30,  // Default height, will be updated by WindowSizeMsg
 	}
 
 	// Build resource rows from result
