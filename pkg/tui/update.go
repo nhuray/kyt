@@ -21,9 +21,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Update table size
-		m.table.SetWidth(msg.Width)
-		m.table.SetHeight(msg.Height - 8) // Leave room for header/footer
+		// Rebuild table with new dimensions to recalculate column widths
+		m.table = m.buildTable()
 
 		// Update viewport size
 		m.viewport.Width = msg.Width
@@ -356,24 +355,59 @@ func (m *Model) reloadDiff() {
 	}
 }
 
+// columnSpec defines a column specification with minimum width and proportional ratio
+type columnSpec struct {
+	title    string
+	minWidth int
+	ratio    float64
+}
+
+// calculateColumns calculates responsive column widths based on available width
+func (m *Model) calculateColumns(availableWidth int, specs []columnSpec) []table.Column {
+	// If width is too small or not set yet, use minimum widths
+	if availableWidth < 80 {
+		availableWidth = 80 // Minimum reasonable terminal width
+	}
+
+	columns := make([]table.Column, len(specs))
+	for i, spec := range specs {
+		width := int(float64(availableWidth) * spec.ratio)
+		// Ensure minimum width
+		if width < spec.minWidth {
+			width = spec.minWidth
+		}
+		columns[i] = table.Column{
+			Title: spec.title,
+			Width: width,
+		}
+	}
+	return columns
+}
+
 // buildTable builds the table component from filtered rows
 func (m *Model) buildTable() table.Model {
 	var columns []table.Column
 	var rows []table.Row
 
+	// Calculate available width for columns (subtract margins/borders)
+	availableWidth := m.width - 4 // Account for table borders and padding
+
 	// Define columns based on current tab
 	switch m.currentTab {
 	case TabAll:
 		// All tab: CHANGE, KIND, LEFT, RIGHT, MATCH TYPE, SIMILARITY SCORE, DIFF
-		columns = []table.Column{
-			{Title: "CHANGE", Width: 8},
-			{Title: "KIND", Width: 15},
-			{Title: "LEFT", Width: 30},
-			{Title: "RIGHT", Width: 30},
-			{Title: "MATCH TYPE", Width: 12},
-			{Title: "SIMILARITY", Width: 11},
-			{Title: "DIFF", Width: 12},
-		}
+		// Define proportional widths (percentages of available width)
+		// Reduced: CHANGE(6%), MATCH_TYPE(8%), SIMILARITY(8%) to give more space to DIFF(14%)
+		// Total: CHANGE(6%) + KIND(12%) + LEFT(25%) + RIGHT(25%) + MATCH_TYPE(8%) + SIMILARITY(8%) + DIFF(16%) = 100%
+		columns = m.calculateColumns(availableWidth, []columnSpec{
+			{title: "CHANGE", minWidth: 7, ratio: 0.06},
+			{title: "KIND", minWidth: 12, ratio: 0.12},
+			{title: "LEFT", minWidth: 20, ratio: 0.25},
+			{title: "RIGHT", minWidth: 20, ratio: 0.25},
+			{title: "MATCH TYPE", minWidth: 9, ratio: 0.08},
+			{title: "SIMILARITY", minWidth: 8, ratio: 0.08},
+			{title: "DIFF", minWidth: 14, ratio: 0.16},
+		})
 
 		for _, r := range m.filteredRows {
 			matchType := ""
@@ -398,12 +432,13 @@ func (m *Model) buildTable() table.Model {
 
 	case TabAdded:
 		// Added tab: KIND, NAMESPACE, NAME, DIFF
-		columns = []table.Column{
-			{Title: "KIND", Width: 20},
-			{Title: "NAMESPACE", Width: 25},
-			{Title: "NAME", Width: 40},
-			{Title: "DIFF", Width: 15},
-		}
+		// KIND(20%) + NAMESPACE(25%) + NAME(40%) + DIFF(15%) = 100%
+		columns = m.calculateColumns(availableWidth, []columnSpec{
+			{title: "KIND", minWidth: 15, ratio: 0.20},
+			{title: "NAMESPACE", minWidth: 20, ratio: 0.25},
+			{title: "NAME", minWidth: 25, ratio: 0.40},
+			{title: "DIFF", minWidth: 12, ratio: 0.15},
+		})
 
 		for _, r := range m.filteredRows {
 			rows = append(rows, table.Row{
@@ -416,14 +451,16 @@ func (m *Model) buildTable() table.Model {
 
 	case TabModified:
 		// Modified tab: KIND, LEFT, RIGHT, MATCH TYPE, SIMILARITY SCORE, DIFF
-		columns = []table.Column{
-			{Title: "KIND", Width: 15},
-			{Title: "LEFT", Width: 30},
-			{Title: "RIGHT", Width: 30},
-			{Title: "MATCH TYPE", Width: 12},
-			{Title: "SIMILARITY", Width: 11},
-			{Title: "DIFF", Width: 12},
-		}
+		// Reduced: MATCH_TYPE(8%), SIMILARITY(8%) to give more space to DIFF(16%)
+		// KIND(14%) + LEFT(27%) + RIGHT(27%) + MATCH_TYPE(8%) + SIMILARITY(8%) + DIFF(16%) = 100%
+		columns = m.calculateColumns(availableWidth, []columnSpec{
+			{title: "KIND", minWidth: 12, ratio: 0.14},
+			{title: "LEFT", minWidth: 20, ratio: 0.27},
+			{title: "RIGHT", minWidth: 20, ratio: 0.27},
+			{title: "MATCH TYPE", minWidth: 9, ratio: 0.08},
+			{title: "SIMILARITY", minWidth: 8, ratio: 0.08},
+			{title: "DIFF", minWidth: 14, ratio: 0.16},
+		})
 
 		for _, r := range m.filteredRows {
 			similarity := ""
@@ -443,12 +480,13 @@ func (m *Model) buildTable() table.Model {
 
 	case TabRemoved:
 		// Removed tab: KIND, NAMESPACE, NAME, DIFF
-		columns = []table.Column{
-			{Title: "KIND", Width: 20},
-			{Title: "NAMESPACE", Width: 25},
-			{Title: "NAME", Width: 40},
-			{Title: "DIFF", Width: 15},
-		}
+		// KIND(20%) + NAMESPACE(25%) + NAME(40%) + DIFF(15%) = 100%
+		columns = m.calculateColumns(availableWidth, []columnSpec{
+			{title: "KIND", minWidth: 15, ratio: 0.20},
+			{title: "NAMESPACE", minWidth: 20, ratio: 0.25},
+			{title: "NAME", minWidth: 25, ratio: 0.40},
+			{title: "DIFF", minWidth: 12, ratio: 0.15},
+		})
 
 		for _, r := range m.filteredRows {
 			rows = append(rows, table.Row{
