@@ -43,12 +43,14 @@ const (
 // Model represents the TUI application state
 type Model struct {
 	// State
-	currentView ViewType
-	currentTab  TabType
-	diffMode    diff.DiffMode
-	sortField   SortField
-	search      string
-	searchMode  bool
+	currentView  ViewType
+	currentTab   TabType
+	diffMode     diff.DiffMode
+	sortField    SortField
+	sortReversed bool
+	search       string
+	searchMode   bool
+	commandMode  bool // Special mode for :q command
 
 	// Data
 	result       *differ.DiffResult
@@ -221,17 +223,23 @@ func (m *Model) sortRows() {
 	switch m.sortField {
 	case SortByName:
 		sort.Slice(m.filteredRows, func(i, j int) bool {
+			if m.sortReversed {
+				return m.filteredRows[i].Name > m.filteredRows[j].Name
+			}
 			return m.filteredRows[i].Name < m.filteredRows[j].Name
 		})
 	case SortByStatus:
 		sort.Slice(m.filteredRows, func(i, j int) bool {
 			if m.filteredRows[i].ChangeType != m.filteredRows[j].ChangeType {
+				if m.sortReversed {
+					return m.filteredRows[i].ChangeType > m.filteredRows[j].ChangeType
+				}
 				return m.filteredRows[i].ChangeType < m.filteredRows[j].ChangeType
 			}
 			return m.filteredRows[i].Kind < m.filteredRows[j].Kind
 		})
 	case SortByDefault:
-		// Default sorting based on tab
+		// Default sorting based on tab (no reverse for default)
 		switch m.currentTab {
 		case TabAll, TabModified:
 			// Sort by Kind, LeftName, RightName

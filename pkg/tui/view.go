@@ -68,13 +68,12 @@ func (m *Model) viewTable() string {
 	b.WriteString(m.table.View())
 	b.WriteString("\n\n")
 
-	// Search mode input
-	if m.searchMode {
-		searchLabel := "Search"
-		if strings.HasPrefix(m.search, ":") {
-			searchLabel = "Command"
-		}
-		b.WriteString(filterStyle.Render(fmt.Sprintf("%s: %s", searchLabel, m.search)))
+	// Command mode or search mode input
+	if m.commandMode {
+		b.WriteString(filterStyle.Render("Command: : (press 'q' to quit or 'esc' to cancel)"))
+		b.WriteString("\n")
+	} else if m.searchMode {
+		b.WriteString(filterStyle.Render(fmt.Sprintf("Search: %s", m.search)))
 		b.WriteString("\n")
 	}
 
@@ -172,8 +171,16 @@ func (m *Model) renderTab(key, label string, count int, active bool) string {
 
 // renderFooter renders the footer with keyboard hints
 func (m *Model) renderFooter() string {
+	if m.commandMode {
+		return footerStyle.Render("[q] Quit | [Esc] Cancel")
+	}
 	if m.searchMode {
 		return footerStyle.Render("[Enter] Apply | [q] Cancel | [Ctrl+u] Clear")
+	}
+
+	// Show different hints based on tab (Added/Removed don't have S sort)
+	if m.currentTab == TabAdded || m.currentTab == TabRemoved {
+		return footerStyle.Render("[Enter] View | [h/l] Tabs | [/] Search | [N] Sort | [?] Help | [:q] Quit")
 	}
 	return footerStyle.Render("[Enter] View | [h/l] Tabs | [/] Search | [N/S] Sort | [?] Help | [:q] Quit")
 }

@@ -40,7 +40,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKeyPress routes key presses based on current view/mode
 func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle search mode first
+	// Handle command mode first (for :q)
+	if m.commandMode {
+		return m.handleCommandKeys(msg)
+	}
+
+	// Handle search mode
 	if m.searchMode {
 		return m.handleSearchKeys(msg)
 	}
@@ -67,14 +72,12 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case ":":
 		// Start command mode for :q
-		m.searchMode = true
-		m.search = ":"
+		m.commandMode = true
 		return m, nil
 
 	case "q":
-		// Back/escape - clear search if active, otherwise do nothing
-		if m.searchMode {
-			m.searchMode = false
+		// Back/cancel - clear search if active
+		if m.search != "" {
 			m.search = ""
 			m.applyFilter()
 			m.table = m.buildTable()
@@ -85,6 +88,8 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "0", "1", "2", "3":
 		tabNum := int(msg.String()[0] - '0')
 		m.currentTab = TabType(tabNum)
+		m.sortField = SortByDefault
+		m.sortReversed = false
 		m.applyFilter()
 		m.table = m.buildTable()
 		return m, nil
@@ -93,6 +98,8 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Navigate to previous tab
 		if m.currentTab > TabAll {
 			m.currentTab--
+			m.sortField = SortByDefault
+			m.sortReversed = false
 			m.applyFilter()
 			m.table = m.buildTable()
 		}
@@ -102,6 +109,8 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Navigate to next tab
 		if m.currentTab < TabRemoved {
 			m.currentTab++
+			m.sortField = SortByDefault
+			m.sortReversed = false
 			m.applyFilter()
 			m.table = m.buildTable()
 		}
@@ -138,15 +147,29 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Sorting
 	case "N":
-		m.sortField = SortByName
+		// Toggle sort by name
+		if m.sortField == SortByName {
+			m.sortReversed = !m.sortReversed
+		} else {
+			m.sortField = SortByName
+			m.sortReversed = false
+		}
 		m.applyFilter()
 		m.table = m.buildTable()
 		return m, nil
 
 	case "S":
-		m.sortField = SortByStatus
-		m.applyFilter()
-		m.table = m.buildTable()
+		// Only allow sort by status for All/Modified tabs
+		if m.currentTab == TabAll || m.currentTab == TabModified {
+			if m.sortField == SortByStatus {
+				m.sortReversed = !m.sortReversed
+			} else {
+				m.sortField = SortByStatus
+				m.sortReversed = false
+			}
+			m.applyFilter()
+			m.table = m.buildTable()
+		}
 		return m, nil
 
 	// Search
@@ -243,12 +266,32 @@ func (m *Model) handleHelpKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleCommandKeys handles keyboard input in command mode (for :q)
+func (m *Model) handleCommandKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+
+	case "esc", "ctrl+c":
+		// Cancel command mode
+		m.commandMode = false
+		return m, nil
+
+	case "q":
+		// Execute quit command
+		return m, tea.Quit
+
+	default:
+		// Any other key cancels command mode
+		m.commandMode = false
+		return m, nil
+	}
+}
+
 // handleSearchKeys handles keyboard input in search mode
 func (m *Model) handleSearchKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 
 	case "esc", "ctrl+c", "q":
-		// Cancel search
+		// Cancel search and clear filter
 		m.searchMode = false
 		m.search = ""
 		m.applyFilter()
@@ -256,10 +299,6 @@ func (m *Model) handleSearchKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "enter":
-		// Check if it's :q command to quit
-		if m.search == ":q" {
-			return m, tea.Quit
-		}
 		// Apply search
 		m.searchMode = false
 		m.applyFilter()
@@ -358,19 +397,19 @@ func (m *Model) buildTable() table.Model {
 		}
 
 	case TabAdded:
-		// Added tab: KIND, NAME, NAMESPACE, DIFF
+		// Added tab: KIND, NAMESPACE, NAME, DIFF
 		columns = []table.Column{
 			{Title: "KIND", Width: 20},
-			{Title: "NAME", Width: 40},
 			{Title: "NAMESPACE", Width: 25},
+			{Title: "NAME", Width: 40},
 			{Title: "DIFF", Width: 15},
 		}
 
 		for _, r := range m.filteredRows {
 			rows = append(rows, table.Row{
 				r.Kind,
-				r.Name,
 				r.Namespace,
+				r.Name,
 				formatDiff(r),
 			})
 		}
@@ -403,19 +442,19 @@ func (m *Model) buildTable() table.Model {
 		}
 
 	case TabRemoved:
-		// Removed tab: KIND, NAME, NAMESPACE, DIFF
+		// Removed tab: KIND, NAMESPACE, NAME, DIFF
 		columns = []table.Column{
 			{Title: "KIND", Width: 20},
-			{Title: "NAME", Width: 40},
 			{Title: "NAMESPACE", Width: 25},
+			{Title: "NAME", Width: 40},
 			{Title: "DIFF", Width: 15},
 		}
 
 		for _, r := range m.filteredRows {
 			rows = append(rows, table.Row{
 				r.Kind,
-				r.Name,
 				r.Namespace,
+				r.Name,
 				formatDiff(r),
 			})
 		}
