@@ -20,6 +20,7 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 - 🔍 **JSON Pointer Support**: RFC 6901 compliant JSON Pointers for precise field targeting
 - 🎨 **JQ Path Expressions**: Powerful filtering with wildcards and conditionals
 - 📊 **Multiple Output Formats**: Unified diff with optional pager support (less, delta, bat)
+- 🖥️ **Interactive TUI Mode**: k9s-inspired terminal UI for exploring large diffs (`--tui`)
 - 🎯 **Smart Normalization**: Removes managed fields, applies ignore rules, sorts keys (used by `diff`)
 - ☸️ **Live Cluster Comparison**: Compare local manifests against live Kubernetes resources
 - 🔧 **Format**: Sort keys consistently with `kyt fmt`
@@ -59,6 +60,9 @@ make build
 # Compare two namespaces in the cluster
 ./bin/kyt diff ns:production ns:staging
 
+# Interactive TUI mode for exploring diffs
+./bin/kyt diff ./manifests ns:production --tui
+
 # Normalize a manifest file
 ./bin/kyt fmt deployment.yaml
 
@@ -77,6 +81,29 @@ kustomize build . | kyt fmt | kubectl apply -f -
 ### `kyt diff` - Compare manifests
 
 Compare two Kubernetes manifest files, directories, or live cluster namespaces with smart ignore rules and intelligent similarity matching.
+
+**Interactive TUI Mode:**
+
+Launch an interactive k9s-inspired terminal UI for exploring diffs with `--tui`. Perfect for navigating large diffs with hundreds of resources.
+
+```bash
+# Launch TUI for interactive exploration
+kyt diff source.yaml target.yaml --tui
+
+# Compare namespaces in TUI
+kyt diff ns:production ns:staging --tui
+
+# All filtering options work with TUI
+kyt diff --include deploy,svc ns:prod ns:staging --tui
+```
+
+**TUI Features:**
+- **Tabbed Views**: All / Added / Modified / Removed resources
+- **Navigation**: vim-style keybindings (h/j/k/l, g/G)
+- **Search**: Filter by Kind, Name, or Namespace (`/`)
+- **Sorting**: Sort by name (`N`) or status (`S`) with reverse toggle
+- **Diff Modes**: Side-by-side and unified views (`s`, `u`)
+- **Quit**: `:q` to quit, `q` to go back
 
 **Live Cluster Comparison:**
 
@@ -351,12 +378,16 @@ make run-json
 - [ArgoCD](https://github.com/argoproj/argo-cd) - Ignore rules engine
 - [gojq](https://github.com/itchyny/gojq) - JQ implementation in Go
 - [cobra](https://github.com/spf13/cobra) - CLI framework
+- [bubbletea](https://github.com/charmbracelet/bubbletea) - TUI framework (for `--tui` mode)
+- [bubbles](https://github.com/charmbracelet/bubbles) - TUI components (table, viewport)
+- [lipgloss](https://github.com/charmbracelet/lipgloss) - Terminal styling
 
 ## Inspiration
 
 This project is inspired by:
 
 - [ArgoCD's diff customization](https://argo-cd.readthedocs.io/en/stable/user-guide/diff-customization/)
+- [k9s](https://github.com/derailed/k9s) - Kubernetes CLI with TUI (inspired the `--tui` mode)
 - [kubectl diff](https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands#diff)
 - [dyff](https://github.com/homeport/dyff) - YAML diff tool
 - [helm-drift](https://github.com/nikhilsbhat/helm-drift) - Helm drift detection
