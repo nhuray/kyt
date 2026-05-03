@@ -1,0 +1,209 @@
+# kyt configuration for comparing local manifests with ArgoCD-applied cluster resources
+# This config ignores common server-side fields and ArgoCD annotations
+#
+# Usage:
+#   kyt diff -c .kyt.full.yaml ./local-manifests ns:redis-ha
+#   kyt diff -c .kyt.full.yaml --summary ./local-manifests ns:redis-ha
+#   kyt diff -c .kyt.full.yaml --exclude pod,pvc,rs ./local-manifests ns:redis-ha
+
+diff:
+  # Normalization options - remove common server-side fields
+  normalization:
+    sortKeys: true
+    removeDefaultFields:
+      - "/status"
+      - "/metadata/managedFields"
+      - "/metadata/creationTimestamp"
+      - "/metadata/generation"
+      - "/metadata/resourceVersion"
+      - "/metadata/uid"
+      - "/metadata/selfLink"
+
+  # Ignore differences for specific resource patterns
+  ignoreDifferences:
+    # ============================================================
+    # ConfigMaps - Ignore auto-injected kube-root-ca.crt
+    # ============================================================
+    - group: ""
+      kind: "ConfigMap"
+      name: "kube-root-ca.crt"
+      jqPathExpressions:
+        # Ignore everything in this ConfigMap (auto-injected by Kubernetes)
+        - "."
+
+    # ============================================================
+    # All Resources - ArgoCD and kubectl annotations
+    # Use JQ to filter out all argocd.argoproj.io/* and kubectl.kubernetes.io/* annotations
+    # Using ArgoCD-style path expressions that work with del()
+    # ============================================================
+    - group: ""
+      kind: "*"
+      jqPathExpressions:
+        # Remove ArgoCD annotations using path-based selection
+        - '.metadata.annotations["argocd.argoproj.io/tracking-id"]'
+        - '.metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"]'
+    
+    - group: "apps"
+      kind: "*"
+      jqPathExpressions:
+        # Remove ArgoCD annotations for apps/* resources
+        - '.metadata.annotations["argocd.argoproj.io/tracking-id"]'
+        - '.metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"]'
+    
+    - group: "batch"
+      kind: "*"
+      jqPathExpressions:
+        # Remove ArgoCD annotations for batch/* resources
+        - '.metadata.annotations["argocd.argoproj.io/tracking-id"]'
+        - '.metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"]'
+    
+    - group: "networking.k8s.io"
+      kind: "*"
+      jqPathExpressions:
+        # Remove ArgoCD annotations for networking/* resources
+        - '.metadata.annotations["argocd.argoproj.io/tracking-id"]'
+        - '.metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"]'
+    
+    - group: "autoscaling"
+      kind: "*"
+      jqPathExpressions:
+        # Remove ArgoCD annotations for autoscaling/* resources
+        - '.metadata.annotations["argocd.argoproj.io/tracking-id"]'
+        - '.metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"]'
+
+    # ============================================================
+    # All Resources - Linkerd service mesh annotations
+    # ============================================================
+    - group: ""
+      kind: "*"
+      jsonPointers:
+        - "/metadata/annotations/config.linkerd.io~1opaque-ports"
+        - "/metadata/annotations/linkerd.io~1inject"
+        - "/metadata/annotations/linkerd.io~1created-by"
+        - "/metadata/annotations/linkerd.io~1proxy-version"
+
+    # ============================================================
+    # Services - Auto-generated fields
+    # ============================================================
+    - group: ""
+      kind: "Service"
+      jsonPointers:
+        # Empty annotations object added by cluster
+        - "/metadata/annotations"
+        # Auto-generated networking fields
+        - "/spec/clusterIP"
+        - "/spec/clusterIPs"
+        - "/spec/ipFamilies"
+        - "/spec/ipFamilyPolicy"
+        - "/spec/internalTrafficPolicy"
+        - "/spec/sessionAffinity"
+        # Port defaults
+        - "/spec/ports/*/protocol"
+        - "/spec/ports/*/nodePort"
+        # Health check port is server-generated for LoadBalancer
+        - "/spec/healthCheckNodePort"
+
+    # ============================================================
+    # Deployments - Server-side defaults
+    # ============================================================
+    - group: "apps"
+      kind: "Deployment"
+      jsonPointers:
+        # Empty annotations object added by cluster
+        - "/metadata/annotations"
+        # Rolling update strategy defaults
+        - "/spec/strategy"
+        - "/spec/strategy/type"
+        - "/spec/strategy/rollingUpdate"
+        - "/spec/strategy/rollingUpdate/maxSurge"
+        - "/spec/strategy/rollingUpdate/maxUnavailable"
+        # Revision history
+        - "/spec/progressDeadlineSeconds"
+        - "/spec/revisionHistoryLimit"
+        # Server-side revision tracking
+        - "/metadata/annotations/deployment.kubernetes.io~1revision"
+        # Container defaults
+        - "/spec/template/spec/containers/*/terminationMessagePath"
+        - "/spec/template/spec/containers/*/terminationMessagePolicy"
+        - "/spec/template/spec/containers/*/imagePullPolicy"
+        - "/spec/template/spec/containers/*/ports/*/protocol"
+        # Pod spec defaults
+        - "/spec/template/spec/restartPolicy"
+        - "/spec/template/spec/terminationGracePeriodSeconds"
+        - "/spec/template/spec/dnsPolicy"
+        - "/spec/template/spec/schedulerName"
+        - "/spec/template/spec/securityContext"
+        - "/spec/template/spec/enableServiceLinks"
+        # Volume defaults
+        - "/spec/template/spec/volumes/*/secret/defaultMode"
+        - "/spec/template/spec/volumes/*/configMap/defaultMode"
+
+    # ============================================================
+    # StatefulSets - Server-side defaults
+    # ============================================================
+    - group: "apps"
+      kind: "StatefulSet"
+      jsonPointers:
+        # Revision history
+        - "/spec/revisionHistoryLimit"
+        # Server-side revision tracking
+        - "/metadata/annotations/deployment.kubernetes.io~1revision"
+        # Container defaults (same as Deployment)
+        - "/spec/template/spec/containers/*/terminationMessagePath"
+        - "/spec/template/spec/containers/*/terminationMessagePolicy"
+        - "/spec/template/spec/containers/*/imagePullPolicy"
+        - "/spec/template/spec/containers/*/ports/*/protocol"
+        # Pod spec defaults
+        - "/spec/template/spec/restartPolicy"
+        - "/spec/template/spec/terminationGracePeriodSeconds"
+        - "/spec/template/spec/dnsPolicy"
+        - "/spec/template/spec/schedulerName"
+        - "/spec/template/spec/securityContext"
+        - "/spec/template/spec/enableServiceLinks"
+        # Volume defaults
+        - "/spec/template/spec/volumes/*/secret/defaultMode"
+        - "/spec/template/spec/volumes/*/configMap/defaultMode"
+        # StatefulSet specific
+        - "/spec/podManagementPolicy"
+        - "/spec/updateStrategy"
+        - "/spec/updateStrategy/type"
+        - "/spec/persistentVolumeClaimRetentionPolicy"
+        # Volume claim templates API version/kind are sometimes added
+        - "/spec/volumeClaimTemplates/*/apiVersion"
+        - "/spec/volumeClaimTemplates/*/kind"
+        # Volume claim template fields added by cluster
+        - "/spec/volumeClaimTemplates/*/spec/volumeMode"
+        - "/spec/volumeClaimTemplates/*/status"
+        # Pod spec fields added by cluster
+        - "/spec/template/spec/serviceAccount"
+        # Affinity null values
+        - "/spec/template/spec/affinity/nodeAffinity"
+        - "/spec/template/spec/affinity/podAffinity"
+
+    # ============================================================
+    # Secrets - Data encoding differences
+    # ============================================================
+    - group: ""
+      kind: "Secret"
+      jsonPointers:
+        # Type is sometimes auto-added
+        - "/type"
+        # Local manifests use stringData, cluster has data (base64)
+        # Since these encode the same content differently, ignore both
+        # NOTE: This means secrets won't be compared for content changes
+        - "/stringData"
+        - "/data"
+
+  # Diff options
+  options:
+    contextLines: 3                 # Lines of context in unified diff
+    similarityThreshold: 0.7        # Min similarity for fuzzy matching
+    dataSimilarityBoost: 2          # Boost for ConfigMap/Secret data fields
+
+  # Fuzzy string matching for large text fields
+  fuzzyMatching:
+    enabled: true
+    minStringLength: 100            # Only apply fuzzy matching to strings 100+ chars
+
+  # Pager to visualize unified diff
+  pager: "delta --side-by-side --diff-so-fancy"
