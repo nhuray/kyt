@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -40,7 +39,7 @@ var diffCmd = &cobra.Command{
 Supports:
 - Unified diff format (git-style)
 - Configurable pager support (with $PAGER fallback)
-- Interactive mode with fzf + delta (--interactive)
+- Interactive mode with tmux + fzf + delta (--interactive)
 - Tabular summary with --summary flag
 - Smart similarity matching for renamed resources
 - Resource filtering by kind (include/exclude)
@@ -52,10 +51,13 @@ Exit Codes:
 - 2+: Error occurred
 
 Interactive Mode:
-- Use --interactive or -i to enable interactive resource selection
-- Requires fzf and delta: brew install fzf git-delta
+- Use --interactive or -i to enable tmux-based interactive viewer
+- Requires tmux, fzf, and delta: brew install tmux fzf git-delta
+- Opens 3 tmux windows: Modified (Ctrl-b 0), Added (Ctrl-b 1), Removed (Ctrl-b 2)
 - Navigate resources with fzf, view side-by-side diff with delta
-- Press Enter to view full diff, Ctrl-/ to toggle preview, Esc to quit
+- Modified resources: show side-by-side diff
+- Added/Removed resources: show clean YAML (no +/- prefixes)
+- Press Ctrl-t to toggle preview, Esc to quit, Ctrl-b 0/1/2 to switch windows
 
 Resource Filtering:
 - Use --include to only compare specific resource kinds
@@ -144,7 +146,7 @@ func init() {
 	diffCmd.Flags().StringVar(&diffIncludeKinds, "include", "", "comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')")
 	diffCmd.Flags().StringVar(&diffExcludeKinds, "exclude", "", "comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')")
 	diffCmd.Flags().StringVar(&diffContext, "context", "", "Kubernetes context to use for namespace inputs (defaults to current context)")
-	diffCmd.Flags().BoolVarP(&diffInteractive, "interactive", "i", false, "interactive mode with fzf resource selection and delta side-by-side view (requires fzf and delta)")
+	diffCmd.Flags().BoolVarP(&diffInteractive, "interactive", "i", false, "interactive mode with tmux windows, fzf selection, and delta preview (requires tmux, fzf, and delta)")
 
 	rootCmd.AddCommand(diffCmd)
 }
@@ -346,18 +348,11 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		// Create interactive viewer
 		viewer, err := interactive.NewViewer()
 		if err != nil {
-			return fmt.Errorf("failed to create interactive viewer: %w\nInstall dependencies: brew install fzf git-delta", err)
+			return fmt.Errorf("failed to create interactive viewer: %w\nInstall dependencies: brew install tmux fzf git-delta", err)
 		}
 
-		// Generate diff output to buffer
-		var buf bytes.Buffer
-		rep := reporter.NewReporter(false, true) // Always colorize for delta
-		if err := rep.Report(result, &nopWriteCloser{&buf}); err != nil {
-			return fmt.Errorf("failed to generate report: %w", err)
-		}
-
-		// Show interactive viewer
-		if err := viewer.Show(buf.Bytes()); err != nil {
+		// Show interactive viewer with structured diff result
+		if err := viewer.Show(result); err != nil {
 			return fmt.Errorf("failed to show interactive viewer: %w", err)
 		}
 

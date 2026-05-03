@@ -1,24 +1,26 @@
 package interactive
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
+	"path/filepath"
 	"sort"
 	"strings"
+	"time"
+
+	"github.com/nhuray/kyt/pkg/differ"
 )
 
-// Viewer provides interactive diff viewing with fzf and delta
+// Viewer provides interactive diff viewing with tmux, fzf, and delta
 type Viewer struct {
 	fzfPath   string
 	deltaPath string
+	tmuxPath  string
 }
 
 // NewViewer creates a new interactive viewer
-// Returns an error if fzf or delta are not available
+// Returns an error if fzf, delta, or tmux are not available
 func NewViewer() (*Viewer, error) {
 	fzfPath, err := exec.LookPath("fzf")
 	if err != nil {
@@ -30,182 +32,220 @@ func NewViewer() (*Viewer, error) {
 		return nil, fmt.Errorf("delta not found in PATH. Install with: brew install git-delta")
 	}
 
+	tmuxPath, err := exec.LookPath("tmux")
+	if err != nil {
+		return nil, fmt.Errorf("tmux not found in PATH. Install with: brew install tmux")
+	}
+
 	return &Viewer{
 		fzfPath:   fzfPath,
 		deltaPath: deltaPath,
+		tmuxPath:  tmuxPath,
 	}, nil
 }
 
-// Resource represents a single resource in the diff
-type Resource struct {
-	Name      string // e.g., "ConfigMap.core/redis-configuration (namespace: redis-ha)"
-	StartLine int
-	EndLine   int
-	Content   string
-}
-
-// Show displays the diff interactively using fzf for selection and delta for viewing
-func (v *Viewer) Show(diffOutput []byte) error {
-	if len(diffOutput) == 0 {
+// Show displays the diff interactively in tmux windows with fzf and delta
+func (v *Viewer) Show(result *differ.DiffResult) error {
+	if !result.HasDifferences() {
 		fmt.Println("No differences found")
 		return nil
 	}
 
-	// Parse the diff to extract resources
-	resources, err := v.parseResources(diffOutput)
-	if err != nil {
-		return fmt.Errorf("failed to parse diff: %w", err)
-	}
+	// Categorize resources
+	added := result.GetAdded()
+	modified := result.GetModified()
+	removed := result.GetRemoved()
 
-	if len(resources) == 0 {
-		// No structured resources, just show the whole diff
-		return v.showWithDelta(diffOutput)
+	// Sort each category by resource name
+	sortByName := func(resources []differ.ResourceDiff) {
+		sort.Slice(resources, func(i, j int) bool {
+			return getResourceName(resources[i]) < getResourceName(resources[j])
+		})
 	}
+	sortByName(added)
+	sortByName(modified)
+	sortByName(removed)
 
-	// Show interactive selector
-	return v.showInteractive(resources, diffOutput)
+	// Show summary
+	fmt.Fprintf(os.Stderr, "Starting interactive mode:\n")
+	fmt.Fprintf(os.Stderr, "  Modified: %d resources\n", len(modified))
+	fmt.Fprintf(os.Stderr, "  Added:    %d resources\n", len(added))
+	fmt.Fprintf(os.Stderr, "  Removed:  %d resources\n", len(removed))
+	fmt.Fprintf(os.Stderr, "\nNavigation:\n")
+	fmt.Fprintf(os.Stderr, "  Ctrl-b 0/1/2: Switch between Modified/Added/Removed windows\n")
+	fmt.Fprintf(os.Stderr, "  Ctrl-t:       Toggle preview\n")
+	fmt.Fprintf(os.Stderr, "  Esc:          Quit\n\n")
+
+	// Create and launch tmux session
+	return v.createTmuxSession(added, modified, removed)
 }
 
-// parseResources extracts individual resources from the diff output
-func (v *Viewer) parseResources(diffOutput []byte) ([]Resource, error) {
-	scanner := bufio.NewScanner(bytes.NewReader(diffOutput))
-
-	// Regex to match resource headers: "--- a/Kind.group/name (namespace: ns)"
-	resourceRegex := regexp.MustCompile(`^(---|\+\+\+) (a/|b/)([^[:space:]]+) \(namespace: ([^)]+)\)`)
-
-	var resources []Resource
-	resourceMap := make(map[string]*Resource)
-	lineNum := 0
-	var currentBuf bytes.Buffer
-
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
-		currentBuf.WriteString(line)
-		currentBuf.WriteByte('\n')
-
-		// Check if this is a resource header
-		matches := resourceRegex.FindStringSubmatch(line)
-		if matches != nil {
-			resourceID := matches[3] + " (namespace: " + matches[4] + ")"
-
-			// If we already have this resource, update end line
-			if res, exists := resourceMap[resourceID]; exists {
-				res.EndLine = lineNum
-			} else {
-				// New resource
-				res := &Resource{
-					Name:      resourceID,
-					StartLine: lineNum,
-					EndLine:   lineNum,
-				}
-				resourceMap[resourceID] = res
-				resources = append(resources, *res)
-			}
-		}
+// getResourceName returns a display name for a resource
+func getResourceName(rd differ.ResourceDiff) string {
+	// Use TargetKey for added resources, SourceKey for removed, either for modified
+	if rd.ChangeType == differ.ChangeTypeAdded && rd.TargetKey != nil {
+		return fmt.Sprintf("%s.%s/%s (namespace: %s)",
+			rd.TargetKey.Kind, rd.TargetKey.Group, rd.TargetKey.Name, rd.TargetKey.Namespace)
+	} else if rd.ChangeType == differ.ChangeTypeRemoved && rd.SourceKey != nil {
+		return fmt.Sprintf("%s.%s/%s (namespace: %s)",
+			rd.SourceKey.Kind, rd.SourceKey.Group, rd.SourceKey.Name, rd.SourceKey.Namespace)
+	} else if rd.TargetKey != nil {
+		return fmt.Sprintf("%s.%s/%s (namespace: %s)",
+			rd.TargetKey.Kind, rd.TargetKey.Group, rd.TargetKey.Name, rd.TargetKey.Namespace)
+	} else if rd.SourceKey != nil {
+		return fmt.Sprintf("%s.%s/%s (namespace: %s)",
+			rd.SourceKey.Kind, rd.SourceKey.Group, rd.SourceKey.Name, rd.SourceKey.Namespace)
 	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	// Extract content for each resource
-	lines := strings.Split(string(diffOutput), "\n")
-	for i := range resources {
-		res := &resources[i]
-		if res.StartLine > 0 && res.EndLine <= len(lines) {
-			res.Content = strings.Join(lines[res.StartLine-1:res.EndLine], "\n")
-		}
-	}
-
-	// Sort by name
-	sort.Slice(resources, func(i, j int) bool {
-		return resources[i].Name < resources[j].Name
-	})
-
-	return resources, nil
+	return "unknown"
 }
 
-// showInteractive shows the fzf selector with delta preview
-func (v *Viewer) showInteractive(resources []Resource, fullDiff []byte) error {
-	// Create a temp file for the full diff
-	tmpFile, err := os.CreateTemp("", "kyt-diff-*.txt")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
-
-	if _, err := tmpFile.Write(fullDiff); err != nil {
-		return fmt.Errorf("failed to write diff to temp file: %w", err)
+// generateCleanDiff creates clean YAML (no +/-) for added/removed, keeps diff for modified
+func (v *Viewer) generateCleanDiff(rd differ.ResourceDiff) string {
+	if rd.ChangeType == differ.ChangeTypeModified {
+		// Keep diff as-is for modified resources
+		return rd.DiffText
 	}
 
-	tmpFile.Close()
+	// For added/removed, strip +/- prefixes to show clean YAML
+	lines := strings.Split(rd.DiffText, "\n")
+	var cleaned []string
 
-	// Prepare resource names for fzf
-	resourceNames := make([]string, len(resources))
-	for i, res := range resources {
-		resourceNames[i] = res.Name
-	}
-
-	// Build fzf command with delta preview
-	fzfCmd := exec.Command(v.fzfPath,
-		"--prompt=Select resource (Enter=view all, Esc=quit): ",
-		"--preview="+v.buildPreviewCommand(tmpFile.Name()),
-		"--preview-window=right:70%:wrap",
-		"--bind=ctrl-/:toggle-preview",
-		"--bind=enter:execute("+v.deltaPath+" --side-by-side --line-numbers --paging=always < "+tmpFile.Name()+")+abort",
-		"--header=Enter=view all | Ctrl-/=toggle preview | Esc=quit",
-		"--height=100%",
-		"--ansi",
-	)
-
-	// Pipe resource names to fzf
-	stdin, err := fzfCmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stdin pipe: %w", err)
-	}
-
-	fzfCmd.Stdout = os.Stdout
-	fzfCmd.Stderr = os.Stderr
-
-	if err := fzfCmd.Start(); err != nil {
-		return fmt.Errorf("failed to start fzf: %w", err)
-	}
-
-	// Write resource names to fzf
-	go func() {
-		defer stdin.Close()
-		for _, name := range resourceNames {
-			fmt.Fprintln(stdin, name)
+	for _, line := range lines {
+		// Skip diff headers (---, +++, @@)
+		if strings.HasPrefix(line, "---") ||
+			strings.HasPrefix(line, "+++") ||
+			strings.HasPrefix(line, "@@") {
+			continue
 		}
-	}()
 
-	if err := fzfCmd.Wait(); err != nil {
-		// Exit code 130 means user pressed Esc, which is fine
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 130 {
-			return nil
+		// Remove leading +/- but keep the rest
+		if len(line) > 0 && (line[0] == '+' || line[0] == '-') {
+			cleaned = append(cleaned, line[1:])
+		} else {
+			cleaned = append(cleaned, line)
 		}
-		// Exit code 0 means user pressed Enter (view all), which triggers the bind action
-		return nil
 	}
+
+	return strings.Join(cleaned, "\n")
+}
+
+// createTmuxSession creates a tmux session with 3 windows (Modified, Added, Removed)
+func (v *Viewer) createTmuxSession(added, modified, removed []differ.ResourceDiff) error {
+	sessionName := fmt.Sprintf("kyt-diff-%d", time.Now().Unix())
+
+	// Create detached session with first window (Modified - most important)
+	cmd := exec.Command(v.tmuxPath, "new-session", "-d", "-s", sessionName, "-n", "Modified")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create tmux session: %w", err)
+	}
+
+	// Setup window 0: Modified Resources
+	if err := v.launchWindowWithFzf(sessionName, 0, "Modified", modified, differ.ChangeTypeModified); err != nil {
+		return err
+	}
+
+	// Create window 1: Added Resources
+	cmd = exec.Command(v.tmuxPath, "new-window", "-t", sessionName, "-n", "Added")
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	if err := v.launchWindowWithFzf(sessionName, 1, "Added", added, differ.ChangeTypeAdded); err != nil {
+		return err
+	}
+
+	// Create window 2: Removed Resources
+	cmd = exec.Command(v.tmuxPath, "new-window", "-t", sessionName, "-n", "Removed")
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	if err := v.launchWindowWithFzf(sessionName, 2, "Removed", removed, differ.ChangeTypeRemoved); err != nil {
+		return err
+	}
+
+	// Select window 0 (Modified) as default
+	cmd = exec.Command(v.tmuxPath, "select-window", "-t", fmt.Sprintf("%s:0", sessionName))
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	// Attach to the session (this blocks until user exits)
+	cmd = exec.Command(v.tmuxPath, "attach-session", "-t", sessionName)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		// Cleanup session even on error
+		exec.Command(v.tmuxPath, "kill-session", "-t", sessionName).Run()
+		return fmt.Errorf("tmux session error: %w", err)
+	}
+
+	// Cleanup: kill session after detach
+	exec.Command(v.tmuxPath, "kill-session", "-t", sessionName).Run()
 
 	return nil
 }
 
-// buildPreviewCommand creates the preview command for fzf
-func (v *Viewer) buildPreviewCommand(tmpFile string) string {
-	// Use grep to find the resource section and pipe to delta
-	return fmt.Sprintf("grep -A 50 '{}' %s | %s --side-by-side --line-numbers --paging=never --width $FZF_PREVIEW_COLUMNS",
-		tmpFile, v.deltaPath)
-}
+// launchWindowWithFzf sets up a tmux window with fzf (left pane) and delta preview (right pane)
+func (v *Viewer) launchWindowWithFzf(sessionName string, windowIndex int, windowName string, resources []differ.ResourceDiff, changeType differ.ChangeType) error {
+	target := fmt.Sprintf("%s:%d", sessionName, windowIndex)
 
-// showWithDelta displays content through delta
-func (v *Viewer) showWithDelta(content []byte) error {
-	cmd := exec.Command(v.deltaPath, "--side-by-side", "--line-numbers", "--paging=always")
-	cmd.Stdin = bytes.NewReader(content)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	if len(resources) == 0 {
+		// Show a message in empty windows
+		msg := fmt.Sprintf("No %s resources", strings.ToLower(string(changeType)))
+		cmd := exec.Command(v.tmuxPath, "send-keys", "-t", target,
+			fmt.Sprintf("echo '%s' && echo '' && echo 'Press Ctrl-b 0/1/2 to switch windows, or Ctrl-d to exit' && bash", msg), "C-m")
+		return cmd.Run()
+	}
+
+	// Create temp directory for this window's files
+	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("kyt-%s-*", changeType))
+	if err != nil {
+		return err
+	}
+
+	// Write resource list file and individual diff files
+	resourceListFile := filepath.Join(tmpDir, "resources.txt")
+	f, err := os.Create(resourceListFile)
+	if err != nil {
+		return err
+	}
+
+	for i, rd := range resources {
+		// Write resource name to list
+		name := getResourceName(rd)
+		fmt.Fprintln(f, name)
+
+		// Write individual diff file
+		diffFile := filepath.Join(tmpDir, fmt.Sprintf("resource_%d.diff", i+1))
+		cleanDiff := v.generateCleanDiff(rd)
+		if err := os.WriteFile(diffFile, []byte(cleanDiff), 0644); err != nil {
+			f.Close()
+			return err
+		}
+	}
+	f.Close()
+
+	// Split window vertically: left 30% for fzf, right 70% for delta
+	cmd := exec.Command(v.tmuxPath, "split-window", "-t", target, "-h", "-p", "70")
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	// Build fzf command with delta preview
+	previewCmd := fmt.Sprintf("%s --side-by-side --line-numbers --paging=never --width $COLUMNS %s/resource_{n}.diff",
+		v.deltaPath, tmpDir)
+
+	header := fmt.Sprintf("%s: %d resources | Ctrl-t=toggle preview | Esc=quit | Ctrl-b 0/1/2=switch window",
+		windowName, len(resources))
+
+	fzfCmd := fmt.Sprintf("%s --prompt='%s: ' --header='%s' --preview='%s' --preview-window=right:70%%:wrap --height=100%% --bind=ctrl-t:toggle-preview < %s",
+		v.fzfPath, windowName, header, previewCmd, resourceListFile)
+
+	// Send fzf command to left pane (pane 0)
+	cmd = exec.Command(v.tmuxPath, "send-keys", "-t",
+		fmt.Sprintf("%s.0", target), // .0 is left pane
+		fzfCmd, "C-m")
 
 	return cmd.Run()
 }
