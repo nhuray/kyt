@@ -1,4 +1,10 @@
-# kyt (Kubernetes YAML Toolkit)
+# kyt
+
+<p align="center">
+  <img src="docs/banner.png" alt="Kubernetes Yaml Toolkit" width="800"/>
+</p>
+
+`kyt` stands for Kubernetes Yaml Toolkit (or Know Your Things). 
 
 A powerful CLI tool for formatting and comparing Kubernetes manifests with intelligent ignore rules.
 
@@ -12,7 +18,8 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 
 1. **Formatting manifests** - Sorts keys alphabetically for consistent YAML structure
 2. **Smart comparison** - Normalizes and compares manifests using ArgoCD-compatible ignore rules (removes fields, applies custom rules, sorts keys)
-3. **Beautiful diffs** - Generates unified diff output (git-style) that's easy to read and integrate with tools
+3. **Beautiful diffs** - Generates unified diff output (git-style) that's easy to read and integrate with tools ([delta](https://github.com/dandavison/delta), [difftohtml](https://github.com/rtfpessoa/diff2html) ...)
+4. **Terminal UI** - Terminal UI inspired by [k9s](https://github.com/derailed/k9s) for exploring large diffs
 
 **Key Features:**
 
