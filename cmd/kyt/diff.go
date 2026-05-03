@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/nhuray/kyt/pkg/config"
 	"github.com/nhuray/kyt/pkg/differ"
+	"github.com/nhuray/kyt/pkg/interactive"
 	"github.com/nhuray/kyt/pkg/manifest"
 	"github.com/nhuray/kyt/pkg/normalizer"
 	"github.com/nhuray/kyt/pkg/pager"
@@ -27,6 +29,7 @@ var (
 	diffIncludeKinds        string
 	diffExcludeKinds        string
 	diffContext             string
+	diffInteractive         bool
 )
 
 var diffCmd = &cobra.Command{
@@ -37,6 +40,7 @@ var diffCmd = &cobra.Command{
 Supports:
 - Unified diff format (git-style)
 - Configurable pager support (with $PAGER fallback)
+- Interactive mode with fzf + delta (--interactive)
 - Tabular summary with --summary flag
 - Smart similarity matching for renamed resources
 - Resource filtering by kind (include/exclude)
@@ -46,6 +50,12 @@ Exit Codes:
 - 0: No differences found
 - 1: Differences found
 - 2+: Error occurred
+
+Interactive Mode:
+- Use --interactive or -i to enable interactive resource selection
+- Requires fzf and delta: brew install fzf git-delta
+- Navigate resources with fzf, view side-by-side diff with delta
+- Press Enter to view full diff, Ctrl-/ to toggle preview, Esc to quit
 
 Resource Filtering:
 - Use --include to only compare specific resource kinds
@@ -64,6 +74,10 @@ Cluster Comparison:
 Examples:
   # Compare two directories
   kyt diff ./left-manifests ./right-manifests
+
+  # Interactive mode with fzf resource selection
+  kyt diff -i ns:default ns:staging
+  kyt diff --interactive ./left ./right
 
   # Compare two namespaces (uses current context)
   kyt diff ns:default ns:staging
@@ -130,6 +144,7 @@ func init() {
 	diffCmd.Flags().StringVar(&diffIncludeKinds, "include", "", "comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')")
 	diffCmd.Flags().StringVar(&diffExcludeKinds, "exclude", "", "comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')")
 	diffCmd.Flags().StringVar(&diffContext, "context", "", "Kubernetes context to use for namespace inputs (defaults to current context)")
+	diffCmd.Flags().BoolVarP(&diffInteractive, "interactive", "i", false, "interactive mode with fzf resource selection and delta side-by-side view (requires fzf and delta)")
 
 	rootCmd.AddCommand(diffCmd)
 }
@@ -316,6 +331,41 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	result, err := d.Diff(sourceManifests, targetManifests)
 	if err != nil {
 		return fmt.Errorf("failed to diff manifests: %w", err)
+	}
+
+	// Handle interactive mode
+	if diffInteractive {
+		// Check if we can use interactive mode
+		if diffOutput != "" {
+			return fmt.Errorf("--interactive cannot be used with --output")
+		}
+		if diffSummary {
+			return fmt.Errorf("--interactive cannot be used with --summary")
+		}
+
+		// Create interactive viewer
+		viewer, err := interactive.NewViewer()
+		if err != nil {
+			return fmt.Errorf("failed to create interactive viewer: %w\nInstall dependencies: brew install fzf git-delta", err)
+		}
+
+		// Generate diff output to buffer
+		var buf bytes.Buffer
+		rep := reporter.NewReporter(false, true) // Always colorize for delta
+		if err := rep.Report(result, &nopWriteCloser{&buf}); err != nil {
+			return fmt.Errorf("failed to generate report: %w", err)
+		}
+
+		// Show interactive viewer
+		if err := viewer.Show(buf.Bytes()); err != nil {
+			return fmt.Errorf("failed to show interactive viewer: %w", err)
+		}
+
+		// Git-style exit code
+		if hasChanges(result) {
+			return &exitError{code: 1}
+		}
+		return nil
 	}
 
 	// Create reporter
