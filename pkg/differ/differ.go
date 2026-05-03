@@ -234,8 +234,8 @@ func (d *Differ) generateModifiedDiff(match Match, source, target *unstructured.
 		return ResourceDiff{}, fmt.Errorf("failed to generate unified diff: %w", err)
 	}
 
-	// Count insertions and deletions
-	insertions, deletions := countChanges(edits, string(sourceYAML))
+	// Count insertions and deletions from the unified diff
+	insertions, deletions := countChangesFromUnifiedDiff(unified)
 
 	return ResourceDiff{
 		SourceKey:       &match.SourceKey,
@@ -280,18 +280,22 @@ func countLines(s string) int {
 	return count
 }
 
-// countChanges counts insertions and deletions from edit operations
-func countChanges(edits []udiff.Edit, source string) (insertions, deletions int) {
-	for _, edit := range edits {
-		// Deletions: content removed from source
-		if edit.End > edit.Start {
-			deleted := source[edit.Start:edit.End]
-			deletions += countLines(deleted)
+// countChangesFromUnifiedDiff counts insertions and deletions from a unified diff string
+// It counts lines that start with '+' (insertions) and '-' (deletions),
+// excluding the file header lines (+++ and ---)
+func countChangesFromUnifiedDiff(unifiedDiff string) (insertions, deletions int) {
+	lines := strings.Split(unifiedDiff, "\n")
+	for _, line := range lines {
+		if len(line) == 0 {
+			continue
 		}
-
-		// Insertions: content added to target
-		if edit.New != "" {
-			insertions += countLines(edit.New)
+		// Count additions (lines starting with +, but not +++ file headers)
+		if line[0] == '+' && !strings.HasPrefix(line, "+++") {
+			insertions++
+		}
+		// Count deletions (lines starting with -, but not --- file headers)
+		if line[0] == '-' && !strings.HasPrefix(line, "---") {
+			deletions++
 		}
 	}
 	return insertions, deletions
