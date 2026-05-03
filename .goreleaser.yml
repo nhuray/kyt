@@ -57,7 +57,6 @@ archives:
     # Files to include in archive
     files:
       - README.md
-      - LICENSE
       - docs/*.md
       - examples/.kyt.yaml
 
