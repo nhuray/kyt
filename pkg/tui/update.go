@@ -21,9 +21,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Update table size
-		m.table.SetWidth(msg.Width)
-		m.table.SetHeight(msg.Height - 8) // Leave room for header/footer
+		// Rebuild table with new dimensions to recalculate column widths
+		m.table = m.buildTable()
 
 		// Update viewport size
 		m.viewport.Width = msg.Width

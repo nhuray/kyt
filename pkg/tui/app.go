@@ -13,7 +13,7 @@ func Run(result *differ.DiffResult, leftSource, rightSource string) error {
 	// Create model
 	m := NewModel(result, leftSource, rightSource)
 
-	// Initialize table with default dimensions (will be updated by WindowSizeMsg)
+	// Initialize table with default dimensions (will be rebuilt by WindowSizeMsg with actual terminal size)
 	m.table = m.buildTable()
 
 	// Initialize viewport
