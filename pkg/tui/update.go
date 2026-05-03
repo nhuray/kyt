@@ -78,6 +78,24 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.table = m.buildTable()
 		return m, nil
 
+	case "left":
+		// Navigate to previous tab
+		if m.currentTab > TabAll {
+			m.currentTab--
+			m.applyFilter()
+			m.table = m.buildTable()
+		}
+		return m, nil
+
+	case "right":
+		// Navigate to next tab
+		if m.currentTab < TabRemoved {
+			m.currentTab++
+			m.applyFilter()
+			m.table = m.buildTable()
+		}
+		return m, nil
+
 	case "/":
 		// Start filter mode
 		m.filterMode = true
@@ -130,13 +148,6 @@ func (m *Model) handleDiffKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Toggle to side-by-side mode
 		m.diffMode = diff.ModeSideBySide
 		m.renderer.Mode = diff.ModeSideBySide
-		m.reloadDiff()
-		return m, nil
-
-	case "i":
-		// Toggle to inline mode
-		m.diffMode = diff.ModeInline
-		m.renderer.Mode = diff.ModeInline
 		m.reloadDiff()
 		return m, nil
 
@@ -301,22 +312,106 @@ func (m *Model) reloadDiff() {
 
 // buildTable builds the table component from filtered rows
 func (m *Model) buildTable() table.Model {
-	columns := []table.Column{
-		{Title: "KIND", Width: 20},
-		{Title: "NAME", Width: 40},
-		{Title: "NAMESPACE", Width: 20},
-		{Title: "CHANGE", Width: 15},
-	}
+	var columns []table.Column
+	var rows []table.Row
 
-	rows := []table.Row{}
-	for _, r := range m.filteredRows {
-		changeStr := formatChange(r)
-		rows = append(rows, table.Row{
-			r.Kind,
-			r.Name,
-			r.Namespace,
-			changeStr,
-		})
+	// Define columns based on current tab
+	switch m.currentTab {
+	case TabAll:
+		// All tab: CHANGE, KIND, LEFT, RIGHT, MATCH TYPE, SIMILARITY SCORE, DIFF
+		columns = []table.Column{
+			{Title: "CHANGE", Width: 8},
+			{Title: "KIND", Width: 15},
+			{Title: "LEFT", Width: 30},
+			{Title: "RIGHT", Width: 30},
+			{Title: "MATCH TYPE", Width: 12},
+			{Title: "SIMILARITY", Width: 11},
+			{Title: "DIFF", Width: 12},
+		}
+
+		for _, r := range m.filteredRows {
+			matchType := ""
+			similarity := ""
+			if r.ChangeType == differ.ChangeTypeModified {
+				matchType = r.MatchType
+				if r.MatchType == "similarity" {
+					similarity = fmt.Sprintf("%.2f", r.SimilarityScore)
+				}
+			}
+
+			rows = append(rows, table.Row{
+				formatChangeIndicator(r.ChangeType),
+				r.Kind,
+				r.LeftName,
+				r.RightName,
+				matchType,
+				similarity,
+				formatDiff(r),
+			})
+		}
+
+	case TabAdded:
+		// Added tab: KIND, NAME, NAMESPACE, DIFF
+		columns = []table.Column{
+			{Title: "KIND", Width: 20},
+			{Title: "NAME", Width: 40},
+			{Title: "NAMESPACE", Width: 25},
+			{Title: "DIFF", Width: 15},
+		}
+
+		for _, r := range m.filteredRows {
+			rows = append(rows, table.Row{
+				r.Kind,
+				r.Name,
+				r.Namespace,
+				formatDiff(r),
+			})
+		}
+
+	case TabModified:
+		// Modified tab: KIND, LEFT, RIGHT, MATCH TYPE, SIMILARITY SCORE, DIFF
+		columns = []table.Column{
+			{Title: "KIND", Width: 15},
+			{Title: "LEFT", Width: 30},
+			{Title: "RIGHT", Width: 30},
+			{Title: "MATCH TYPE", Width: 12},
+			{Title: "SIMILARITY", Width: 11},
+			{Title: "DIFF", Width: 12},
+		}
+
+		for _, r := range m.filteredRows {
+			similarity := ""
+			if r.MatchType == "similarity" {
+				similarity = fmt.Sprintf("%.2f", r.SimilarityScore)
+			}
+
+			rows = append(rows, table.Row{
+				r.Kind,
+				r.LeftName,
+				r.RightName,
+				r.MatchType,
+				similarity,
+				formatDiff(r),
+			})
+		}
+
+	case TabRemoved:
+		// Removed tab: KIND, NAME, NAMESPACE, DIFF
+		columns = []table.Column{
+			{Title: "KIND", Width: 20},
+			{Title: "NAME", Width: 40},
+			{Title: "NAMESPACE", Width: 25},
+			{Title: "DIFF", Width: 15},
+		}
+
+		for _, r := range m.filteredRows {
+			rows = append(rows, table.Row{
+				r.Kind,
+				r.Name,
+				r.Namespace,
+				formatDiff(r),
+			})
+		}
 	}
 
 	t := table.New(
@@ -342,15 +437,48 @@ func (m *Model) buildTable() table.Model {
 	return t
 }
 
-// formatChange formats the change statistics
-func formatChange(r ResourceRow) string {
+// formatChangeIndicator returns the colored change indicator (A/M/R)
+func formatChangeIndicator(changeType differ.ChangeType) string {
+	const (
+		red    = "\033[31m"
+		green  = "\033[32m"
+		yellow = "\033[33m"
+		reset  = "\033[0m"
+	)
+
+	switch changeType {
+	case differ.ChangeTypeAdded:
+		return green + "A" + reset
+	case differ.ChangeTypeModified:
+		return yellow + "M" + reset
+	case differ.ChangeTypeRemoved:
+		return red + "R" + reset
+	default:
+		return ""
+	}
+}
+
+// formatDiff formats the diff statistics
+func formatDiff(r ResourceRow) string {
+	const (
+		red   = "\033[31m"
+		green = "\033[32m"
+		reset = "\033[0m"
+	)
+
 	switch r.ChangeType {
 	case differ.ChangeTypeAdded:
-		return fmt.Sprintf("+%d", r.Additions)
+		return green + fmt.Sprintf("+%d", r.Additions) + reset
 	case differ.ChangeTypeRemoved:
-		return fmt.Sprintf("-%d", r.Deletions)
+		return red + fmt.Sprintf("-%d", r.Deletions) + reset
 	case differ.ChangeTypeModified:
-		return fmt.Sprintf("+%d -%d", r.Additions, r.Deletions)
+		if r.Additions > 0 && r.Deletions > 0 {
+			return green + fmt.Sprintf("+%d", r.Additions) + reset + " / " + red + fmt.Sprintf("-%d", r.Deletions) + reset
+		} else if r.Additions > 0 {
+			return green + fmt.Sprintf("+%d", r.Additions) + reset
+		} else if r.Deletions > 0 {
+			return red + fmt.Sprintf("-%d", r.Deletions) + reset
+		}
 	}
 	return ""
 }

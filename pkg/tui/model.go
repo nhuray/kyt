@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/nhuray/kyt/pkg/differ"
+	"github.com/nhuray/kyt/pkg/manifest"
 	"github.com/nhuray/kyt/pkg/tui/diff"
 )
 
@@ -63,13 +64,17 @@ type Model struct {
 
 // ResourceRow represents a row in the resource table
 type ResourceRow struct {
-	Kind       string
-	Name       string
-	Namespace  string
-	ChangeType differ.ChangeType
-	Additions  int
-	Deletions  int
-	DiffText   string
+	Kind            string
+	Name            string
+	Namespace       string
+	LeftName        string // For All/Modified tabs: namespace/name from left
+	RightName       string // For All/Modified tabs: namespace/name from right
+	ChangeType      differ.ChangeType
+	MatchType       string  // "exact" or "similarity" (for Modified)
+	SimilarityScore float64 // 0.0-1.0 (for similarity matches)
+	Additions       int
+	Deletions       int
+	DiffText        string
 }
 
 // NewModel creates a new TUI model
@@ -99,29 +104,33 @@ func buildResourceRows(result *differ.DiffResult) []ResourceRow {
 
 	for _, change := range result.Changes {
 		row := ResourceRow{
-			ChangeType: change.ChangeType,
-			DiffText:   change.DiffText,
-			Additions:  change.Insertions,
-			Deletions:  change.Deletions,
+			ChangeType:      change.ChangeType,
+			MatchType:       change.MatchType,
+			SimilarityScore: change.SimilarityScore,
+			DiffText:        change.DiffText,
+			Additions:       change.Insertions,
+			Deletions:       change.Deletions,
 		}
 
 		// Get resource details from SourceKey or TargetKey
-		if change.ChangeType == differ.ChangeTypeAdded && change.TargetKey != nil {
-			row.Kind = change.TargetKey.Kind
-			row.Name = change.TargetKey.Name
-			row.Namespace = change.TargetKey.Namespace
-		} else if change.ChangeType == differ.ChangeTypeRemoved && change.SourceKey != nil {
+		if change.SourceKey != nil {
 			row.Kind = change.SourceKey.Kind
+			row.LeftName = formatResourceName(*change.SourceKey)
+			// For simple display (Added/Removed tabs)
 			row.Name = change.SourceKey.Name
 			row.Namespace = change.SourceKey.Namespace
-		} else if change.TargetKey != nil {
-			row.Kind = change.TargetKey.Kind
-			row.Name = change.TargetKey.Name
-			row.Namespace = change.TargetKey.Namespace
-		} else if change.SourceKey != nil {
-			row.Kind = change.SourceKey.Kind
-			row.Name = change.SourceKey.Name
-			row.Namespace = change.SourceKey.Namespace
+		}
+
+		if change.TargetKey != nil {
+			if row.Kind == "" {
+				row.Kind = change.TargetKey.Kind
+			}
+			row.RightName = formatResourceName(*change.TargetKey)
+			// Override simple display for added resources
+			if change.ChangeType == differ.ChangeTypeAdded {
+				row.Name = change.TargetKey.Name
+				row.Namespace = change.TargetKey.Namespace
+			}
 		}
 
 		rows = append(rows, row)
@@ -136,6 +145,14 @@ func buildResourceRows(result *differ.DiffResult) []ResourceRow {
 	})
 
 	return rows
+}
+
+// formatResourceName formats a resource key as namespace/name
+func formatResourceName(key manifest.ResourceKey) string {
+	if key.Namespace == "" {
+		return key.Name
+	}
+	return key.Namespace + "/" + key.Name
 }
 
 // Init initializes the model

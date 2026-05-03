@@ -12,7 +12,6 @@ type DiffMode int
 
 const (
 	ModeSideBySide DiffMode = iota
-	ModeInline
 	ModeUnified
 )
 
@@ -70,8 +69,6 @@ func (r *Renderer) Render(parsed *ParsedDiff) string {
 	switch r.Mode {
 	case ModeSideBySide:
 		return r.renderSideBySide(parsed)
-	case ModeInline:
-		return r.renderInline(parsed)
 	case ModeUnified:
 		return r.renderUnified(parsed)
 	default:
@@ -84,12 +81,18 @@ func (r *Renderer) renderSideBySide(parsed *ParsedDiff) string {
 	var output strings.Builder
 	halfWidth := (r.Width - 3) / 2 // -3 for separator " │ "
 
-	// Render header
-	output.WriteString(r.Styles.Header.Render(r.truncate(parsed.OldLabel, halfWidth)))
+	// Render header (account for line numbers: 4 digits + 1 space = 5 chars)
+	lineNumWidth := 5
+	headerWidth := halfWidth - lineNumWidth
+
+	leftHeader := strings.Repeat(" ", lineNumWidth) + r.truncate(parsed.OldLabel, headerWidth)
+	rightHeader := strings.Repeat(" ", lineNumWidth) + r.truncate(parsed.NewLabel, headerWidth)
+
+	output.WriteString(r.Styles.Header.Render(leftHeader))
 	output.WriteString(" ")
 	output.WriteString(r.Styles.Separator.Render("│"))
 	output.WriteString(" ")
-	output.WriteString(r.Styles.Header.Render(r.truncate(parsed.NewLabel, halfWidth)))
+	output.WriteString(r.Styles.Header.Render(rightHeader))
 	output.WriteString("\n")
 
 	// Render separator line
@@ -156,8 +159,8 @@ func (r *Renderer) renderCell(content string, lineNum int, width int, style lipg
 	return lineNumStr + " " + style.Render(displayContent)
 }
 
-// renderInline renders an inline diff (classic unified diff with colors)
-func (r *Renderer) renderInline(parsed *ParsedDiff) string {
+// renderUnified renders a unified diff with line numbers and colors
+func (r *Renderer) renderUnified(parsed *ParsedDiff) string {
 	var output strings.Builder
 
 	// Render headers
@@ -182,31 +185,6 @@ func (r *Renderer) renderInline(parsed *ParsedDiff) string {
 			content := r.Styles.Context.Render("  " + r.truncate(line.Content, r.Width-7))
 			output.WriteString(lineNum + " " + content + "\n")
 
-		case LineHunk:
-			output.WriteString(r.Styles.Header.Render(line.Content) + "\n")
-		}
-	}
-
-	return output.String()
-}
-
-// renderUnified renders a plain unified diff (no side-by-side)
-func (r *Renderer) renderUnified(parsed *ParsedDiff) string {
-	var output strings.Builder
-
-	// Render headers
-	output.WriteString(r.Styles.Header.Render(parsed.OldLabel) + "\n")
-	output.WriteString(r.Styles.Header.Render(parsed.NewLabel) + "\n")
-	output.WriteString(r.Styles.Separator.Render(strings.Repeat("─", r.Width)) + "\n")
-
-	for _, line := range parsed.Lines {
-		switch line.Type {
-		case LineAdded:
-			output.WriteString(r.Styles.Added.Render("+ "+r.truncate(line.Content, r.Width-2)) + "\n")
-		case LineRemoved:
-			output.WriteString(r.Styles.Removed.Render("- "+r.truncate(line.Content, r.Width-2)) + "\n")
-		case LineContext:
-			output.WriteString(r.Styles.Context.Render("  "+r.truncate(line.Content, r.Width-2)) + "\n")
 		case LineHunk:
 			output.WriteString(r.Styles.Header.Render(line.Content) + "\n")
 		}

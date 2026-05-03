@@ -90,11 +90,9 @@ func (m *Model) viewDiff() string {
 	// Header with diff mode indicator
 	modeStr := "side-by-side"
 	if m.diffMode == 1 {
-		modeStr = "inline"
-	} else if m.diffMode == 2 {
 		modeStr = "unified"
 	}
-	header := fmt.Sprintf("Diff View [%s] - Press s/i/u to toggle mode", modeStr)
+	header := fmt.Sprintf("Diff View [%s] - Press s/u to toggle mode", modeStr)
 	b.WriteString(headerStyle.Render(header))
 	b.WriteString("\n\n")
 
@@ -103,7 +101,7 @@ func (m *Model) viewDiff() string {
 	b.WriteString("\n\n")
 
 	// Footer
-	b.WriteString(footerStyle.Render("[s] Side-by-side | [i] Inline | [u] Unified | [↑/↓] Scroll | [Esc] Back | [q] Quit"))
+	b.WriteString(footerStyle.Render("[s] Side-by-side | [u] Unified | [↑/↓] Scroll | [Esc] Back | [q] Quit"))
 
 	return b.String()
 }
@@ -114,39 +112,39 @@ func (m *Model) viewHelp() string {
 KEYBOARD SHORTCUTS
 
 Navigation:
-  ↑/↓, j/k     Navigate table rows
-  0/1/2/3      Switch tabs (All/Added/Modified/Removed)
-  Enter        View selected resource diff
-  Esc          Go back / Cancel
+  ↑/↓, j/k         Navigate table rows
+  ←/→              Navigate between tabs
+  0/1/2/3          Jump to tab (All/Added/Modified/Removed)
+  Enter            View selected resource diff
+  Esc              Go back / Cancel
 
 Filtering:
-  /            Start filter mode (type to filter by name/kind/namespace)
-  :            Command mode (shortcuts: :cm, :svc, :deploy, etc.)
+  /                Start filter mode (type to filter by name/kind/namespace)
+  :                Command mode (shortcuts: :cm, :svc, :deploy, etc.)
 
 Diff View:
-  s            Side-by-side diff mode
-  i            Inline diff mode
-  u            Unified diff mode
-  ↑/↓, j/k     Scroll diff
+  s                Side-by-side diff mode
+  u                Unified diff mode
+  ↑/↓, j/k         Scroll diff
 
 General:
-  ?            Toggle help
-  q, Ctrl+c    Quit
+  ?                Toggle help
+  q, Ctrl+c        Quit
 
 COMMAND SHORTCUTS
-  :cm          ConfigMaps
-  :svc         Services
-  :deploy      Deployments
-  :sts         StatefulSets
-  :secret      Secrets
-  :ns          Namespaces
-  :sa          ServiceAccounts
-  :po          Pods
-  :ing         Ingresses
-  :pv          PersistentVolumes
-  :pvc         PersistentVolumeClaims
-  :ds          DaemonSets
-  :rs          ReplicaSets
+  :cm              ConfigMaps
+  :svc             Services
+  :deploy          Deployments
+  :sts             StatefulSets
+  :secret          Secrets
+  :ns              Namespaces
+  :sa              ServiceAccounts
+  :po              Pods
+  :ing             Ingresses
+  :pv              PersistentVolumes
+  :pvc             PersistentVolumeClaims
+  :ds              DaemonSets
+  :rs              ReplicaSets
 `
 	return helpStyle.Render(help)
 }
@@ -179,5 +177,5 @@ func (m *Model) renderFooter() string {
 	if m.filterMode || m.commandMode {
 		return footerStyle.Render("[Enter] Apply | [Esc] Cancel | [Ctrl+u] Clear")
 	}
-	return footerStyle.Render("[Enter] View | [/] Filter | [:] Command | [?] Help | [q] Quit")
+	return footerStyle.Render("[Enter] View | [←/→] Tabs | [/] Filter | [:] Command | [?] Help | [q] Quit")
 }
