@@ -12,6 +12,7 @@ import (
 	"github.com/nhuray/kyt/pkg/pager"
 	"github.com/nhuray/kyt/pkg/reporter"
 	"github.com/nhuray/kyt/pkg/resourcekind"
+	"github.com/nhuray/kyt/pkg/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -19,6 +20,7 @@ var (
 	// Diff command flags
 	diffOutput              string
 	diffSummary             bool
+	diffTUI                 bool
 	diffUnified             int
 	diffColor               string
 	diffExactMatch          bool
@@ -122,6 +124,7 @@ Examples:
 func init() {
 	diffCmd.Flags().StringVarP(&diffOutput, "output", "o", "", "write diff to file instead of stdout")
 	diffCmd.Flags().BoolVar(&diffSummary, "summary", false, "show tabular summary of resource changes")
+	diffCmd.Flags().BoolVar(&diffTUI, "tui", false, "show interactive terminal UI for exploring diffs")
 	diffCmd.Flags().IntVarP(&diffUnified, "unified", "U", 3, "generate diff with <n> lines of context")
 	diffCmd.Flags().StringVar(&diffColor, "color", "auto", "colorize output: auto, always, never")
 	diffCmd.Flags().BoolVar(&diffExactMatch, "exact-match", false, "disable similarity matching (only exact name matches)")
@@ -316,6 +319,21 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	result, err := d.Diff(sourceManifests, targetManifests)
 	if err != nil {
 		return fmt.Errorf("failed to diff manifests: %w", err)
+	}
+
+	// Check for conflicting flags
+	if diffTUI && diffOutput != "" {
+		return fmt.Errorf("--tui and --output flags are mutually exclusive")
+	}
+	if diffTUI && diffSummary {
+		return fmt.Errorf("--tui and --summary flags are mutually exclusive")
+	}
+
+	// If TUI mode is requested, launch the interactive interface
+	if diffTUI {
+		leftSource := formatInputForDisplay(sourceInput, effectiveContext)
+		rightSource := formatInputForDisplay(targetInput, effectiveContext)
+		return tui.Run(result, leftSource, rightSource)
 	}
 
 	// Create reporter
