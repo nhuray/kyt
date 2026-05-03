@@ -31,16 +31,24 @@ const (
 	TabRemoved
 )
 
+// SortField represents the field to sort by
+type SortField int
+
+const (
+	SortByDefault SortField = iota
+	SortByName
+	SortByStatus
+)
+
 // Model represents the TUI application state
 type Model struct {
 	// State
 	currentView ViewType
 	currentTab  TabType
 	diffMode    diff.DiffMode
-	filter      string
-	filterMode  bool
-	commandMode bool
-	commandBuf  string
+	sortField   SortField
+	search      string
+	searchMode  bool
 
 	// Data
 	result       *differ.DiffResult
@@ -185,25 +193,70 @@ func filterByType(resources []ResourceRow, changeType differ.ChangeType) []Resou
 	return filtered
 }
 
-// applyFilter applies the current filter and tab to resources
+// applyFilter applies the current search filter and tab to resources
 func (m *Model) applyFilter() {
 	tabRows := m.getRowsForTab()
 
-	if m.filter == "" {
+	if m.search == "" {
 		m.filteredRows = tabRows
+		m.sortRows()
 		return
 	}
 
 	// Filter by name, kind, or namespace
 	filtered := []ResourceRow{}
 	for _, r := range tabRows {
-		if contains(r.Name, m.filter) ||
-			contains(r.Kind, m.filter) ||
-			contains(r.Namespace, m.filter) {
+		if contains(r.Name, m.search) ||
+			contains(r.Kind, m.search) ||
+			contains(r.Namespace, m.search) {
 			filtered = append(filtered, r)
 		}
 	}
 	m.filteredRows = filtered
+	m.sortRows()
+}
+
+// sortRows sorts the filtered rows based on current sort field and tab
+func (m *Model) sortRows() {
+	switch m.sortField {
+	case SortByName:
+		sort.Slice(m.filteredRows, func(i, j int) bool {
+			return m.filteredRows[i].Name < m.filteredRows[j].Name
+		})
+	case SortByStatus:
+		sort.Slice(m.filteredRows, func(i, j int) bool {
+			if m.filteredRows[i].ChangeType != m.filteredRows[j].ChangeType {
+				return m.filteredRows[i].ChangeType < m.filteredRows[j].ChangeType
+			}
+			return m.filteredRows[i].Kind < m.filteredRows[j].Kind
+		})
+	case SortByDefault:
+		// Default sorting based on tab
+		switch m.currentTab {
+		case TabAll, TabModified:
+			// Sort by Kind, LeftName, RightName
+			sort.Slice(m.filteredRows, func(i, j int) bool {
+				if m.filteredRows[i].Kind != m.filteredRows[j].Kind {
+					return m.filteredRows[i].Kind < m.filteredRows[j].Kind
+				}
+				if m.filteredRows[i].LeftName != m.filteredRows[j].LeftName {
+					return m.filteredRows[i].LeftName < m.filteredRows[j].LeftName
+				}
+				return m.filteredRows[i].RightName < m.filteredRows[j].RightName
+			})
+		case TabAdded, TabRemoved:
+			// Sort by Kind, Namespace, Name
+			sort.Slice(m.filteredRows, func(i, j int) bool {
+				if m.filteredRows[i].Kind != m.filteredRows[j].Kind {
+					return m.filteredRows[i].Kind < m.filteredRows[j].Kind
+				}
+				if m.filteredRows[i].Namespace != m.filteredRows[j].Namespace {
+					return m.filteredRows[i].Namespace < m.filteredRows[j].Namespace
+				}
+				return m.filteredRows[i].Name < m.filteredRows[j].Name
+			})
+		}
+	}
 }
 
 // contains checks if s contains substr (case-insensitive)

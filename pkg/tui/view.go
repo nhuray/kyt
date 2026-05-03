@@ -68,12 +68,13 @@ func (m *Model) viewTable() string {
 	b.WriteString(m.table.View())
 	b.WriteString("\n\n")
 
-	// Filter/Command mode input
-	if m.filterMode {
-		b.WriteString(filterStyle.Render(fmt.Sprintf("Filter: %s", m.filter)))
-		b.WriteString("\n")
-	} else if m.commandMode {
-		b.WriteString(filterStyle.Render(fmt.Sprintf(":%s", m.commandBuf)))
+	// Search mode input
+	if m.searchMode {
+		searchLabel := "Search"
+		if strings.HasPrefix(m.search, ":") {
+			searchLabel = "Command"
+		}
+		b.WriteString(filterStyle.Render(fmt.Sprintf("%s: %s", searchLabel, m.search)))
 		b.WriteString("\n")
 	}
 
@@ -92,7 +93,7 @@ func (m *Model) viewDiff() string {
 	if m.diffMode == 1 {
 		modeStr = "unified"
 	}
-	header := fmt.Sprintf("Diff View [%s] - Press s/u to toggle mode", modeStr)
+	header := fmt.Sprintf("Diff View [%s]", modeStr)
 	b.WriteString(headerStyle.Render(header))
 	b.WriteString("\n\n")
 
@@ -101,7 +102,7 @@ func (m *Model) viewDiff() string {
 	b.WriteString("\n\n")
 
 	// Footer
-	b.WriteString(footerStyle.Render("[s] Side-by-side | [u] Unified | [↑/↓] Scroll | [Esc] Back | [q] Quit"))
+	b.WriteString(footerStyle.Render("[s] Side-by-side | [u] Unified | [j/k] Scroll | [q] Back | [:q] Quit"))
 
 	return b.String()
 }
@@ -109,42 +110,39 @@ func (m *Model) viewDiff() string {
 // viewHelp renders the help view
 func (m *Model) viewHelp() string {
 	help := `
-KEYBOARD SHORTCUTS
+KEYBOARD SHORTCUTS (k9s-style)
 
 Navigation:
-  ↑/↓, j/k         Navigate table rows
-  ←/→              Navigate between tabs
-  0/1/2/3          Jump to tab (All/Added/Modified/Removed)
-  Enter            View selected resource diff
-  Esc              Go back / Cancel
+  h               Navigate left (previous tab)
+  l               Navigate right (next tab)
+  k, ↑            Move up
+  j, ↓            Move down
+  g               Go to top
+  G (shift-g)     Go to bottom
+  ctrl-f          Page down
+  ctrl-b          Page up
+  0/1/2/3         Jump to tab (All/Added/Modified/Removed)
+  Enter           View selected resource diff
 
-Filtering:
-  /                Start filter mode (type to filter by name/kind/namespace)
-  :                Command mode (shortcuts: :cm, :svc, :deploy, etc.)
+Search:
+  /               Search (filter by Kind, Name, or Namespace)
+  
+Sorting:
+  N (shift-n)     Sort by name
+  S (shift-s)     Sort by status (Added/Modified/Removed)
 
 Diff View:
-  s                Side-by-side diff mode
-  u                Unified diff mode
-  ↑/↓, j/k         Scroll diff
+  s               Side-by-side diff mode
+  u               Unified diff mode  
+  j/k, ↑/↓        Scroll diff
+  ctrl-f/ctrl-b   Page down/up
+  g/G             Go to top/bottom
 
 General:
-  ?                Toggle help
-  q, Ctrl+c        Quit
-
-COMMAND SHORTCUTS
-  :cm              ConfigMaps
-  :svc             Services
-  :deploy          Deployments
-  :sts             StatefulSets
-  :secret          Secrets
-  :ns              Namespaces
-  :sa              ServiceAccounts
-  :po              Pods
-  :ing             Ingresses
-  :pv              PersistentVolumes
-  :pvc             PersistentVolumeClaims
-  :ds              DaemonSets
-  :rs              ReplicaSets
+  ?               Toggle help
+  q               Back / Cancel
+  :q              Quit application
+  ctrl-c          Force quit
 `
 	return helpStyle.Render(help)
 }
@@ -174,8 +172,8 @@ func (m *Model) renderTab(key, label string, count int, active bool) string {
 
 // renderFooter renders the footer with keyboard hints
 func (m *Model) renderFooter() string {
-	if m.filterMode || m.commandMode {
-		return footerStyle.Render("[Enter] Apply | [Esc] Cancel | [Ctrl+u] Clear")
+	if m.searchMode {
+		return footerStyle.Render("[Enter] Apply | [q] Cancel | [Ctrl+u] Clear")
 	}
-	return footerStyle.Render("[Enter] View | [←/→] Tabs | [/] Filter | [:] Command | [?] Help | [q] Quit")
+	return footerStyle.Render("[Enter] View | [h/l] Tabs | [/] Search | [N/S] Sort | [?] Help | [:q] Quit")
 }

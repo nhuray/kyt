@@ -40,14 +40,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKeyPress routes key presses based on current view/mode
 func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle filter mode first
-	if m.filterMode {
-		return m.handleFilterKeys(msg)
-	}
-
-	// Handle command mode
-	if m.commandMode {
-		return m.handleCommandKeys(msg)
+	// Handle search mode first
+	if m.searchMode {
+		return m.handleSearchKeys(msg)
 	}
 
 	// Route based on view
@@ -67,18 +62,34 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 
-	case "ctrl+c", "q":
+	case "ctrl+c":
 		return m, tea.Quit
 
+	case ":":
+		// Start command mode for :q
+		m.searchMode = true
+		m.search = ":"
+		return m, nil
+
+	case "q":
+		// Back/escape - clear search if active, otherwise do nothing
+		if m.searchMode {
+			m.searchMode = false
+			m.search = ""
+			m.applyFilter()
+			m.table = m.buildTable()
+		}
+		return m, nil
+
+	// Tab navigation
 	case "0", "1", "2", "3":
-		// Switch tabs
 		tabNum := int(msg.String()[0] - '0')
 		m.currentTab = TabType(tabNum)
 		m.applyFilter()
 		m.table = m.buildTable()
 		return m, nil
 
-	case "left":
+	case "h", "left":
 		// Navigate to previous tab
 		if m.currentTab > TabAll {
 			m.currentTab--
@@ -87,7 +98,7 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "right":
+	case "l", "right":
 		// Navigate to next tab
 		if m.currentTab < TabRemoved {
 			m.currentTab++
@@ -96,18 +107,55 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	// Row navigation
+	case "k", "up":
+		m.table.MoveUp(1)
+		return m, nil
+
+	case "j", "down":
+		m.table.MoveDown(1)
+		return m, nil
+
+	case "g":
+		// Go to top
+		m.table.GotoTop()
+		return m, nil
+
+	case "G":
+		// Go to bottom
+		m.table.GotoBottom()
+		return m, nil
+
+	case "ctrl+f", "pgdown":
+		// Page down
+		m.table.MoveDown(m.height - 10)
+		return m, nil
+
+	case "ctrl+b", "pgup":
+		// Page up
+		m.table.MoveUp(m.height - 10)
+		return m, nil
+
+	// Sorting
+	case "N":
+		m.sortField = SortByName
+		m.applyFilter()
+		m.table = m.buildTable()
+		return m, nil
+
+	case "S":
+		m.sortField = SortByStatus
+		m.applyFilter()
+		m.table = m.buildTable()
+		return m, nil
+
+	// Search
 	case "/":
-		// Start filter mode
-		m.filterMode = true
-		m.filter = ""
+		m.searchMode = true
+		m.search = ""
 		return m, nil
 
-	case ":":
-		// Start command mode
-		m.commandMode = true
-		m.commandBuf = ""
-		return m, nil
-
+	// Actions
 	case "enter":
 		// View selected resource diff
 		if len(m.filteredRows) == 0 {
@@ -125,10 +173,8 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	default:
-		// Delegate to table for navigation (↑/↓, j/k, etc.)
-		var cmd tea.Cmd
-		m.table, cmd = m.table.Update(msg)
-		return m, cmd
+		// No default delegation to table for j/k since we handle them explicitly
+		return m, nil
 	}
 }
 
@@ -136,10 +182,10 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleDiffKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 
-	case "ctrl+c", "q":
+	case "ctrl+c":
 		return m, tea.Quit
 
-	case "esc":
+	case "q", "esc":
 		// Go back to table view
 		m.currentView = ViewTable
 		return m, nil
@@ -158,11 +204,32 @@ func (m *Model) handleDiffKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.reloadDiff()
 		return m, nil
 
+	case "k", "up":
+		m.viewport.LineUp(1)
+		return m, nil
+
+	case "j", "down":
+		m.viewport.LineDown(1)
+		return m, nil
+
+	case "ctrl+f", "pgdown":
+		m.viewport.ViewDown()
+		return m, nil
+
+	case "ctrl+b", "pgup":
+		m.viewport.ViewUp()
+		return m, nil
+
+	case "g":
+		m.viewport.GotoTop()
+		return m, nil
+
+	case "G":
+		m.viewport.GotoBottom()
+		return m, nil
+
 	default:
-		// Delegate to viewport for scrolling
-		var cmd tea.Cmd
-		m.viewport, cmd = m.viewport.Update(msg)
-		return m, cmd
+		return m, nil
 	}
 }
 
@@ -176,107 +243,47 @@ func (m *Model) handleHelpKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleFilterKeys handles keyboard input in filter mode
-func (m *Model) handleFilterKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// handleSearchKeys handles keyboard input in search mode
+func (m *Model) handleSearchKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 
-	case "esc", "ctrl+c":
-		// Cancel filter
-		m.filterMode = false
-		m.filter = ""
+	case "esc", "ctrl+c", "q":
+		// Cancel search
+		m.searchMode = false
+		m.search = ""
 		m.applyFilter()
 		m.table = m.buildTable()
 		return m, nil
 
 	case "enter":
-		// Apply filter
-		m.filterMode = false
+		// Check if it's :q command to quit
+		if m.search == ":q" {
+			return m, tea.Quit
+		}
+		// Apply search
+		m.searchMode = false
 		m.applyFilter()
 		m.table = m.buildTable()
 		return m, nil
 
 	case "backspace":
 		// Remove last character
-		if len(m.filter) > 0 {
-			m.filter = m.filter[:len(m.filter)-1]
+		if len(m.search) > 0 {
+			m.search = m.search[:len(m.search)-1]
 		}
 		return m, nil
 
 	case "ctrl+u":
-		// Clear entire filter
-		m.filter = ""
+		// Clear entire search
+		m.search = ""
 		return m, nil
 
 	default:
-		// Add character to filter
+		// Add character to search
 		if len(msg.String()) == 1 {
-			m.filter += msg.String()
+			m.search += msg.String()
 		}
 		return m, nil
-	}
-}
-
-// handleCommandKeys handles keyboard input in command mode
-func (m *Model) handleCommandKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-
-	case "esc", "ctrl+c":
-		// Cancel command
-		m.commandMode = false
-		m.commandBuf = ""
-		return m, nil
-
-	case "enter":
-		// Execute command
-		m.executeCommand(m.commandBuf)
-		m.commandMode = false
-		m.commandBuf = ""
-		m.applyFilter()
-		m.table = m.buildTable()
-		return m, nil
-
-	case "backspace":
-		// Remove last character
-		if len(m.commandBuf) > 0 {
-			m.commandBuf = m.commandBuf[:len(m.commandBuf)-1]
-		}
-		return m, nil
-
-	case "ctrl+u":
-		// Clear entire command
-		m.commandBuf = ""
-		return m, nil
-
-	default:
-		// Add character to command
-		if len(msg.String()) == 1 {
-			m.commandBuf += msg.String()
-		}
-		return m, nil
-	}
-}
-
-// executeCommand executes a k9s-style command
-func (m *Model) executeCommand(cmd string) {
-	// Parse command like "cm" for ConfigMaps, "svc" for Services
-	kindMap := map[string]string{
-		"cm":     "ConfigMap",
-		"svc":    "Service",
-		"deploy": "Deployment",
-		"sts":    "StatefulSet",
-		"secret": "Secret",
-		"ns":     "Namespace",
-		"sa":     "ServiceAccount",
-		"po":     "Pod",
-		"ing":    "Ingress",
-		"pv":     "PersistentVolume",
-		"pvc":    "PersistentVolumeClaim",
-		"ds":     "DaemonSet",
-		"rs":     "ReplicaSet",
-	}
-
-	if kind, ok := kindMap[cmd]; ok {
-		m.filter = kind
 	}
 }
 
