@@ -37,7 +37,10 @@ type SortField int
 const (
 	SortByDefault SortField = iota
 	SortByName
-	SortByStatus
+	SortByLeft
+	SortByRight
+	SortByKind
+	SortByChange
 )
 
 // Model represents the TUI application state
@@ -91,7 +94,7 @@ type ResourceRow struct {
 func NewModel(result *differ.DiffResult, leftSource, rightSource string) *Model {
 	m := &Model{
 		currentView: ViewTable,
-		currentTab:  TabModified, // Start with Modified tab (most common)
+		currentTab:  TabAll, // Start with All tab (most common)
 		diffMode:    diff.ModeSideBySide,
 		result:      result,
 		leftSource:  leftSource,
@@ -223,6 +226,42 @@ func (m *Model) applyFilter() {
 // sortRows sorts the filtered rows based on current sort field and tab
 func (m *Model) sortRows() {
 	switch m.sortField {
+	// Sort by Change Type (Added, Modified, Removed)
+    case SortByChange:
+        sort.Slice(m.filteredRows, func(i, j int) bool {
+            if m.filteredRows[i].ChangeType != m.filteredRows[j].ChangeType {
+                if m.sortReversed {
+                    return m.filteredRows[i].ChangeType > m.filteredRows[j].ChangeType
+                }
+                return m.filteredRows[i].ChangeType < m.filteredRows[j].ChangeType
+            }
+            return m.filteredRows[i].Kind < m.filteredRows[j].Kind
+        })
+    // Sort by Kind
+	case SortByKind:
+		sort.Slice(m.filteredRows, func(i, j int) bool {
+			if m.sortReversed {
+				return m.filteredRows[i].Kind > m.filteredRows[j].Kind
+			}
+			return m.filteredRows[i].Kind < m.filteredRows[j].Kind
+		})
+    // Sort by Left
+	case SortByLeft:
+		sort.Slice(m.filteredRows, func(i, j int) bool {
+			if m.sortReversed {
+				return m.filteredRows[i].LeftName > m.filteredRows[j].LeftName
+			}
+			return m.filteredRows[i].LeftName < m.filteredRows[j].LeftName
+		})
+    // Sort by Right
+	case SortByRight:
+		sort.Slice(m.filteredRows, func(i, j int) bool {
+			if m.sortReversed {
+				return m.filteredRows[i].RightName > m.filteredRows[j].RightName
+			}
+			return m.filteredRows[i].RightName < m.filteredRows[j].RightName
+		})
+    // Sort by Name
 	case SortByName:
 		sort.Slice(m.filteredRows, func(i, j int) bool {
 			if m.sortReversed {
@@ -230,20 +269,26 @@ func (m *Model) sortRows() {
 			}
 			return m.filteredRows[i].Name < m.filteredRows[j].Name
 		})
-	case SortByStatus:
-		sort.Slice(m.filteredRows, func(i, j int) bool {
-			if m.filteredRows[i].ChangeType != m.filteredRows[j].ChangeType {
-				if m.sortReversed {
-					return m.filteredRows[i].ChangeType > m.filteredRows[j].ChangeType
-				}
-				return m.filteredRows[i].ChangeType < m.filteredRows[j].ChangeType
-			}
-			return m.filteredRows[i].Kind < m.filteredRows[j].Kind
-		})
+
 	case SortByDefault:
 		// Default sorting based on tab (no reverse for default)
 		switch m.currentTab {
-		case TabAll, TabModified:
+
+		case TabAll:
+			// Sort by ChangeType, Kind, LeftName, RightName
+			sort.Slice(m.filteredRows, func(i, j int) bool {
+				if m.filteredRows[i].ChangeType != m.filteredRows[j].ChangeType {
+					return m.filteredRows[i].ChangeType < m.filteredRows[j].ChangeType
+				}
+				if m.filteredRows[i].Kind != m.filteredRows[j].Kind {
+					return m.filteredRows[i].Kind < m.filteredRows[j].Kind
+				}
+				if m.filteredRows[i].LeftName != m.filteredRows[j].LeftName {
+					return m.filteredRows[i].LeftName < m.filteredRows[j].LeftName
+				}
+				return m.filteredRows[i].RightName < m.filteredRows[j].RightName
+			})
+		case TabModified:
 			// Sort by Kind, LeftName, RightName
 			sort.Slice(m.filteredRows, func(i, j int) bool {
 				if m.filteredRows[i].Kind != m.filteredRows[j].Kind {
