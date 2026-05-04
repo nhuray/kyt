@@ -145,6 +145,32 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	// Sorting
+    case "C":
+        // Only allow sort by status for All/Modified tabs
+        if m.currentTab == TabAll || m.currentTab == TabModified {
+            if m.sortField == SortByChange {
+                m.sortReversed = !m.sortReversed
+            } else {
+                m.sortField = SortByChange
+                m.sortReversed = false
+            }
+            m.applyFilter()
+            m.table = m.buildTable()
+        }
+        return m, nil
+
+	case "K":
+		// Toggle sort by kind
+		if m.sortField == SortByKind {
+			m.sortReversed = !m.sortReversed
+		} else {
+			m.sortField = SortByKind
+			m.sortReversed = false
+		}
+		m.applyFilter()
+		m.table = m.buildTable()
+		return m, nil
+
 	case "N":
 		// Toggle sort by name
 		if m.sortField == SortByName {
@@ -157,19 +183,30 @@ func (m *Model) handleTableKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.table = m.buildTable()
 		return m, nil
 
-	case "S":
-		// Only allow sort by status for All/Modified tabs
-		if m.currentTab == TabAll || m.currentTab == TabModified {
-			if m.sortField == SortByStatus {
-				m.sortReversed = !m.sortReversed
-			} else {
-				m.sortField = SortByStatus
-				m.sortReversed = false
-			}
-			m.applyFilter()
-			m.table = m.buildTable()
+	case "L":
+		// Toggle sort by left
+		if m.sortField == SortByLeft {
+			m.sortReversed = !m.sortReversed
+		} else {
+			m.sortField = SortByLeft
+			m.sortReversed = false
 		}
+		m.applyFilter()
+		m.table = m.buildTable()
 		return m, nil
+
+	case "R":
+		// Toggle sort by right
+		if m.sortField == SortByRight {
+			m.sortReversed = !m.sortReversed
+		} else {
+			m.sortField = SortByRight
+			m.sortReversed = false
+		}
+		m.applyFilter()
+		m.table = m.buildTable()
+		return m, nil
+
 
 	// Search
 	case "/":

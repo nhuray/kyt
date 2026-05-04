@@ -127,8 +127,11 @@ Search:
   /               Search (filter by Kind, Name, or Namespace)
   
 Sorting:
+  C (shift-n)     Sort by change (Added/Modified/Removed)
+  K (shift-n)     Sort by kind
+  L (shift-n)     Sort by left (namespace and name)
+  R (shift-n)     Sort by right (namespace and name)
   N (shift-n)     Sort by name
-  S (shift-s)     Sort by status (Added/Modified/Removed)
 
 Diff View:
   s               Side-by-side diff mode
@@ -180,7 +183,7 @@ func (m *Model) renderFooter() string {
 
 	// Show different hints based on tab (Added/Removed don't have S sort)
 	if m.currentTab == TabAdded || m.currentTab == TabRemoved {
-		return footerStyle.Render("[Enter] View | [h/l] Tabs | [/] Search | [N] Sort | [?] Help | [:q] Quit")
+		return footerStyle.Render("[Enter] View | [h/l] Tabs | [/] Search | [K/N] Sort | [?] Help | [:q] Quit")
 	}
-	return footerStyle.Render("[Enter] View | [h/l] Tabs | [/] Search | [N/S] Sort | [?] Help | [:q] Quit")
+	return footerStyle.Render("[Enter] View | [h/l] Tabs | [/] Search | [C/K/L/R] Sort | [?] Help | [:q] Quit")
 }
