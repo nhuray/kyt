@@ -30,6 +30,11 @@ func (r *Reporter) reportDiff(result *differ.DiffResult, w io.Writer) error {
 
 // reportSummary outputs a tabular summary of changes
 func (r *Reporter) reportSummary(result *differ.DiffResult, w io.Writer) error {
+	// If no changes, display nothing (consistent with unified diff)
+	if len(result.Changes) == 0 {
+		return nil
+	}
+
 	// Colors
 	const (
 		cyan      = "\033[36m"

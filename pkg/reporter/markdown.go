@@ -10,6 +10,11 @@ import (
 
 // reportMarkdownSummary outputs a markdown table summary of changes
 func (r *Reporter) reportMarkdownSummary(result *differ.DiffResult, w io.Writer) error {
+	// If no changes, display nothing (consistent with unified diff)
+	if len(result.Changes) == 0 {
+		return nil
+	}
+
 	// Sort changes by: CHANGE (A/R/M), then KIND, then LEFT, then RIGHT
 	sortedChanges := make([]differ.ResourceDiff, len(result.Changes))
 	copy(sortedChanges, result.Changes)
@@ -77,6 +82,11 @@ func (r *Reporter) reportMarkdownSummary(result *differ.DiffResult, w io.Writer)
 
 // reportMarkdownDiff outputs markdown-formatted diffs grouped by change type
 func (r *Reporter) reportMarkdownDiff(result *differ.DiffResult, w io.Writer) error {
+	// If no changes, display nothing (consistent with unified diff)
+	if len(result.Changes) == 0 {
+		return nil
+	}
+
 	// Group changes by type
 	added := []differ.ResourceDiff{}
 	modified := []differ.ResourceDiff{}
