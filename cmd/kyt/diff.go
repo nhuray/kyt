@@ -20,6 +20,7 @@ var (
 	// Diff command flags
 	diffOutput              string
 	diffSummary             bool
+	diffMarkdown            bool
 	diffTUI                 bool
 	diffUnified             int
 	diffColor               string
@@ -124,6 +125,7 @@ Examples:
 func init() {
 	diffCmd.Flags().StringVarP(&diffOutput, "output", "o", "", "write diff to file instead of stdout")
 	diffCmd.Flags().BoolVar(&diffSummary, "summary", false, "show tabular summary of resource changes")
+	diffCmd.Flags().BoolVar(&diffMarkdown, "markdown", false, "output in markdown format (suitable for GitHub PR comments)")
 	diffCmd.Flags().BoolVar(&diffTUI, "tui", false, "show interactive terminal UI for exploring diffs")
 	diffCmd.Flags().IntVarP(&diffUnified, "unified", "U", 3, "generate diff with <n> lines of context")
 	diffCmd.Flags().StringVar(&diffColor, "color", "auto", "colorize output: auto, always, never")
@@ -328,6 +330,12 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	if diffTUI && diffSummary {
 		return fmt.Errorf("--tui and --summary flags are mutually exclusive")
 	}
+	if diffTUI && diffMarkdown {
+		return fmt.Errorf("--tui and --markdown flags are mutually exclusive")
+	}
+	if diffMarkdown && diffColor != "auto" {
+		return fmt.Errorf("--markdown and --color flags are mutually exclusive (markdown is always uncolored)")
+	}
 
 	// If TUI mode is requested, launch the interactive interface
 	if diffTUI {
@@ -336,8 +344,13 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		return tui.Run(result, leftSource, rightSource)
 	}
 
+	// Markdown format disables colorization
+	if diffMarkdown {
+		colorize = false
+	}
+
 	// Create reporter
-	rep := reporter.NewReporter(diffSummary, colorize)
+	rep := reporter.NewReporter(diffSummary, colorize, diffMarkdown)
 
 	// Generate output
 	if rootVerbose {

@@ -40,7 +40,7 @@ func TestReporter_Report(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reporter := NewReporter(tt.showSummary, tt.colorize)
+			reporter := NewReporter(tt.showSummary, tt.colorize, false)
 			buf := &bytes.Buffer{}
 
 			err := reporter.Report(result, buf)
@@ -70,7 +70,7 @@ func TestReporter_NoDifferences(t *testing.T) {
 		},
 	}
 
-	reporter := NewReporter(false, false)
+	reporter := NewReporter(false, false, false)
 	buf := &bytes.Buffer{}
 
 	err := reporter.Report(result, buf)
@@ -99,7 +99,7 @@ func TestNewReporter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reporter := NewReporter(tt.showSummary, tt.colorize)
+			reporter := NewReporter(tt.showSummary, tt.colorize, false)
 			if reporter == nil {
 				t.Fatal("Expected non-nil reporter")
 			}
