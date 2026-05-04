@@ -40,7 +40,7 @@ func (r *Reporter) reportMarkdownSummary(result *differ.DiffResult, w io.Writer)
 	})
 
 	// Write markdown table header
-	if _, err := fmt.Fprintln(w, "# Diff Summary"); err != nil {
+	if _, err := fmt.Fprintln(w, "## Kyt Diff Summary"); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(w, ""); err != nil {
@@ -118,7 +118,7 @@ func (r *Reporter) reportMarkdownDiff(result *differ.DiffResult, w io.Writer) er
 	sortChangesByKindAndName(removed)
 
 	// Write title
-	if _, err := fmt.Fprintln(w, "# Kubernetes Manifest Diff"); err != nil {
+	if _, err := fmt.Fprintln(w, "## Kyt Unified Diff"); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(w, ""); err != nil {
@@ -127,7 +127,7 @@ func (r *Reporter) reportMarkdownDiff(result *differ.DiffResult, w io.Writer) er
 
 	// Write Added section
 	if len(added) > 0 {
-		if _, err := fmt.Fprintln(w, "## Added Resources"); err != nil {
+		if _, err := fmt.Fprintln(w, "### Added Resources"); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintln(w, ""); err != nil {
@@ -142,7 +142,7 @@ func (r *Reporter) reportMarkdownDiff(result *differ.DiffResult, w io.Writer) er
 
 	// Write Modified section
 	if len(modified) > 0 {
-		if _, err := fmt.Fprintln(w, "## Modified Resources"); err != nil {
+		if _, err := fmt.Fprintln(w, "### Modified Resources"); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintln(w, ""); err != nil {
@@ -157,7 +157,7 @@ func (r *Reporter) reportMarkdownDiff(result *differ.DiffResult, w io.Writer) er
 
 	// Write Removed section
 	if len(removed) > 0 {
-		if _, err := fmt.Fprintln(w, "## Removed Resources"); err != nil {
+		if _, err := fmt.Fprintln(w, "### Removed Resources"); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintln(w, ""); err != nil {
@@ -198,14 +198,14 @@ func (r *Reporter) writeMarkdownResourceDiff(w io.Writer, change differ.Resource
 	var header string
 	switch change.ChangeType {
 	case differ.ChangeTypeAdded:
-		header = fmt.Sprintf("### %s `%s`", kind, rightName)
+		header = fmt.Sprintf("#### %s `%s`", kind, rightName)
 	case differ.ChangeTypeRemoved:
-		header = fmt.Sprintf("### %s `%s`", kind, leftName)
+		header = fmt.Sprintf("#### %s `%s`", kind, leftName)
 	case differ.ChangeTypeModified:
 		if leftName != rightName {
-			header = fmt.Sprintf("### %s `%s` → `%s`", kind, leftName, rightName)
+			header = fmt.Sprintf("#### %s `%s` → `%s`", kind, leftName, rightName)
 		} else {
-			header = fmt.Sprintf("### %s `%s`", kind, leftName)
+			header = fmt.Sprintf("#### %s `%s`", kind, leftName)
 		}
 	}
 
