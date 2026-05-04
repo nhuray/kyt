@@ -275,12 +275,15 @@ func runDiff(cmd *cobra.Command, args []string) error {
 			outputWriter = nopWriteCloser{os.Stdout}
 			usePager = false
 		}
-	}
-	defer func() {
-		if closeErr := outputWriter.Close(); closeErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to close output: %v\n", closeErr)
+		// Only close if using pager (stdout doesn't need closing)
+		if usePager {
+			defer func() {
+				if closeErr := outputWriter.Close(); closeErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to close pager: %v\n", closeErr)
+				}
+			}()
 		}
-	}()
+	}
 
 	// Determine colorization
 	colorize := shouldColorize(diffColor, !usePager)
