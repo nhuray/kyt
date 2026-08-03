@@ -253,6 +253,24 @@ diff:
     similarityThreshold: 0.7     # Min similarity score for matching (0.0-1.0, default: 0.7)
     dataSimilarityBoost: 2       # Boost for ConfigMap/Secret data fields (1-10, default: 2)
 
+  # Default resource filters (can be overridden by CLI flags)
+  # CLI flags take precedence over these settings
+  filters:
+    # Resource kinds to include/exclude
+    # Use "-" prefix for exclusions
+    # Examples:
+    #   kinds: ["Deployment", "StatefulSet"]  # include only these
+    #   kinds: ["-Secret", "-ConfigMap"]      # exclude these
+    kinds: []
+
+    # Namespaces to include/exclude
+    # Use "-" prefix for exclusions
+    # Note: Cluster-scoped resources (ClusterRole, Node, etc.) are excluded when namespace filters are active
+    # Examples:
+    #   namespaces: ["production", "staging"]  # include only these
+    #   namespaces: ["-kube-system", "-kube-public"]  # exclude system namespaces
+    namespaces: []
+    
   # Fuzzy string matching configuration
   fuzzyMatching:
     enabled: true                # Enable Levenshtein distance for strings (default: true)
