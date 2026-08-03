@@ -198,22 +198,20 @@ Flags:
       --exact-match                  disable similarity matching (only exact name matches)
       --similarity-threshold float   minimum similarity score (0.0-1.0) for matching resources (default 0.7)
       --data-similarity-boost int    boost factor for ConfigMap/Secret data fields (1-10) (default 2)
-      --include string               comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')
-      --exclude string               comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')
+  -k, --kind string                  filter resource kinds (e.g., 'dep,sts' or '-cm,-sec')
+      --kinds string                 filter resource kinds (alias for --kind)
+  -n, --namespace string             filter namespaces (e.g., 'prod,staging' or '-kube-system')
+      --namespaces string            filter namespaces (alias for --namespace)
+      --ns string                    filter namespaces (alias for --namespace)
   -v, --verbose                      verbose output to stderr
   -h, --help                         help for diff
-```
-      --include string     comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')
-      --exclude string     comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')
-  -v, --verbose            verbose output to stderr
-  -h, --help               help for diff
 ```
 
 ### Resource Filtering
 
-The `--include` and `--exclude` flags allow you to filter which resources are compared. This is useful when you only care about specific resource types or want to skip certain resources.
+The `--kind` and `--namespace` flags allow you to filter which resources are compared. Both flags support unified include/exclude syntax with `-` prefix.
 
-**Supported name forms:**
+**Kind Filtering - Supported name forms:**
 - **Short names**: `cm`, `svc`, `deploy`, `sts`, `ds`, `po`, etc.
 - **Singular**: `configmap`, `service`, `deployment`, etc.
 - **Plural**: `configmaps`, `services`, `deployments`, etc.
@@ -221,32 +219,51 @@ The `--include` and `--exclude` flags allow you to filter which resources are co
 
 All forms are case-insensitive and can be mixed in the same command.
 
+**Namespace Filtering:**
+- Filter by specific namespaces or exclude certain namespaces
+- Cluster-scoped resources (ClusterRole, Node, etc.) are automatically excluded when namespace filters are active
+
 **Examples:**
 
 ```bash
-# Include only ConfigMaps and Secrets
-kyt diff --include cm,secrets ./left ./right
+# Include only specific resource kinds
+kyt diff --kind cm,secrets ./left ./right
+kyt diff --kind deploy,svc,cm ./left ./right
 
-# Exclude Secrets from comparison
-kyt diff --exclude secrets ./left ./right
+# Exclude specific resource kinds
+kyt diff --kind -secrets ./left ./right
+kyt diff --kind -secrets,-configmaps ./left ./right
 
-# Include multiple resource types (using different name forms)
-kyt diff --include deploy,svc,cm ./left ./right
-kyt diff --include deployments,services,configmaps ./left ./right
-kyt diff --include Deployment,Service,ConfigMap ./left ./right
+# Using different name forms (all equivalent)
+kyt diff --kind deploy,svc,cm ./left ./right
+kyt diff --kind deployments,services,configmaps ./left ./right
+kyt diff --kind Deployment,Service,ConfigMap ./left ./right
 
-# Compare only StatefulSets and DaemonSets
-kyt diff --include sts,ds ./left ./right
+# Filter by namespace (include)
+kyt diff --namespace production,staging ./left ./right
+kyt diff -n prod ./left ./right
 
-# Exclude multiple types
-kyt diff --exclude secrets,cm,svc ./left ./right
+# Filter by namespace (exclude)
+kyt diff --namespace -kube-system ./left ./right
+kyt diff --ns -kube-system,-kube-public ./left ./right
+
+# Combine kind and namespace filters
+kyt diff --kind deploy,sts --namespace production ./left ./right
+kyt diff -k deploy,svc -n prod,staging ./left ./right
+
+# Short flag aliases
+kyt diff -k sts,ds ./left ./right
+kyt diff --kinds deploy,svc ./left ./right  # plural alias
+kyt diff --namespaces prod,staging ./left ./right  # plural alias
 ```
 
-**Note:** 
-- `--include` and `--exclude` can be used together
-- When `--include` is specified, only those resource kinds are compared
-- When `--exclude` is specified, those resource kinds are skipped
+**Notes:**
+- CLI filters take precedence over config file filters
+- For kinds: process includes first, then apply excludes
+- For namespaces: process includes first, then apply excludes
 - Filters apply to both left and right manifests
+- Use `-` prefix for exclusions (e.g., `-secrets`, `-kube-system`)
+- Cluster-scoped resources are excluded when namespace filters are active
 
 ### Exit Codes
 
@@ -655,34 +672,45 @@ else
 fi
 ```
 
-### Example 6: Comparing Only Specific Resource Types
+### Example 6: Filtering Specific Resource Types
 
-Compare only certain resource types using the `--include` and `--exclude` flags:
+Filter resources by kind or namespace using the unified `--kind` and `--namespace` flags:
 
 ```bash
 # Compare only ConfigMaps and Secrets (useful for config drift detection)
-kyt diff --include cm,secrets ./prod ./staging
+kyt diff --kind cm,secrets ./prod ./staging
 
 # Compare all resources except Secrets (skip sensitive data)
-kyt diff --exclude secrets ./left ./right
+kyt diff --kind -secrets ./left ./right
 
 # Compare only workload resources
-kyt diff --include deploy,sts,ds,job ./helm-output ./kustomize-output
+kyt diff --kind deploy,sts,ds,job ./helm-output ./kustomize-output
 
 # Compare infrastructure resources only
-kyt diff --include svc,ing,cm ./old-infra ./new-infra
+kyt diff --kind svc,ing,cm ./old-infra ./new-infra
 
 # Skip testing resources when comparing environments
-kyt diff --exclude job,cronjob,po ./dev ./prod
+kyt diff --kind -job,-cronjob,-po ./dev ./prod
+
+# Filter by namespace (include only production)
+kyt diff --namespace production ./left ./right
+
+# Exclude system namespaces
+kyt diff --namespace -kube-system,-kube-public ./left ./right
+
+# Combine kind and namespace filters
+kyt diff --kind deploy,sts --namespace production,staging ./left ./right
 ```
 
 **Use cases for resource filtering:**
 
-- **Security audits**: Compare only RBAC resources (`--include role,rolebinding,clusterrole,clusterrolebinding`)
-- **Config validation**: Compare only ConfigMaps and Secrets (`--include cm,secrets`)
-- **Workload comparison**: Focus on Deployments and StatefulSets (`--include deploy,sts`)
-- **Skip ephemeral resources**: Exclude Pods and Jobs (`--exclude po,job`)
-- **Network comparison**: Compare only Services and Ingresses (`--include svc,ing`)
+- **Security audits**: Compare only RBAC resources (`--kind role,rolebinding,clusterrole,clusterrolebinding`)
+- **Config validation**: Compare only ConfigMaps and Secrets (`--kind cm,secrets`)
+- **Workload comparison**: Focus on Deployments and StatefulSets (`--kind deploy,sts`)
+- **Skip ephemeral resources**: Exclude Pods and Jobs (`--kind -po,-job`)
+- **Network comparison**: Compare only Services and Ingresses (`--kind svc,ing`)
+- **Environment-specific**: Compare only production namespace (`--namespace production`)
+- **Exclude system resources**: Skip kube-system (`--namespace -kube-system`)
 
 ## JQ Expression Cookbook
 
