@@ -87,17 +87,23 @@ kyt fetches approximately 15 common resource types from the cluster:
 
 ### Filtering Resources
 
-Use `--include` or `--exclude` to filter specific resource types:
+Use `--kind` or `--namespace` to filter specific resource types or namespaces:
 
 ```bash
 # Compare only Deployments and Services
-kyt diff --include deploy,svc ns:production ns:staging
+kyt diff --kind deploy,svc ns:production ns:staging
 
 # Compare all except Secrets
-kyt diff --exclude secrets ns:production ns:staging
+kyt diff --kind -secrets ns:production ns:staging
 
 # Multiple resource types
-kyt diff --include cm,secrets,deploy ./manifests ns:production
+kyt diff --kind cm,secrets,deploy ./manifests ns:production
+
+# Filter by namespace
+kyt diff --namespace production ./manifests ns:all
+
+# Exclude system namespaces
+kyt diff --namespace -kube-system ./manifests ns:all
 ```
 
 Supports multiple formats:
@@ -153,7 +159,7 @@ kyt diff ./k8s/production ns:production
 kyt diff --summary ./k8s/production ns:production
 
 # Filter to specific types
-kyt diff --include deploy,svc,cm ./k8s/production ns:production
+kyt diff --kind deploy,svc,cm ./k8s/production ns:production
 ```
 
 ### Environment Comparison
@@ -168,7 +174,7 @@ kyt diff ns:production ns:staging
 kyt diff --context prod ns:default ./staging-export.yaml
 
 # With filtering
-kyt diff --include deploy,svc ns:production ns:staging
+kyt diff --kind deploy,svc ns:production ns:staging
 ```
 
 ### Pre-Deployment Validation
@@ -264,7 +270,7 @@ Skipped batch.k8s.io/jobs: forbidden: User cannot list jobs
 **Solutions:**
 - Check permissions: `kubectl auth can-i list jobs -n production`
 - Contact cluster administrator for access
-- Use `--include` to only fetch resource types you have access to
+- Use `--kind` to only fetch resource types you have access to
 
 ### Connection Errors
 
@@ -295,7 +301,7 @@ kubectl get all -n production
 kyt diff -v ns:production ns:staging
 
 # Explicitly specify resource types
-kyt diff --include deploy,svc,cm ns:production ns:staging
+kyt diff --kind deploy,svc,cm ns:production ns:staging
 ```
 
 ## Advanced Examples
@@ -307,8 +313,8 @@ kyt diff --include deploy,svc,cm ns:production ns:staging
 kubectl get deploy,svc,cm -n production -l app=myapp -o yaml > /tmp/prod-myapp.yaml
 kyt diff /tmp/prod-myapp.yaml ns:staging
 
-# Or compare full namespaces and use include filter
-kyt diff --include deploy,svc,cm ns:production ns:staging
+# Or compare full namespaces and use kind filter
+kyt diff --kind deploy,svc,cm ns:production ns:staging
 ```
 
 ### Multi-Cluster Comparison
@@ -369,7 +375,7 @@ kyt diff -c .kyt.yaml ns:production ns:staging
 ## Best Practices
 
 1. **Use version control for configurations**: Store your `.kyt.yaml` in Git alongside manifests
-2. **Filter to relevant resources**: Use `--include` to reduce noise and improve performance
+2. **Filter to relevant resources**: Use `--kind` to reduce noise and improve performance
 3. **Automate drift detection**: Run comparisons in CI/CD or cron jobs
 4. **Use verbose mode for debugging**: Add `-v` when troubleshooting connection issues
 5. **Leverage ignore rules**: Configure `.kyt.yaml` to ignore expected differences
@@ -396,7 +402,7 @@ kubectl get deploy -n production -o yaml | kyt fmt | kubectl apply -f -
 
 - **Credentials**: kyt uses your kubectl credentials from `~/.kube/config`
 - **RBAC**: Requires `list` permission on resource types in target namespaces
-- **Secrets**: Consider using `--exclude secrets` to avoid displaying sensitive data
+- **Secrets**: Consider using `--kind -secrets` to avoid displaying sensitive data
 - **Audit logs**: Cluster access is logged by Kubernetes audit logs
 - **Read-only**: kyt only performs read operations (list/get), never modifies resources
 

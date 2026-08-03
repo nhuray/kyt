@@ -74,6 +74,24 @@ diff:
     # Higher values = faster but less accurate for short strings
     # Lower values = slower but more accurate
     minStringLength: 100 # default: 100
+
+  # Default resource filters (can be overridden by CLI flags)
+  # CLI flags take precedence over these settings
+  filters:
+    # Resource kinds to include/exclude
+    # Use "-" prefix for exclusions
+    # Examples:
+    #   kinds: ["Deployment", "StatefulSet"]  # include only these
+    #   kinds: ["-Secret", "-ConfigMap"]      # exclude these
+    kinds: []
+    
+    # Namespaces to include/exclude
+    # Use "-" prefix for exclusions
+    # Note: Cluster-scoped resources (ClusterRole, Node, etc.) are excluded when namespace filters are active
+    # Examples:
+    #   namespaces: ["production", "staging"]  # include only these
+    #   namespaces: ["-kube-system", "-kube-public"]  # exclude system namespaces
+    namespaces: []
   
   # Optional: pipe output through external diff viewer
   # Only used when stdout is a terminal

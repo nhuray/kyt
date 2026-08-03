@@ -34,7 +34,7 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 - 🔀 **Pipe-friendly**: Works seamlessly with kubectl, kustomize, helm
 - 🤖 **Intelligent Similarity Matching**: Automatically detects renamed resources across namespaces
 - 🎚️ **Configurable Matching**: Adjust similarity thresholds and data field importance
-- 🎛️ **Resource Filtering**: Include/exclude specific resource kinds (supports short names like `cm`, `svc`, `deploy`)
+- 🎛️ **Resource Filtering**: Filter by resource kinds and namespaces with unified syntax (supports short names like `cm`, `svc`, `deploy`)
 - ⚡ **Fast & Reliable**: Written in Go with comprehensive test coverage
 
 ## Use Cases
@@ -101,7 +101,7 @@ kyt diff source.yaml target.yaml --tui
 kyt diff ns:production ns:staging --tui
 
 # All filtering options work with TUI
-kyt diff --include deploy,svc ns:prod ns:staging --tui
+kyt diff --kind deploy,svc ns:prod ns:staging --tui
 ```
 
 **TUI Features:**
@@ -127,7 +127,7 @@ kyt diff ns:production ns:staging
 kyt diff --context prod ns:production ns:staging
 
 # Compare specific resource types from cluster
-kyt diff --include deploy,svc,cm ns:production ns:staging
+kyt diff --kind deploy,svc,cm ns:production ns:staging
 
 # Verbose output shows connection and resource fetching details
 kyt diff -v ns:production ns:staging
@@ -157,11 +157,20 @@ kyt diff --similarity-threshold 0.8 source.yaml target.yaml
 # Higher values prioritize data content over metadata differences
 kyt diff --data-similarity-boost 4 source.yaml target.yaml
 
-# Compare only specific resource types
-kyt diff --include cm,svc,deploy source.yaml target.yaml
+# Filter by resource kind (include only specific types)
+kyt diff --kind cm,svc,deploy source.yaml target.yaml
 
-# Exclude specific resource types
-kyt diff --exclude secrets source.yaml target.yaml
+# Filter by resource kind (exclude specific types)
+kyt diff --kind -secrets,-configmaps source.yaml target.yaml
+
+# Filter by namespace
+kyt diff --namespace production,staging source.yaml target.yaml
+
+# Exclude specific namespaces
+kyt diff --namespace -kube-system source.yaml target.yaml
+
+# Combine kind and namespace filters
+kyt diff --kind deploy,sts --namespace production source.yaml target.yaml
 
 # Show summary of changes
 kyt diff --summary source.yaml target.yaml
