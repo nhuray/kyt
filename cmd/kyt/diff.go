@@ -7,6 +7,7 @@ import (
 
 	"github.com/nhuray/kyt/pkg/config"
 	"github.com/nhuray/kyt/pkg/differ"
+	"github.com/nhuray/kyt/pkg/filter"
 	"github.com/nhuray/kyt/pkg/manifest"
 	"github.com/nhuray/kyt/pkg/normalizer"
 	"github.com/nhuray/kyt/pkg/pager"
@@ -27,8 +28,8 @@ var (
 	diffExactMatch          bool
 	diffSimilarityThreshold float64
 	diffDataSimilarityBoost int
-	diffIncludeKinds        string
-	diffExcludeKinds        string
+	diffKinds               string
+	diffNamespaces          string
 	diffContext             string
 )
 
@@ -42,7 +43,7 @@ Supports:
 - Configurable pager support (with $PAGER fallback)
 - Tabular summary with --summary flag
 - Smart similarity matching for renamed resources
-- Resource filtering by kind (include/exclude)
+- Resource filtering by kind and namespace
 - Live cluster comparison using namespace syntax (ns:namespace)
 
 Exit Codes:
@@ -51,10 +52,17 @@ Exit Codes:
 - 2+: Error occurred
 
 Resource Filtering:
-- Use --include to only compare specific resource kinds
-- Use --exclude to skip specific resource kinds
+- Use --kind/-k to filter resource kinds (supports include/exclude syntax)
+- Use --namespace/-n/--ns to filter namespaces (supports include/exclude syntax)
 - Supports short names (cm, svc, deploy), singular (configmap, service), and plural (configmaps, services)
+- Use "-" prefix for exclusions
+- Examples:
+  --kind dep,sts           # include only Deployments and StatefulSets
+  --kind -cm,-sec          # exclude ConfigMaps and Secrets
+  --namespace prod,staging # include only prod and staging namespaces
+  --namespace -kube-system # exclude kube-system namespace
 - Both flags accept comma-separated lists
+- Cluster-scoped resources (ClusterRole, Node, etc.) are excluded when namespace filters are active
 
 Cluster Comparison:
 - Use ns:namespace syntax to compare resources from a Kubernetes namespace
@@ -62,7 +70,7 @@ Cluster Comparison:
 - Example: kyt diff ns:default ns:staging
 - Example: kyt diff --context prod ns:default ns:staging
 - Fetches ~15 common resource types (pods, deployments, services, etc.)
-- Use --include/--exclude to filter resource types
+- Use --kind to filter resource types
 
 Examples:
   # Compare two directories
@@ -81,7 +89,16 @@ Examples:
   kyt diff ns:production ./manifests
 
   # Compare specific resource types from cluster
-  kyt diff --include deploy,svc ns:default ns:staging
+  kyt diff --kind deploy,svc ns:default ns:staging
+
+  # Exclude specific resource types
+  kyt diff --kind -cm,-sec ./left ./right
+
+  # Filter by namespace
+  kyt diff --namespace production,staging ./left ./right
+
+  # Combine kind and namespace filters
+  kyt diff --kind dep,sts --namespace prod ./left ./right
 
   # Show tabular summary instead of full diff
   kyt diff --summary ./left ./right
@@ -95,16 +112,13 @@ Examples:
   # Use 5 lines of context (default is 3)
   kyt diff -U5 ./left ./right
 
-  # Compare only ConfigMaps and Secrets
-  kyt diff --include cm,secrets ./left ./right
+  # Compare only Deployments and StatefulSets
+  kyt diff --kind dep,sts ./left ./right
+  kyt diff --kind deployments,statefulsets ./left ./right
+  kyt diff --kind Deployment,StatefulSet ./left ./right
 
-  # Compare all except Secrets
-  kyt diff --exclude secrets ./left ./right
-
-  # Compare Deployments and Services only (multiple forms supported)
-  kyt diff --include deploy,svc ./left ./right
-  kyt diff --include deployments,services ./left ./right
-  kyt diff --include Deployment,Service ./left ./right
+  # Compare all except Secrets and ConfigMaps
+  kyt diff --kind -secrets,-configmaps ./left ./right
 
   # Compare Helm vs Kustomize
   helm template my-chart > /tmp/helm.yaml
@@ -132,8 +146,11 @@ func init() {
 	diffCmd.Flags().BoolVar(&diffExactMatch, "exact-match", false, "disable similarity matching (only exact name matches)")
 	diffCmd.Flags().Float64Var(&diffSimilarityThreshold, "similarity-threshold", 0.7, "minimum similarity score (0.0-1.0) for matching resources")
 	diffCmd.Flags().IntVar(&diffDataSimilarityBoost, "data-similarity-boost", 2, "boost factor for ConfigMap/Secret data fields (1-10, higher = more weight on data)")
-	diffCmd.Flags().StringVar(&diffIncludeKinds, "include", "", "comma-separated list of resource kinds to include (e.g., 'cm,svc,deploy')")
-	diffCmd.Flags().StringVar(&diffExcludeKinds, "exclude", "", "comma-separated list of resource kinds to exclude (e.g., 'secrets,configmaps')")
+	diffCmd.Flags().StringVarP(&diffKinds, "kind", "k", "", "filter resource kinds (e.g., 'dep,sts' or '-cm,-sec')")
+	diffCmd.Flags().StringVar(&diffKinds, "kinds", "", "filter resource kinds (alias for --kind)")
+	diffCmd.Flags().StringVarP(&diffNamespaces, "namespace", "n", "", "filter namespaces (e.g., 'prod,staging' or '-kube-system')")
+	diffCmd.Flags().StringVar(&diffNamespaces, "namespaces", "", "filter namespaces (alias for --namespace)")
+	diffCmd.Flags().StringVar(&diffNamespaces, "ns", "", "filter namespaces (alias for --namespace)")
 	diffCmd.Flags().StringVar(&diffContext, "context", "", "Kubernetes context to use for namespace inputs (defaults to current context)")
 
 	rootCmd.AddCommand(diffCmd)
@@ -205,30 +222,61 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	// Apply resource kind filtering
-	if diffIncludeKinds != "" || diffExcludeKinds != "" {
+	var kindFilter, namespaceFilter *filter.Expression
+	
+	// Parse CLI filters
+	if diffKinds != "" {
+		var err error
+		kindFilter, err = filter.Parse(diffKinds)
+		if err != nil {
+			return fmt.Errorf("failed to parse --kind filter: %w", err)
+		}
+	}
+	
+	if diffNamespaces != "" {
+		var err error
+		namespaceFilter, err = filter.Parse(diffNamespaces)
+		if err != nil {
+			return fmt.Errorf("failed to parse --namespace filter: %w", err)
+		}
+	}
+	
+	// Parse config file filters and merge with CLI (CLI takes precedence)
+	if len(cfg.Diff.Filters.Kinds) > 0 || len(cfg.Diff.Filters.Namespaces) > 0 {
+		configKindFilter, err := filter.ParseList(cfg.Diff.Filters.Kinds)
+		if err != nil {
+			return fmt.Errorf("failed to parse config kinds filter: %w", err)
+		}
+		
+		configNamespaceFilter, err := filter.ParseList(cfg.Diff.Filters.Namespaces)
+		if err != nil {
+			return fmt.Errorf("failed to parse config namespaces filter: %w", err)
+		}
+		
+		// Merge: CLI overrides config
+		if kindFilter == nil || kindFilter.IsEmpty() {
+			kindFilter = configKindFilter
+		}
+		if namespaceFilter == nil || namespaceFilter.IsEmpty() {
+			namespaceFilter = configNamespaceFilter
+		}
+	}
+	
+	// Apply filters if any are specified
+	if (kindFilter != nil && !kindFilter.IsEmpty()) || (namespaceFilter != nil && !namespaceFilter.IsEmpty()) {
 		if rootVerbose {
-			fmt.Fprintf(os.Stderr, "Applying resource kind filters...\n")
+			fmt.Fprintf(os.Stderr, "Applying resource filters...\n")
+			if kindFilter != nil && !kindFilter.IsEmpty() {
+				fmt.Fprintf(os.Stderr, "  Kinds: %s\n", kindFilter.String())
+			}
+			if namespaceFilter != nil && !namespaceFilter.IsEmpty() {
+				fmt.Fprintf(os.Stderr, "  Namespaces: %s\n", namespaceFilter.String())
+			}
 		}
 
 		matcher := resourcekind.NewMatcher()
-		var includeFilters, excludeFilters []string
-
-		if diffIncludeKinds != "" {
-			includeFilters = matcher.ParseList(diffIncludeKinds)
-			if rootVerbose {
-				fmt.Fprintf(os.Stderr, "  Include: %v\n", includeFilters)
-			}
-		}
-
-		if diffExcludeKinds != "" {
-			excludeFilters = matcher.ParseList(diffExcludeKinds)
-			if rootVerbose {
-				fmt.Fprintf(os.Stderr, "  Exclude: %v\n", excludeFilters)
-			}
-		}
-
-		sourceManifests = filterManifests(sourceManifests, matcher, includeFilters, excludeFilters)
-		targetManifests = filterManifests(targetManifests, matcher, includeFilters, excludeFilters)
+		sourceManifests = filterManifests(sourceManifests, matcher, kindFilter, namespaceFilter)
+		targetManifests = filterManifests(targetManifests, matcher, kindFilter, namespaceFilter)
 
 		if rootVerbose {
 			fmt.Fprintf(os.Stderr, "  After filtering: %d left, %d right\n", sourceManifests.Len(), targetManifests.Len())
@@ -413,30 +461,49 @@ func (nopWriteCloser) Close() error {
 	return nil
 }
 
-// filterManifests filters a ManifestSet based on include/exclude filters
-func filterManifests(manifestSet *manifest.ManifestSet, matcher *resourcekind.Matcher, includeFilters, excludeFilters []string) *manifest.ManifestSet {
+// filterManifests filters a ManifestSet based on kind and namespace filters
+func filterManifests(
+	manifestSet *manifest.ManifestSet,
+	matcher *resourcekind.Matcher,
+	kindFilter *filter.Expression,
+	namespaceFilter *filter.Expression,
+) *manifest.ManifestSet {
 	filtered := manifest.NewManifestSet()
 
 	for key, obj := range manifestSet.Resources {
 		kind := obj.GetKind()
+		namespace := obj.GetNamespace()
 
-		// If include filters are specified, only include matching kinds
-		if len(includeFilters) > 0 {
-			if !matcher.MatchesAny(kind, includeFilters) {
+		// Apply kind filter
+		if kindFilter != nil && !kindFilter.IsEmpty() {
+			// Use a matcher function that handles resource kind aliases
+			kindMatcher := func(objKind, filterKind string) bool {
+				return matcher.Match(objKind, filterKind)
+			}
+			if !kindFilter.ShouldInclude(kind, kindMatcher) {
 				continue
 			}
 		}
 
-		// If exclude filters are specified, skip matching kinds
-		if len(excludeFilters) > 0 {
-			if matcher.MatchesAny(kind, excludeFilters) {
+		// Apply namespace filter
+		if namespaceFilter != nil && !namespaceFilter.IsEmpty() {
+			// Cluster-scoped resources (empty namespace) are excluded when namespace filters are active
+			if namespace == "" {
+				continue
+			}
+
+			// Simple string matcher for namespaces (case-sensitive)
+			namespaceMatcher := func(objNs, filterNs string) bool {
+				return objNs == filterNs
+			}
+			if !namespaceFilter.ShouldInclude(namespace, namespaceMatcher) {
 				continue
 			}
 		}
 
 		// Add to filtered set
 		filtered.Resources[key] = obj
-		// Preserve left file information if available
+		// Preserve source file information if available
 		if sourcePath, ok := manifestSet.GetSourceFile(key); ok {
 			filtered.SourceFile[key] = sourcePath
 		}

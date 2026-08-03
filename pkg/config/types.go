@@ -11,6 +11,7 @@ type DiffConfig struct {
 	Normalization     NormalizationConfig         `yaml:"normalization"`
 	Options           OptionsConfig               `yaml:"options"`
 	FuzzyMatching     FuzzyMatchingConfig         `yaml:"fuzzyMatching"`
+	Filters           FilterConfig                `yaml:"filters,omitempty"`
 	Pager             string                      `yaml:"pager,omitempty"`
 }
 
@@ -107,6 +108,25 @@ type OptionsConfig struct {
 	DataSimilarityBoost int `yaml:"dataSimilarityBoost,omitempty"`
 }
 
+// FilterConfig defines default filters for resource kinds and namespaces
+type FilterConfig struct {
+	// Kinds defines which resource kinds to include/exclude
+	// Use "-" prefix for exclusions (e.g., ["-ConfigMap", "-Secret"])
+	// Empty list means include all
+	// Examples:
+	//   kinds: ["Deployment", "StatefulSet"]  # include only these
+	//   kinds: ["-Secret", "-ConfigMap"]      # exclude these
+	Kinds []string `yaml:"kinds,omitempty"`
+
+	// Namespaces defines which namespaces to include/exclude
+	// Use "-" prefix for exclusions (e.g., ["-kube-system", "-kube-public"])
+	// Empty list means include all
+	// Examples:
+	//   namespaces: ["production", "staging"]  # include only these
+	//   namespaces: ["-kube-system"]           # exclude this namespace
+	Namespaces []string `yaml:"namespaces,omitempty"`
+}
+
 // NewDefaultConfig returns a Config with sensible defaults
 func NewDefaultConfig() *Config {
 	return &Config{
@@ -131,6 +151,10 @@ func NewDefaultConfig() *Config {
 			FuzzyMatching: FuzzyMatchingConfig{
 				Enabled:         true,
 				MinStringLength: 100,
+			},
+			Filters: FilterConfig{
+				Kinds:      []string{},
+				Namespaces: []string{},
 			},
 			Pager: "", // Use $PAGER by default
 		},
@@ -168,6 +192,10 @@ func (c *Config) Merge(other *Config) {
 	if other.Diff.FuzzyMatching.MinStringLength > 0 {
 		c.Diff.FuzzyMatching.MinStringLength = other.Diff.FuzzyMatching.MinStringLength
 	}
+
+	// Filters config: append (CLI will override via separate merge logic)
+	c.Diff.Filters.Kinds = append(c.Diff.Filters.Kinds, other.Diff.Filters.Kinds...)
+	c.Diff.Filters.Namespaces = append(c.Diff.Filters.Namespaces, other.Diff.Filters.Namespaces...)
 
 	// Pager: other takes precedence if non-empty
 	if other.Diff.Pager != "" {
