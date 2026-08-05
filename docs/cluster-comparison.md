@@ -402,7 +402,13 @@ kubectl get deploy -n production -o yaml | kyt fmt | kubectl apply -f -
 
 - **Credentials**: kyt uses your kubectl credentials from `~/.kube/config`
 - **RBAC**: Requires `list` permission on resource types in target namespaces
-- **Secrets**: Consider using `--kind -secrets` to avoid displaying sensitive data
+- **Secret Masking**: Secrets are automatically masked using pattern-based rules to prevent credential leaks in CI/CD logs
+  - Connection strings: `postgres://admin:pass@host:5432` → `postgres://ad***:pa**@*****:5432`
+  - API keys: `sk_live_abc123def456` → `********abc1****f456`
+  - Base64 values: `cGFzc3dvcmQxMjM=` → `cGFz********wM=`
+  - See [Secret Masking](diff.md#secret-masking) for details and configuration
+  - Disable with `--mask-secrets=false` if you need to see full values locally
+  - Alternative: Use `--kind=-secrets` to exclude Secrets entirely from comparison
 - **Audit logs**: Cluster access is logged by Kubernetes audit logs
 - **Read-only**: kyt only performs read operations (list/get), never modifies resources
 

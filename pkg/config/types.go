@@ -12,6 +12,7 @@ type DiffConfig struct {
 	Options           OptionsConfig               `yaml:"options"`
 	FuzzyMatching     FuzzyMatchingConfig         `yaml:"fuzzyMatching"`
 	Filters           FilterConfig                `yaml:"filters,omitempty"`
+	SecretMasking     SecretMaskingConfig         `yaml:"secretMasking,omitempty"`
 	Pager             string                      `yaml:"pager,omitempty"`
 }
 
@@ -127,6 +128,49 @@ type FilterConfig struct {
 	Namespaces []string `yaml:"namespaces,omitempty"`
 }
 
+// SecretMaskingConfig controls how Kubernetes Secret data is masked in diff output
+type SecretMaskingConfig struct {
+	// Enabled enables masking of Secret data/stringData fields
+	// When enabled, Secret values are masked to prevent credential leaks in CI/CD logs
+	// nil = use default (true), true = enabled, false = disabled
+	// Default: true (mask by default for security)
+	Enabled *bool `yaml:"enabled,omitempty"`
+
+	// MaskChar is the global default character used for masking (default: "*")
+	// Can be overridden per-rule
+	MaskChar string `yaml:"maskChar,omitempty"`
+
+	// Fields is the list of Secret fields to mask
+	// Default: ["data", "stringData"]
+	// These are the standard Kubernetes Secret fields containing sensitive data
+	Fields []string `yaml:"fields,omitempty"`
+
+	// Rules defines pattern-based masking rules (evaluated in order, first match wins)
+	// Each rule uses regex patterns with named capture groups
+	Rules []SecretMaskingRule `yaml:"rules,omitempty"`
+}
+
+// SecretMaskingRule defines a pattern-based masking rule
+type SecretMaskingRule struct {
+	// Name is a unique identifier for the rule (for debugging/logging)
+	Name string `yaml:"name"`
+
+	// Description explains what this rule matches (optional, for documentation)
+	Description string `yaml:"description,omitempty"`
+
+	// Pattern is a regex pattern with named capture groups
+	// Example: "^postgres://[^:]+:(?<password>[^@]+)@(?<host>[^?]+)?$"
+	Pattern string `yaml:"pattern"`
+
+	// Masks maps capture group names to masking strategies
+	// Strategies: "mask-F-E" (keep first F, last E) or "mask-F-E-S-M" (sequenced)
+	// Example: {"password": "mask-0-0", "host": "mask-1-1-3-1"}
+	Masks map[string]string `yaml:"masks"`
+
+	// MaskChar overrides the global mask character for this rule (optional)
+	MaskChar string `yaml:"maskChar,omitempty"`
+}
+
 // NewDefaultConfig returns a Config with sensible defaults
 func NewDefaultConfig() *Config {
 	return &Config{
@@ -152,11 +196,25 @@ func NewDefaultConfig() *Config {
 				Enabled:         true,
 				MinStringLength: 100,
 			},
-			Filters: FilterConfig{
-				Kinds:      []string{},
-				Namespaces: []string{},
+		Filters: FilterConfig{
+			Kinds:      []string{},
+			Namespaces: []string{},
+		},
+		SecretMasking: SecretMaskingConfig{
+			Enabled:  boolPtr(true), // Mask by default for security
+			MaskChar: "*",
+			Fields:   []string{"data", "stringData"},
+			Rules: []SecretMaskingRule{
+				// Default fallback rule - matches everything
+				{
+					Name:        "default",
+					Description: "Default masking for all secrets",
+					Pattern:     `^(?<value>.+)$`,
+					Masks:       map[string]string{"value": "mask-2-2"},
+				},
 			},
-			Pager: "", // Use $PAGER by default
+		},
+		Pager: "", // Use $PAGER by default
 		},
 	}
 }
@@ -196,6 +254,21 @@ func (c *Config) Merge(other *Config) {
 	// Filters config: append (CLI will override via separate merge logic)
 	c.Diff.Filters.Kinds = append(c.Diff.Filters.Kinds, other.Diff.Filters.Kinds...)
 	c.Diff.Filters.Namespaces = append(c.Diff.Filters.Namespaces, other.Diff.Filters.Namespaces...)
+
+	// SecretMasking config: other takes precedence if explicitly set
+	if other.Diff.SecretMasking.Enabled != nil {
+		c.Diff.SecretMasking.Enabled = other.Diff.SecretMasking.Enabled
+	}
+	if other.Diff.SecretMasking.MaskChar != "" {
+		c.Diff.SecretMasking.MaskChar = other.Diff.SecretMasking.MaskChar
+	}
+	if len(other.Diff.SecretMasking.Fields) > 0 {
+		c.Diff.SecretMasking.Fields = other.Diff.SecretMasking.Fields
+	}
+	// Rules: if other has rules, replace (not append) - rules define complete masking behavior
+	if len(other.Diff.SecretMasking.Rules) > 0 {
+		c.Diff.SecretMasking.Rules = other.Diff.SecretMasking.Rules
+	}
 
 	// Pager: other takes precedence if non-empty
 	if other.Diff.Pager != "" {
@@ -237,4 +310,9 @@ func matchGlob(pattern, str string) bool {
 		return true
 	}
 	return pattern == str
+}
+
+// boolPtr is a helper function to create a pointer to a bool value
+func boolPtr(b bool) *bool {
+	return &b
 }

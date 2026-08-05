@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/aymanbagabas/go-udiff"
+	"github.com/nhuray/kyt/pkg/config"
+	"github.com/nhuray/kyt/pkg/masker"
 	"github.com/nhuray/kyt/pkg/manifest"
 	"github.com/nhuray/kyt/pkg/normalizer"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -17,6 +19,8 @@ import (
 type Differ struct {
 	normalizer *normalizer.Normalizer
 	options    *DiffOptions
+	masker     *masker.Masker
+	maskConfig config.SecretMaskingConfig
 }
 
 // New creates a new Differ with the given normalizer and options
@@ -24,9 +28,57 @@ func New(norm *normalizer.Normalizer, opts *DiffOptions) *Differ {
 	if opts == nil {
 		opts = NewDefaultDiffOptions()
 	}
+	disabled := false
 	return &Differ{
 		normalizer: norm,
 		options:    opts,
+		masker:     nil,
+		maskConfig: config.SecretMaskingConfig{Enabled: &disabled},
+	}
+}
+
+// NewWithMasking creates a new Differ with Secret masking support
+func NewWithMasking(norm *normalizer.Normalizer, opts *DiffOptions, maskConfig config.SecretMaskingConfig) *Differ {
+	if opts == nil {
+		opts = NewDefaultDiffOptions()
+	}
+	
+	var m *masker.Masker
+	// Check if masking is enabled (nil means default=true, explicitly check for false)
+	if maskConfig.Enabled == nil || *maskConfig.Enabled {
+		maskChar := maskConfig.MaskChar
+		if maskChar == "" {
+			maskChar = "*"
+		}
+
+		// Set default fields if not specified
+		if len(maskConfig.Fields) == 0 {
+			maskConfig.Fields = []string{"data", "stringData"}
+		}
+
+		// Ensure we have at least a default rule
+		rules := maskConfig.Rules
+		if len(rules) == 0 {
+			// Provide fallback default rule
+			rules = []config.SecretMaskingRule{
+				{
+					Name:        "default",
+					Description: "Default masking for all secrets",
+					Pattern:     `^(?<value>.+)$`,
+					Masks:       map[string]string{"value": "mask-2-2"},
+				},
+			}
+		}
+
+		// Always use rule-based masking
+		m = masker.NewMaskerWithRules(rules, maskChar)
+	}
+	
+	return &Differ{
+		normalizer: norm,
+		options:    opts,
+		masker:     m,
+		maskConfig: maskConfig,
 	}
 }
 
@@ -134,8 +186,14 @@ func (d *Differ) Diff(source, target *manifest.ManifestSet) (*DiffResult, error)
 
 // generateAddedDiff generates a diff for a resource that only exists in target
 func (d *Differ) generateAddedDiff(key manifest.ResourceKey, resource *unstructured.Unstructured) (ResourceDiff, error) {
+	// Apply masking if enabled and resource is a Secret
+	maskedResource := resource
+	if d.masker != nil && masker.IsSecret(resource) {
+		maskedResource = d.masker.MaskSecretData(resource, d.maskConfig.Fields)
+	}
+	
 	// Convert to YAML
-	targetYAML, err := yaml.Marshal(resource.Object)
+	targetYAML, err := yaml.Marshal(maskedResource.Object)
 	if err != nil {
 		return ResourceDiff{}, fmt.Errorf("failed to marshal target: %w", err)
 	}
@@ -171,8 +229,14 @@ func (d *Differ) generateAddedDiff(key manifest.ResourceKey, resource *unstructu
 
 // generateRemovedDiff generates a diff for a resource that only exists in source
 func (d *Differ) generateRemovedDiff(key manifest.ResourceKey, resource *unstructured.Unstructured) (ResourceDiff, error) {
+	// Apply masking if enabled and resource is a Secret
+	maskedResource := resource
+	if d.masker != nil && masker.IsSecret(resource) {
+		maskedResource = d.masker.MaskSecretData(resource, d.maskConfig.Fields)
+	}
+	
 	// Convert to YAML
-	sourceYAML, err := yaml.Marshal(resource.Object)
+	sourceYAML, err := yaml.Marshal(maskedResource.Object)
 	if err != nil {
 		return ResourceDiff{}, fmt.Errorf("failed to marshal source: %w", err)
 	}
@@ -208,13 +272,25 @@ func (d *Differ) generateRemovedDiff(key manifest.ResourceKey, resource *unstruc
 
 // generateModifiedDiff generates a diff for a resource that exists in both but differs
 func (d *Differ) generateModifiedDiff(match Match, source, target *unstructured.Unstructured) (ResourceDiff, error) {
+	// Apply masking if enabled and resources are Secrets
+	maskedSource := source
+	maskedTarget := target
+	if d.masker != nil {
+		if masker.IsSecret(source) {
+			maskedSource = d.masker.MaskSecretData(source, d.maskConfig.Fields)
+		}
+		if masker.IsSecret(target) {
+			maskedTarget = d.masker.MaskSecretData(target, d.maskConfig.Fields)
+		}
+	}
+	
 	// Convert to YAML
-	sourceYAML, err := yaml.Marshal(source.Object)
+	sourceYAML, err := yaml.Marshal(maskedSource.Object)
 	if err != nil {
 		return ResourceDiff{}, fmt.Errorf("failed to marshal source: %w", err)
 	}
 
-	targetYAML, err := yaml.Marshal(target.Object)
+	targetYAML, err := yaml.Marshal(maskedTarget.Object)
 	if err != nil {
 		return ResourceDiff{}, fmt.Errorf("failed to marshal target: %w", err)
 	}

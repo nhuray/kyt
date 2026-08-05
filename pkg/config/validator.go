@@ -34,6 +34,11 @@ func (v *Validator) Validate(cfg *Config) error {
 		return err
 	}
 
+	// Validate secret masking config
+	if err := v.validateSecretMaskingConfig(&cfg.Diff.SecretMasking); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -133,6 +138,27 @@ func (v *Validator) validateFuzzyMatchingConfig(cfg *FuzzyMatchingConfig) error 
 	// Practical upper limit to prevent performance issues
 	if cfg.MinStringLength > 10000 {
 		return fmt.Errorf("fuzzyMatching.minStringLength must be <= 10000, got: %d", cfg.MinStringLength)
+	}
+
+	return nil
+}
+
+// validateSecretMaskingConfig validates secret masking configuration
+func (v *Validator) validateSecretMaskingConfig(cfg *SecretMaskingConfig) error {
+	// If masking is explicitly disabled, skip validation
+	if cfg.Enabled != nil && !*cfg.Enabled {
+		return nil
+	}
+
+	// If no rules and masking not explicitly enabled, skip validation
+	// (user hasn't configured secret masking, will use defaults at runtime)
+	if len(cfg.Rules) == 0 && cfg.Enabled == nil {
+		return nil
+	}
+
+	// If masking is explicitly enabled or rules are provided, validate them
+	if err := ValidateSecretMaskingRules(cfg.Rules); err != nil {
+		return fmt.Errorf("secretMasking: %w", err)
 	}
 
 	return nil

@@ -9,6 +9,7 @@ The `kyt diff` command compares Kubernetes manifests with smart ignore rules, pr
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [Ignore Rules](#ignore-rules)
+- [Secret Masking](#secret-masking)
 - [Advanced Examples](#advanced-examples)
 - [JQ Expression Cookbook](#jq-expression-cookbook)
 - [Use Cases](#use-cases)
@@ -399,6 +400,189 @@ diff:
   # Optional: pipe output through external diff viewer
   pager: ""  # Examples: "delta --side-by-side", "bat --language=diff", "less -R"
 ```
+
+## Secret Masking
+
+To prevent accidental credential leaks in CI/CD logs and console output, kyt automatically masks Kubernetes Secret values using pattern-based rules.
+
+### How It Works
+
+When comparing Secrets, kyt applies regex-based masking rules with named capture groups:
+- Rules are evaluated in order (first match wins)
+- Each rule defines patterns for specific credential types (database URLs, API keys, JWT tokens, etc.)
+- Masking strategies preserve structural patterns while hiding sensitive data
+- Works across all output formats: unified diff, summary, and TUI
+
+### Examples
+
+```
+PostgreSQL: postgres://admin:MySecretPass@db.com:5432/prod
+    Masked: postgres://ad***:My**********ss@*****:5432/prod
+
+MongoDB:    mongodb://user:P@ssw0rd@cluster.net/db
+    Masked: mongodb://us**:*****0rd@*******ter.net/db
+
+API Key:    apikey_live_ExAmPlE1234567890aBcDeF
+    Masked: ************ExAm***************cDeF
+
+JWT:        eyJhbGc.eyJzdWI.SflKxwRJ
+    Masked: ***JhbGc.eyJs********RJ.********
+
+Base64:     cGFzc3dvcmQxMjM=
+    Masked: cGFz********wM=
+```
+
+### Configuration
+
+Customize masking rules in `.kyt.yaml`:
+
+```yaml
+diff:
+  secretMasking:
+    enabled: true                    # Enable/disable (default: true)
+    maskChar: "*"                    # Masking character (default: "*")
+    fields: ["data", "stringData"]   # Fields to mask
+    
+    # Pattern-based rules (first match wins)
+    rules:
+      # PostgreSQL/MySQL connection strings
+      - name: "postgres"
+        description: "PostgreSQL/MySQL database connection strings"
+        pattern: '^postgres(?:ql)?://(?<user>[^:]+):(?<password>[^@]+)@(?<host>.+)$'
+        masks:
+          user: "mask-2-0"        # Keep first 2 chars of username
+          password: "mask-2-2"    # Keep first/last 2 chars of password
+          host: "mask-0-10"       # Keep last 10 chars of host (shows port/db)
+      
+      # MongoDB connection strings
+      - name: "mongodb"
+        description: "MongoDB connection strings"
+        pattern: '^mongodb(?:\+srv)?://(?<user>[^:]+):(?<password>[^@]+)@(?<host>.+)$'
+        masks:
+          user: "mask-2-0"
+          password: "mask-0-4"    # Keep last 4 chars
+          host: "mask-0-20"       # Keep last 20 chars (shows cluster/db)
+      
+      # API keys with prefixes (AWS, Stripe, etc.)
+      - name: "api-key-prefix"
+        description: "API keys with identifying prefixes"
+        pattern: '^(?<prefix>(?:sk|pk|AKIA|ASIA)_[a-zA-Z0-9_]+_)(?<secret>[A-Za-z0-9+/=]+)$'
+        masks:
+          prefix: "mask-0-0"      # Fully mask prefix (security)
+          secret: "mask-4-4"      # Keep first/last 4 chars of secret
+      
+      # JWT tokens
+      - name: "jwt"
+        description: "JSON Web Tokens"
+        pattern: '^(?<header>[^.]+)\.(?<payload>[^.]+)\.(?<signature>.+)$'
+        masks:
+          header: "mask-0-4"
+          payload: "mask-4-4"
+          signature: "mask-0-0"   # Fully mask signature
+      
+      # Generic base64-encoded secrets
+      - name: "base64"
+        description: "Base64-encoded values"
+        pattern: '^(?<value>[A-Za-z0-9+/]+=*)$'
+        masks:
+          value: "mask-4-4"
+      
+      # Default fallback for any other format
+      - name: "default"
+        description: "Default masking for all other secrets"
+        pattern: '^(?<value>.+)$'
+        masks:
+          value: "mask-2-2"       # Keep first/last 2 chars
+```
+
+### Masking Strategies
+
+**`mask-F-E` - Keep First/Last**
+
+Keep first F and last E characters, mask the middle:
+
+```
+mask-2-2 on "password123" → "pa********23"
+mask-4-4 on "MySecretKey1234" → "MySe******1234"
+mask-0-0 on "secret" → "******"
+```
+
+**`mask-F-E-S-M` - Sequenced Masking**
+
+Keep first F and last E characters, then apply repeating pattern (mask S, keep M):
+
+```
+mask-2-2-5-1 on "1234567890abcdefgh" → "12*****8*****d**gh"
+mask-0-4-8-2 on "MyLongPassword123!" → "****MyLo********Pa******rd123!"
+```
+
+Sequenced masking is useful for complex credentials where simple first/last masking hides too much structure, making it impossible to spot differences.
+
+### CLI Control
+
+```bash
+# Default behavior (masking enabled)
+kyt diff ./left ./right
+
+# Disable masking temporarily
+kyt diff --mask-secrets=false ./left ./right
+
+# Alternative: exclude Secrets entirely
+kyt diff --kind -secrets ./left ./right
+```
+
+### Example Output
+
+```diff
+--- a/Secret.core/database-credentials
++++ b/Secret.core/database-credentials
+@@ -1,7 +1,7 @@
+  apiVersion: v1
+  data:
+-  connection-string: po**********ss@*****:5432/prod     # Masked connection string
++  connection-string: po**********rd@*****:5432/prod     # Masked connection string
+    username: ad***                                       # Masked username
+-  password: My**********ss                              # Masked password
++  password: Ne**********rd                              # Masked password
+  kind: Secret
+```
+
+Notice how the masking reveals enough structure to spot the difference ("ss" → "rd" in password, "pass" → "word" in connection string) while protecting the actual credentials.
+
+### Custom Rules for Your Environment
+
+You can add custom rules for your specific secret formats:
+
+```yaml
+diff:
+  secretMasking:
+    rules:
+      # Custom app-specific API token format
+      - name: "my-app-token"
+        pattern: '^MYAPP_(?<env>[A-Z]+)_(?<token>[a-f0-9]{32})$'
+        masks:
+          env: "mask-0-0"         # Hide environment name
+          token: "mask-8-8"       # Keep first/last 8 hex chars
+      
+      # Custom database URL with multiple credentials
+      - name: "custom-db"
+        pattern: '^mysql://(?<user>[^:]+):(?<pass>[^:]+):(?<key>[^@]+)@(?<host>.+)$'
+        masks:
+          user: "mask-2-0"
+          pass: "mask-2-2"
+          key: "mask-4-4"
+          host: "mask-0-15"
+```
+
+### Security Best Practices
+
+1. **Keep masking enabled in CI/CD**: Always use default `enabled: true` in production configs
+2. **Test your rules**: Verify custom patterns match your secret formats correctly
+3. **Use fail-safe defaults**: Always include a catch-all default rule as the last rule
+4. **Avoid over-revealing**: When in doubt, mask more (use `mask-0-0` for complete masking)
+5. **Review diffs carefully**: Even masked diffs can reveal patterns - review before sharing publicly
+6. **Use per-rule maskChar**: Override `maskChar` per rule if needed for better visibility
+
 
 ## Ignore Rules
 

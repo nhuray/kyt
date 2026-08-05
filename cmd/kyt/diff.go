@@ -31,6 +31,7 @@ var (
 	diffKinds               string
 	diffNamespaces          string
 	diffContext             string
+	diffMaskSecrets         *bool // Use pointer to detect if flag was explicitly set
 )
 
 var diffCmd = &cobra.Command{
@@ -71,6 +72,34 @@ Cluster Comparison:
 - Example: kyt diff --context prod ns:default ns:staging
 - Fetches ~15 common resource types (pods, deployments, services, etc.)
 - Use --kind to filter resource types
+
+Secret Masking:
+- Kubernetes Secrets are masked by default using pattern-based rules to prevent credential leaks
+- Masking examples:
+  * Connection strings: "postgres://admin:pass@host:5432" → "postgres://ad***:pa**@*****:5432"
+  * API keys: "sk_live_abc123def456" → "********abc1****f456"
+  * Base64: "cGFzc3dvcmQxMjM=" → "cGFz********wM="
+- Configure masking rules in .kyt.yaml:
+  diff:
+    secretMasking:
+      enabled: true
+      maskChar: "*"
+      fields: ["data", "stringData"]
+      rules:
+        - name: "postgres"
+          pattern: '^postgres://(?<user>[^:]+):(?<password>[^@]+)@(?<host>.+)$'
+          masks:
+            user: "mask-2-0"
+            password: "mask-2-2"
+            host: "mask-0-10"
+        - name: "default"
+          pattern: '^(?<value>.+)$'
+          masks:
+            value: "mask-2-2"
+- Strategies: "mask-F-E" (keep first F, last E chars) or "mask-F-E-S-M" (sequenced)
+- To disable masking temporarily: kyt diff --mask-secrets=false ./left ./right
+- Alternative: exclude Secrets entirely with --kind=-secrets
+- See docs/diff.md#secret-masking for full documentation
 
 Examples:
   # Compare two directories
@@ -129,6 +158,10 @@ Examples:
   kyt diff --color=always ./left ./right  # Always colorize
   kyt diff --color=never ./left ./right   # Never colorize
   kyt diff --color=auto ./left ./right    # Auto (default, based on TTY)
+
+  # Secret masking (enabled by default)
+  kyt diff ./left ./right                 # Secrets are masked by default
+  kyt diff --mask-secrets=false ./left ./right  # Disable masking to see full Secret values
 `,
 	Args:          cobra.ExactArgs(2),
 	RunE:          runDiff,
@@ -152,6 +185,11 @@ func init() {
 	diffCmd.Flags().StringVar(&diffNamespaces, "namespaces", "", "filter namespaces (alias for --namespace)")
 	diffCmd.Flags().StringVar(&diffNamespaces, "ns", "", "filter namespaces (alias for --namespace)")
 	diffCmd.Flags().StringVar(&diffContext, "context", "", "Kubernetes context to use for namespace inputs (defaults to current context)")
+	
+	// Secret masking flag - default true
+	defaultMaskSecrets := true
+	diffMaskSecrets = &defaultMaskSecrets
+	diffCmd.Flags().BoolVar(diffMaskSecrets, "mask-secrets", true, "mask Secret data/stringData values in output")
 
 	rootCmd.AddCommand(diffCmd)
 }
@@ -354,7 +392,14 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		dataSimilarityBoost = cfg.Diff.Options.DataSimilarityBoost
 	}
 
-	// Create differ
+	// Override Secret masking from CLI if provided
+	maskSecretsConfig := cfg.Diff.SecretMasking
+	if diffMaskSecrets != nil && cmd.Flags().Changed("mask-secrets") {
+		// CLI flag overrides config
+		maskSecretsConfig.Enabled = diffMaskSecrets
+	}
+
+	// Create differ with Secret masking support
 	diffOpts := &differ.DiffOptions{
 		ContextLines:               contextLines,
 		EnableSimilarityMatching:   !diffExactMatch,
@@ -363,7 +408,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		FuzzyStringMinLength:       cfg.Diff.FuzzyMatching.MinStringLength,
 		DataSimilarityBoost:        dataSimilarityBoost,
 	}
-	d := differ.New(norm, diffOpts)
+	d := differ.NewWithMasking(norm, diffOpts, maskSecretsConfig)
 
 	// Perform diff
 	if rootVerbose {
