@@ -16,6 +16,7 @@ type Masker struct {
 
 	// New rule-based mode
 	patternMatcher *PatternMatcher
+	multiline      bool // Enable per-line masking for multiline values
 }
 
 // NewMasker creates a new Masker with simple keep-first-last pattern (legacy mode)
@@ -24,14 +25,16 @@ func NewMasker(keepFirst, keepLast int, maskChar string) *Masker {
 		keepFirst: keepFirst,
 		keepLast:  keepLast,
 		maskChar:  maskChar,
+		multiline: true, // Default to true
 	}
 }
 
 // NewMaskerWithRules creates a new Masker with rule-based masking
-func NewMaskerWithRules(rules []config.SecretMaskingRule, maskChar string) *Masker {
+func NewMaskerWithRules(rules []config.SecretMaskingRule, maskChar string, multiline bool) *Masker {
 	return &Masker{
 		patternMatcher: NewPatternMatcher(rules, maskChar),
 		maskChar:       maskChar,
+		multiline:      multiline,
 	}
 }
 
@@ -43,6 +46,34 @@ func (m *Masker) Mask(value string) string {
 		return "<empty>"
 	}
 
+	// Check if we should apply per-line masking for multiline values
+	if m.multiline && m.isMultiline(value) {
+		return m.maskMultiline(value)
+	}
+
+	// Single-line masking
+	return m.maskSingleLine(value)
+}
+
+// isMultiline checks if a value should be treated as multiline
+func (m *Masker) isMultiline(value string) bool {
+	lines := strings.Split(value, "\n")
+	// Must have at least 2 lines (not just a trailing newline)
+	return len(lines) > 1 && value != lines[0]+"\n"
+}
+
+// maskMultiline masks each line independently
+func (m *Masker) maskMultiline(value string) string {
+	lines := strings.Split(value, "\n")
+	maskedLines := make([]string, len(lines))
+	for i, line := range lines {
+		maskedLines[i] = m.maskSingleLine(line)
+	}
+	return strings.Join(maskedLines, "\n")
+}
+
+// maskSingleLine masks a single line value
+func (m *Masker) maskSingleLine(value string) string {
 	// Use rule-based masking if available
 	if m.patternMatcher != nil {
 		masked, err := m.patternMatcher.Mask(value)

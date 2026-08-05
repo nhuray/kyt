@@ -101,6 +101,11 @@ diff:
     # When enabled, Secret values are masked using pattern-based rules
     enabled: true
     
+    # Enable per-line masking for multiline values (default: true)
+    # When true, each line in a multiline secret is masked independently
+    # This prevents identical masked output when only specific lines differ
+    multiline: true
+    
     # Global mask character (default: "*")
     # Can be overridden per-rule
     maskChar: "*"
@@ -146,6 +151,13 @@ diff:
           prefix: "mask-0-0"      # Fully mask prefix (security)
           secret: "mask-4-4"      # Keep first/last 4 chars of secret
       
+      # JS Config File - MUST come before JWT to avoid false matches
+      - name: "js-config"
+        description: "JavaScript config object lines (key-value pairs)"
+        pattern: "^\\s*'[A-Z_]+':\\s*'?(?<value>[^',]+)'?,?$"
+        masks:
+          value: "mask-1-1-5-1"
+      
       # JWT tokens
       - name: "jwt"
         description: "JSON Web Tokens"
@@ -161,7 +173,7 @@ diff:
         pattern: '^(?<value>[A-Za-z0-9+/]+=*)$'
         masks:
           value: "mask-4-4"       # Keep first/last 4 chars
-      
+
       # Default fallback for any other format
       - name: "default"
         description: "Default masking for all other secrets"
