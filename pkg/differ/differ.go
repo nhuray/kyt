@@ -70,8 +70,14 @@ func NewWithMasking(norm *normalizer.Normalizer, opts *DiffOptions, maskConfig c
 			}
 		}
 
+		// Determine multiline setting (default: true)
+		multiline := true
+		if maskConfig.Multiline != nil {
+			multiline = *maskConfig.Multiline
+		}
+
 		// Always use rule-based masking
-		m = masker.NewMaskerWithRules(rules, maskChar)
+		m = masker.NewMaskerWithRules(rules, maskChar, multiline)
 	}
 	
 	return &Differ{

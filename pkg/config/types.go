@@ -145,6 +145,12 @@ type SecretMaskingConfig struct {
 	// These are the standard Kubernetes Secret fields containing sensitive data
 	Fields []string `yaml:"fields,omitempty"`
 
+	// Multiline enables per-line masking for multiline Secret values
+	// When true, values containing newlines are masked line-by-line
+	// This prevents identical masked output when only specific lines differ
+	// Default: true
+	Multiline *bool `yaml:"multiline,omitempty"`
+
 	// Rules defines pattern-based masking rules (evaluated in order, first match wins)
 	// Each rule uses regex patterns with named capture groups
 	Rules []SecretMaskingRule `yaml:"rules,omitempty"`
@@ -201,9 +207,10 @@ func NewDefaultConfig() *Config {
 			Namespaces: []string{},
 		},
 		SecretMasking: SecretMaskingConfig{
-			Enabled:  boolPtr(true), // Mask by default for security
-			MaskChar: "*",
-			Fields:   []string{"data", "stringData"},
+			Enabled:   boolPtr(true), // Mask by default for security
+			Multiline: boolPtr(true), // Enable per-line masking by default
+			MaskChar:  "*",
+			Fields:    []string{"data", "stringData"},
 			Rules: []SecretMaskingRule{
 				// Default fallback rule - matches everything
 				{
@@ -258,6 +265,9 @@ func (c *Config) Merge(other *Config) {
 	// SecretMasking config: other takes precedence if explicitly set
 	if other.Diff.SecretMasking.Enabled != nil {
 		c.Diff.SecretMasking.Enabled = other.Diff.SecretMasking.Enabled
+	}
+	if other.Diff.SecretMasking.Multiline != nil {
+		c.Diff.SecretMasking.Multiline = other.Diff.SecretMasking.Multiline
 	}
 	if other.Diff.SecretMasking.MaskChar != "" {
 		c.Diff.SecretMasking.MaskChar = other.Diff.SecretMasking.MaskChar

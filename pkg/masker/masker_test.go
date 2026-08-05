@@ -271,3 +271,85 @@ func TestIsSecret(t *testing.T) {
 		})
 	}
 }
+
+func TestMasker_MultilineMasking(t *testing.T) {
+	tests := []struct {
+		name      string
+		multiline bool
+		input     string
+		expected  string
+	}{
+		{
+			name:      "multiline enabled - masks per line",
+			multiline: true,
+			input: `line1
+line2
+line3`,
+			expected: `li*e1
+li*e2
+li*e3`,
+		},
+		{
+			name:      "multiline enabled - structured content",
+			multiline: true,
+			input: `    'KEY1': 'value123',
+    'KEY2': 'anothervalue',
+    'KEY3': 'short',`,
+			expected: `  *******************',
+  ***********************',
+  ****************',`,
+		},
+		{
+			name:      "multiline disabled - treats as single value",
+			multiline: false,
+			input: `line1
+line2
+line3`,
+			expected: `li*************e3`,
+		},
+		{
+			name:      "single line with multiline enabled",
+			multiline: true,
+			input:     "singlelinevalue",
+			expected:  "si***********ue",
+		},
+		{
+			name:      "single line with trailing newline",
+			multiline: true,
+			input:     "singleline\n",
+			expected:  "si*******e\n",
+		},
+		{
+			name:      "empty lines in multiline",
+			multiline: true,
+			input: `line1
+
+line3`,
+			expected: `li*e1
+****
+li*e3`,
+		},
+		{
+			name:      "very short lines in multiline",
+			multiline: true,
+			input: `a
+bc
+longline`,
+			expected: `****
+****
+lo****ne`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewMasker(2, 2, "*")
+			m.multiline = tt.multiline
+			
+			result := m.Mask(tt.input)
+			if result != tt.expected {
+				t.Errorf("Mask() with multiline=%v\ngot:  %q\nwant: %q", tt.multiline, result, tt.expected)
+			}
+		})
+	}
+}
