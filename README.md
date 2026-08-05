@@ -30,6 +30,7 @@ When working with tools like Helm, Kustomize, or ArgoCD, you often need to compa
 - 🖥️ **Interactive TUI Mode**: k9s-inspired terminal UI for exploring large diffs (`--tui`)
 - 🎯 **Smart Normalization**: Removes managed fields, applies ignore rules, sorts keys (used by `diff`)
 - ☸️ **Live Cluster Comparison**: Compare local manifests against live Kubernetes resources
+- 🔒 **Secret Masking**: Automatically masks Kubernetes Secret values to prevent credential leaks in CI/CD logs
 - 🔧 **Format**: Sort keys consistently with `kyt fmt`
 - 🔀 **Pipe-friendly**: Works seamlessly with kubectl, kustomize, helm
 - 🤖 **Intelligent Similarity Matching**: Automatically detects renamed resources across namespaces
@@ -78,6 +79,10 @@ kustomize build . | kyt fmt | kubectl apply -f -
 
 # Use custom config
 ./bin/kyt diff -c .kyt.yaml source.yaml target.yaml
+
+# Secret masking (enabled by default)
+./bin/kyt diff source.yaml target.yaml  # Secrets are masked
+./bin/kyt diff --mask-secrets=false source.yaml target.yaml  # Disable masking
 
 # Output JSON for CI/CD
 ./bin/kyt diff -o json source.yaml target.yaml
@@ -270,6 +275,31 @@ diff:
     #   namespaces: ["production", "staging"]  # include only these
     #   namespaces: ["-kube-system", "-kube-public"]  # exclude system namespaces
     namespaces: []
+
+  # Secret masking configuration (pattern-based rules)
+  # Masks Kubernetes Secret data/stringData values to prevent credential leaks in CI/CD logs
+  secretMasking:
+    enabled: true                    # Enable/disable masking (default: true)
+    maskChar: "*"                    # Masking character (default: "*")
+    fields: ["data", "stringData"]   # Secret fields to mask (default: ["data", "stringData"])
+    
+    # Pattern-based masking rules (evaluated in order, first match wins)
+    # Each rule uses regex with named capture groups
+    # Strategies: "mask-F-E" (keep first F, last E chars) or "mask-F-E-S-M" (sequenced)
+    rules:
+      # PostgreSQL/MySQL connection strings
+      - name: "postgres"
+        pattern: '^postgres(?:ql)?://(?<user>[^:]+):(?<password>[^@]+)@(?<host>.+)$'
+        masks:
+          user: "mask-2-0"        # Keep first 2 chars
+          password: "mask-2-2"    # Keep first/last 2 chars
+          host: "mask-0-10"       # Keep last 10 chars
+      
+      # Default fallback for any other format
+      - name: "default"
+        pattern: '^(?<value>.+)$'
+        masks:
+          value: "mask-2-2"       # Keep first/last 2 chars
     
   # Fuzzy string matching configuration
   fuzzyMatching:
@@ -348,6 +378,106 @@ make install
 
 ```bash
 kyt version
+```
+
+## Security
+
+### Secret Masking
+
+To prevent accidental credential leaks in CI/CD logs and console output, kyt automatically masks Kubernetes Secret values using pattern-based rules.
+
+**How it works:**
+
+When comparing Secrets, kyt applies regex-based masking rules with named capture groups:
+- Rules are evaluated in order (first match wins)
+- Each rule defines patterns for specific credential types (database URLs, API keys, etc.)
+- Masking strategies preserve structural patterns while hiding sensitive data
+- Works across all output formats: unified diff, summary, markdown, and TUI
+
+**Examples:**
+
+```
+PostgreSQL: postgres://admin:MySecretPass@db.com:5432/prod
+    Masked: postgres://ad***:My**********ss@*****:5432/prod
+
+MongoDB:    mongodb://user:P@ssw0rd@cluster.net/db
+    Masked: mongodb://us**:*****0rd@*******ter.net/db
+
+API Key:    apikey_live_ExAmPlE1234567890aBcDeF
+    Masked: ************ExAm***************cDeF
+
+JWT:        eyJhbGc.eyJzdWI.SflKxwRJ
+    Masked: ***JhbGc.eyJs********RJ.********
+```
+
+**Configuration:**
+
+Customize masking rules in `.kyt.yaml`:
+
+```yaml
+diff:
+  secretMasking:
+    enabled: true                    # Enable/disable (default: true)
+    maskChar: "*"                    # Masking character (default: "*")
+    fields: ["data", "stringData"]   # Fields to mask
+    
+    # Pattern-based rules (first match wins)
+    rules:
+      # PostgreSQL connection strings
+      - name: "postgres"
+        pattern: '^postgres://(?<user>[^:]+):(?<password>[^@]+)@(?<host>.+)$'
+        masks:
+          user: "mask-2-0"        # Keep first 2 chars
+          password: "mask-2-2"    # Keep first/last 2 chars
+          host: "mask-0-10"       # Keep last 10 chars
+      
+      # API keys with prefixes
+      - name: "api-key"
+        pattern: '^(?<prefix>sk_[a-z]+_)(?<secret>[A-Za-z0-9]+)$'
+        masks:
+          prefix: "mask-0-0"      # Fully mask prefix
+          secret: "mask-4-4"      # Keep first/last 4 chars
+      
+      # Default fallback
+      - name: "default"
+        pattern: '^(?<value>.+)$'
+        masks:
+          value: "mask-2-2"       # Keep first/last 2 chars
+```
+
+**Masking Strategies:**
+
+- `mask-F-E`: Keep first F and last E characters, mask middle
+  - Example: `mask-2-2` on "password123" → "pa********23"
+- `mask-F-E-S-M`: Sequenced masking (keep F, keep E, then mask S/keep M/repeat)
+  - Example: `mask-2-2-5-1` on "1234567890abcdefgh" → "12*****8*****d**gh"
+  - Useful for complex credentials where simple masking hides too much structure
+
+**CLI Control:**
+
+```bash
+# Default behavior (masking enabled)
+kyt diff ./left ./right
+
+# Disable masking temporarily
+kyt diff --mask-secrets=false ./left ./right
+
+# Alternative: exclude Secrets entirely
+kyt diff --kind -secrets ./left ./right
+```
+
+**Example output:**
+
+```diff
+--- a/Secret.core/my-secret
++++ b/Secret.core/my-secret
+@@ -1,7 +1,7 @@
+ apiVersion: v1
+ data:
+-  password: cG************M=     # Masked value
++  password: bm************Q=     # Masked value
+   token: dG****************kw
+ kind: Secret
 ```
 
 ## Documentation
