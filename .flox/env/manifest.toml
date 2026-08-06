@@ -1,0 +1,172 @@
+## Flox Environment Manifest -----------------------------------------
+##
+##   _Everything_ you need to know about the _manifest_ is here:
+##
+##   https://flox.dev/docs/reference/command-reference/manifest.toml/
+##
+## -------------------------------------------------------------------
+# Flox manifest version managed by Flox CLI
+version = 1
+
+
+## Install Packages --------------------------------------------------
+##  $ flox install gum  <- puts a package in [install] section below
+##  $ flox search gum   <- search for a package
+##  $ flox show gum     <- show all versions of a package
+## -------------------------------------------------------------------
+[install]
+go.pkg-path = "go"
+go.version = "^1.26.0"
+git.pkg-path = "git"
+gnumake.pkg-path = "gnumake"
+coreutils.pkg-path = "coreutils"
+
+# Runtime dependencies for the Go binary
+tzdata.pkg-path = "tzdata"
+mailcap.pkg-path = "mailcap"
+iana-etc.pkg-path = "iana-etc"
+
+
+## Environment Variables ---------------------------------------------
+##  ... available for use in the activated environment
+##      as well as [hook], [profile] scripts and [services] below.
+## -------------------------------------------------------------------
+[vars]
+# INTRO_MESSAGE = "It's gettin' Flox in here"
+
+
+## Activation Hook ---------------------------------------------------
+##  ... run by _bash_ shell when you run 'flox activate'.
+## -------------------------------------------------------------------
+[hook]
+on-activate = """
+  # Welcome message
+  echo "kyt development environment activated"
+  echo "Run 'flox build kyt' to build the project"
+"""
+
+
+## Profile script ----------------------------------------------------
+## ... sourced by _your shell_ when you run 'flox activate'.
+## -------------------------------------------------------------------
+[profile]
+# common = '''
+#   gum style \
+#   --foreground 212 --border-foreground 212 --border double \
+#   --align center --width 50 --margin "1 2" --padding "2 4" \
+#     $INTRO_MESSAGE
+# '''
+## Shell-specific customizations such as setting aliases go here:
+# bash = ...
+# zsh  = ...
+# fish = ...
+
+
+## Services ---------------------------------------------------------
+##  $ flox services start             <- Starts all services
+##  $ flox services status            <- Status of running services
+##  $ flox activate --start-services  <- Activates & starts all
+## ------------------------------------------------------------------
+[services]
+# myservice.command = "python3 -m http.server"
+
+
+## Include ----------------------------------------------------------
+## ... environments to create a composed environment
+## ------------------------------------------------------------------
+[include]
+# environments = [
+#     { dir = "../common" }
+# ]
+
+
+## Build and publish your own packages ------------------------------
+##  $ flox build
+##  $ flox publish
+## ------------------------------------------------------------------
+[build]
+
+# Main kyt binary build
+[build.kyt]
+description = "Kubernetes YAML Toolkit - Format and compare manifests with intelligent ignore rules"
+version = "0.0.0"  # Overridden by git tag during build
+sandbox = "pure"
+# Runtime packages required by Go binary (tzdata for time zones, etc.)
+runtime-packages = ["tzdata", "mailcap", "iana-etc"]
+
+command = """
+set -euo pipefail
+
+# Extract version information from git
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "none")
+DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+echo "Building kyt version: $VERSION (commit: $COMMIT)"
+
+# Create output directories
+mkdir -p "$out/bin"
+mkdir -p "$out/share/doc/kyt"
+mkdir -p "$out/share/examples/kyt"
+
+# Build the binary with version info
+env CGO_ENABLED=0 go build \
+  -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" \
+  -trimpath \
+  -o "$out/bin/kyt" \
+  ./cmd/kyt
+
+# Verify the binary was created
+if [ ! -f "$out/bin/kyt" ]; then
+  echo "Error: Failed to build kyt binary"
+  exit 1
+fi
+
+# Make it executable
+chmod +x "$out/bin/kyt"
+
+# Copy documentation
+cp README.md LICENSE "$out/share/doc/kyt/"
+if [ -d "docs" ]; then
+  cp -r docs/* "$out/share/doc/kyt/"
+fi
+
+# Copy example configuration
+if [ -f "examples/.kyt.yaml" ]; then
+  cp examples/.kyt.yaml "$out/share/examples/kyt/example-config.yaml"
+fi
+
+echo "✓ Build completed successfully"
+"""
+
+# Optional: Test target (not published, just for validation)
+[build.kyt-tests]
+description = "Run kyt test suite"
+version = "0.0.0"
+sandbox = "pure"
+command = """
+set -euo pipefail
+
+mkdir -p "$out/test-results"
+
+echo "Running tests..."
+go test -v ./... 2>&1 | tee "$out/test-results/test.log"
+
+echo "Running tests with coverage..."
+go test -coverprofile="$out/test-results/coverage.out" ./...
+
+echo "✓ Tests completed"
+"""
+
+
+## Other Environment Options -----------------------------------------
+[options]
+# Systems that environment is compatible with
+# systems = [
+#   "aarch64-darwin",
+#   "aarch64-linux",
+#   "x86_64-darwin",
+#   "x86_64-linux",
+# ]
+# Uncomment to disable CUDA detection.
+# cuda-detection = false
