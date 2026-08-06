@@ -5,6 +5,9 @@ on:
   release:
     types: [published]
 
+  # Trigger from GitHub UI
+  workflow_dispatch:
+
 permissions:
   contents: read
 
