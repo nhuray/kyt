@@ -90,7 +90,7 @@ on-activate = """
 # Main kyt binary build
 [build.kyt]
 description = "Kubernetes YAML Toolkit - Format and compare manifests with intelligent ignore rules"
-version = "0.6.0"
+version = "0.6.1"
 sandbox = "pure"
 # Runtime packages required by Go binary (tzdata for time zones, etc.)
 runtime-packages = ["tzdata", "mailcap", "iana-etc"]
