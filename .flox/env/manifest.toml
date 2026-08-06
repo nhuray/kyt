@@ -89,7 +89,7 @@ on-activate = """
 # Main kyt binary build
 [build.kyt]
 description = "Kubernetes YAML Toolkit - Format and compare manifests with intelligent ignore rules"
-version = "0.0.0"  # Overridden by git tag during build
+version = "0.0.0"  # Updated by release.sh script
 sandbox = "pure"
 # Runtime packages required by Go binary (tzdata for time zones, etc.)
 runtime-packages = ["tzdata", "mailcap", "iana-etc"]
@@ -97,8 +97,14 @@ runtime-packages = ["tzdata", "mailcap", "iana-etc"]
 command = """
 set -euo pipefail
 
-# Extract version information from git
-VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+# Use version from manifest (FLOX_PKG_VERSION is set by Flox)
+# Fall back to git describe if version is 0.0.0 (development builds)
+if [ "${FLOX_PKG_VERSION:-0.0.0}" = "0.0.0" ]; then
+  VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+else
+  VERSION="${FLOX_PKG_VERSION}"
+fi
+
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "none")
 DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
