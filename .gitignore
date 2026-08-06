@@ -42,6 +42,9 @@ tmp/
 *.tar.gz
 *.zip
 
+# Flox build outputs
+result-*
+
 # OS generated files
 Thumbs.db
 .idea/

@@ -351,6 +351,21 @@ Expand-Archive -Path "kyt.zip" -DestinationPath .
 # Add kyt.exe to your PATH
 ```
 
+### Using Flox
+
+[Flox](https://flox.dev) provides reproducible environments and package management. Install kyt from the private catalog:
+
+```bash
+# Install directly
+flox install nhuray/kyt
+
+# Or add to your Flox environment
+flox init
+flox edit  # Add: "nhuray/kyt".pkg-path = "nhuray/kyt"
+flox activate
+kyt version
+```
+
 ### Using Go Install
 
 ```bash

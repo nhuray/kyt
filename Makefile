@@ -1,4 +1,4 @@
-.PHONY: build test test-verbose test-coverage lint install clean help
+.PHONY: build test test-verbose test-coverage lint install clean release help
 
 # Binary name
 BINARY=kyt
@@ -54,8 +54,11 @@ install: build ## Install kyt binary to GOPATH/bin
 
 clean: ## Clean build artifacts
 	@echo "Cleaning..."
-	@rm -rf bin/ dist/ coverage.out coverage.html
+	@rm -rf bin/ dist/ coverage.out coverage.html result-*
 	@echo "✓ Cleaned"
+
+release: ## Create a new release (interactive)
+	@./scripts/release.sh
 
 run: build ## Build and run kyt diff with example arguments
 	@echo "Running $(BINARY) diff..."

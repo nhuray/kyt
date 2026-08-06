@@ -1,0 +1,118 @@
+name: Publish to Flox Catalog
+
+# Trigger on release publication (after the release is created)
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish-flox:
+    name: Build and Publish (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    
+    strategy:
+      # Don't cancel other platforms if one fails
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64
+          - platform: linux-x64
+            runner: ubuntu-latest
+            
+          # macOS x86_64 (Intel)
+          - platform: macos-x64
+            runner: macos-13
+            
+          # macOS ARM64 (Apple Silicon)
+          - platform: macos-arm64
+            runner: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for git describe
+
+      - name: Install Flox
+        run: |
+          echo "Installing Flox CLI..."
+          curl -fsSL https://install.flox.dev | sh
+          
+          # Add flox to PATH
+          echo "$HOME/.flox/bin" >> $GITHUB_PATH
+        shell: bash
+
+      - name: Verify Flox installation
+        run: |
+          flox --version
+          which flox
+
+      - name: Authenticate to FloxHub
+        run: |
+          echo "Authenticating to FloxHub..."
+          flox auth login --token "${{ secrets.FLOXHUB_TOKEN }}"
+        env:
+          FLOXHUB_TOKEN: ${{ secrets.FLOXHUB_TOKEN }}
+
+      - name: Verify Flox environment
+        run: |
+          echo "Checking for manifest.toml..."
+          if [ ! -f ".flox/env/manifest.toml" ]; then
+            echo "❌ ERROR: .flox/env/manifest.toml not found"
+            exit 1
+          fi
+          
+          echo "✓ Flox environment found"
+          
+          # Show environment info
+          flox list
+
+      - name: Build kyt package
+        run: |
+          echo "Building kyt for ${{ matrix.platform }}..."
+          flox build kyt
+          
+          # Verify build output
+          if [ ! -d "./result-kyt" ]; then
+            echo "❌ ERROR: Build output not found"
+            exit 1
+          fi
+          
+          echo "✓ Build completed"
+          
+          # Test the binary
+          echo "Testing binary..."
+          ./result-kyt/bin/kyt version
+
+      - name: Publish to Flox Catalog
+        run: |
+          echo "Publishing kyt to nhuray catalog for ${{ matrix.platform }}..."
+          flox publish -o nhuray kyt
+        env:
+          FLOXHUB_TOKEN: ${{ secrets.FLOXHUB_TOKEN }}
+
+      - name: Build Summary
+        if: success()
+        run: |
+          echo "## ✅ Successfully published kyt" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** ${{ matrix.platform }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ github.event.release.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Install with:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "flox install nhuray/kyt" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Failure Summary
+        if: failure()
+        run: |
+          echo "## ❌ Failed to publish kyt" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** ${{ matrix.platform }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ github.event.release.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for details." >> $GITHUB_STEP_SUMMARY
