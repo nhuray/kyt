@@ -25,6 +25,7 @@ coreutils.pkg-path = "coreutils"
 tzdata.pkg-path = "tzdata"
 mailcap.pkg-path = "mailcap"
 iana-etc.pkg-path = "iana-etc"
+jq.pkg-path = "jq"
 
 
 ## Environment Variables ---------------------------------------------
