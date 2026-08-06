@@ -113,9 +113,31 @@ fi
 
 success "Updated version to $VERSION in manifest.toml"
 
+# Update manifest.lock
+info "Updating .flox/env/manifest.lock..."
+LOCK_FILE=".flox/env/manifest.lock"
+
+# Use jq to update the version in manifest.lock for build.kyt
+if command -v jq >/dev/null 2>&1; then
+    TMP_FILE=$(mktemp)
+    jq ".manifest.build.kyt.version = \"$VERSION\"" "$LOCK_FILE" > "$TMP_FILE"
+    mv "$TMP_FILE" "$LOCK_FILE"
+    
+    # Verify the change
+    NEW_LOCK_VERSION=$(jq -r '.manifest.build.kyt.version' "$LOCK_FILE")
+    if [[ "$NEW_LOCK_VERSION" != "$VERSION" ]]; then
+        error "Failed to update version in manifest.lock"
+        exit 1
+    fi
+    success "Updated version to $VERSION in manifest.lock"
+else
+    warning "jq not found, skipping manifest.lock update"
+    warning "Install jq with: flox install jq"
+fi
+
 # Show the diff
-info "Changes to manifest.toml:"
-git diff "$MANIFEST_FILE"
+info "Changes to manifest files:"
+git diff "$MANIFEST_FILE" "$LOCK_FILE"
 echo ""
 
 # Commit the change
@@ -123,13 +145,13 @@ read -p "Commit this change? [y/N] " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     warning "Reverting changes..."
-    git checkout "$MANIFEST_FILE"
+    git checkout "$MANIFEST_FILE" "$LOCK_FILE"
     info "Release cancelled"
     exit 0
 fi
 
 info "Committing changes..."
-git add "$MANIFEST_FILE"
+git add "$MANIFEST_FILE" "$LOCK_FILE"
 git commit -m "chore: bump version to $VERSION"
 success "Committed version bump"
 
