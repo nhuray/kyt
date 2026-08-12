@@ -84,6 +84,12 @@ jobs:
 
       - name: Publish to Flox Catalog
         run: |
+          echo "Preparing git branch for flox publish..."
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          git fetch origin "${DEFAULT_BRANCH}"
+          git checkout -B ci-publish "${GITHUB_SHA}"
+          git branch --set-upstream-to="origin/${DEFAULT_BRANCH}" ci-publish
+
           echo "Publishing kyt to nhuray catalog for ${{ matrix.platform }}..."
           flox publish -o nhuray kyt
 
