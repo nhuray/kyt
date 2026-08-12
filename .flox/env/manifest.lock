@@ -43,7 +43,7 @@
           "iana-etc"
         ],
         "sandbox": "pure",
-        "version": "0.6.1",
+        "version": "0.6.2",
         "description": "Kubernetes YAML Toolkit - Format and compare manifests with intelligent ignore rules"
       },
       "kyt-tests": {
