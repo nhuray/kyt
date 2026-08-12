@@ -40,13 +40,7 @@ jobs:
           fetch-depth: 0  # Full history needed for git describe
 
       - name: Install Flox
-        run: |
-          echo "Installing Flox CLI..."
-          curl -fsSL https://install.flox.dev | sh
-          
-          # Add flox to PATH
-          echo "$HOME/.flox/bin" >> $GITHUB_PATH
-        shell: bash
+        uses: flox/install-flox-action@v2
 
       - name: Verify Flox installation
         run: |
@@ -56,9 +50,8 @@ jobs:
       - name: Authenticate to FloxHub
         run: |
           echo "Authenticating to FloxHub..."
-          flox auth login --token "${{ secrets.FLOXHUB_TOKEN }}"
-        env:
-          FLOXHUB_TOKEN: ${{ secrets.FLOXHUB_TOKEN }}
+          echo ${{ secrets.FLOXHUB_TOKEN }} > /tmp/flox-token.txt
+          flox auth login --token-file /tmp/flox-token.txt && rm -f /tmp/flox-token.txt
 
       - name: Verify Flox environment
         run: |
@@ -85,7 +78,6 @@ jobs:
           fi
           
           echo "✓ Build completed"
-          
           # Test the binary
           echo "Testing binary..."
           ./result-kyt/bin/kyt version
@@ -94,8 +86,6 @@ jobs:
         run: |
           echo "Publishing kyt to nhuray catalog for ${{ matrix.platform }}..."
           flox publish -o nhuray kyt
-        env:
-          FLOXHUB_TOKEN: ${{ secrets.FLOXHUB_TOKEN }}
 
       - name: Build Summary
         if: success()
