@@ -42,7 +42,7 @@
           "mailcap",
           "iana-etc"
         ],
-        "sandbox": "pure",
+        "sandbox": "off",
         "version": "0.6.2",
         "description": "Kubernetes YAML Toolkit - Format and compare manifests with intelligent ignore rules"
       },
