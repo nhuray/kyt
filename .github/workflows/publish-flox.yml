@@ -24,11 +24,7 @@ jobs:
           # Linux x86_64
           - platform: linux-x64
             runner: ubuntu-latest
-            
-          # macOS x86_64 (Intel)
-          - platform: macos-x64
-            runner: macos-13
-            
+
           # macOS ARM64 (Apple Silicon)
           - platform: macos-arm64
             runner: macos-latest
