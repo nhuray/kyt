@@ -82,7 +82,7 @@ The Flox build configuration is defined in `.flox/env/manifest.toml`:
 
 **Build Process:**
 1. Extracts version from git tags using `git describe`
-2. Builds static binary with CGO disabled
+2. Builds static binary with CGO disabled and vendored Go modules (`-mod=vendor`)
 3. Embeds version info via `-ldflags`
 4. Copies documentation to `$out/share/doc/kyt/`
 5. Copies example config to `$out/share/examples/kyt/`

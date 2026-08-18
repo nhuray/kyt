@@ -15,9 +15,6 @@ dist/
 coverage.out
 coverage.html
 
-# Dependency directories
-vendor/
-
 # Go workspace file
 go.work
 
