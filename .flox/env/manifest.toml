@@ -124,7 +124,7 @@ mkdir -p "$out/share/doc/kyt"
 mkdir -p "$out/share/examples/kyt"
 
 # Build the binary with version info
-env CGO_ENABLED=0 GOFLAGS=-mod=vendor go build \\
+env CGO_ENABLED=0 go build \\
   -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" \\
   -trimpath \\
   -o "$out/bin/kyt" \\
@@ -164,10 +164,10 @@ set -euo pipefail
 mkdir -p "$out/test-results"
 
 echo "Running tests..."
-GOFLAGS=-mod=vendor go test -v ./... 2>&1 | tee "$out/test-results/test.log"
+go test -v ./... 2>&1 | tee "$out/test-results/test.log"
 
 echo "Running tests with coverage..."
-GOFLAGS=-mod=vendor go test -coverprofile="$out/test-results/coverage.out" ./...
+go test -coverprofile="$out/test-results/coverage.out" ./...
 
 echo "✓ Tests completed"
 """
